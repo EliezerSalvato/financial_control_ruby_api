@@ -45,6 +45,9 @@ module FinancialControlRubyApi
 
     config.api_only = true
 
+    config.middleware.use ActionDispatch::Cookies
+    config.middleware.use Rack::Attack
+
     config.generators do |g|
       g.orm :active_record, primary_key_type: :uuid
     end
