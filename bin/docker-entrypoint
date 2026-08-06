@@ -1,0 +1,20 @@
+#!/bin/bash -e
+
+should_prepare=false
+
+if [[ "${1}" == "./bin/rails" || "${1}" == "bin/rails" ]] && [[ "${2}" == "server" ]]; then
+  should_prepare=true
+elif [[ "${1}" == "bin/jobs" || "${1}" == "./bin/jobs" ]]; then
+  should_prepare=true
+elif [[ "${1}" == "bundle" && "${2}" == "exec" && "${3}" == "puma" ]]; then
+  should_prepare=true
+elif [[ "${1}" == "puma" ]]; then
+  should_prepare=true
+fi
+
+if [ "${should_prepare}" = true ]; then
+  echo "Preparing databases..."
+  ./bin/rails db:prepare
+fi
+
+exec "${@}"

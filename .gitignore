@@ -31,3 +31,6 @@
 # Ignore key files for decrypting credentials and more.
 /config/*.key
 
+
+# Local Compose override (keep sample tracked)
+docker-compose.yml

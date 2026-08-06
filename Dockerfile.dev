@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+
+ARG RUBY_VERSION=3.4.5
+FROM ruby:${RUBY_VERSION}-slim
+
+ARG APP_PATH=/app
+
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y \
+      bash \
+      build-essential \
+      git \
+      libpq-dev \
+      postgresql-client \
+      libyaml-dev \
+      pkg-config \
+      libvips && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV RAILS_ENV=development \
+    BUNDLE_PATH=/usr/local/bundle
+
+WORKDIR ${APP_PATH}
+
+COPY Gemfile Gemfile.lock .ruby-version ./
+
+RUN bundle config set path "$BUNDLE_PATH" && \
+    bundle install
+
+COPY . .
+
+ENTRYPOINT ["./bin/docker-entrypoint"]
+
+EXPOSE 3000
+
+CMD ["./bin/rails", "server", "-b", "0.0.0.0"]
