@@ -1,0 +1,11 @@
+<hr>
+
+<p><%= t("mailer.user.email.confirmation.greeting") %></p>
+
+<p><%= t("mailer.user.email.confirmation.body_html", email: params[:email]) %></p>
+
+<p><strong><%= t("mailer.user.email.confirmation.instruction") %></strong></p>
+
+<p><%= link_to t("mailer.user.email.confirmation.cta"), "#{frontend_url}/users/confirmation?token=#{params[:token]}" %></p>
+
+<hr>

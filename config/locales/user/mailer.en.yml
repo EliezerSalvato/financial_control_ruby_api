@@ -1,0 +1,21 @@
+---
+en:
+  mailer:
+    user:
+      email:
+        confirmation:
+          body_html: >-
+            This is to confirm that <strong>%{email}</strong> is the email you want to use on your account. If you ever lose your password, that's where
+            we'll email a reset link.
+          cta: Yes, use this email for my account
+          greeting: Hey there,
+          instruction: You must hit the link below to confirm that you received this email.
+          subject: Verify your email
+      password_reset:
+        body_html: Can't remember your password for <strong>%{email}</strong>? That's OK, it happens. Just hit the link below to set a new one.
+        cta: Reset my password
+        greeting: Hey there,
+        ignore_notice: >-
+          If you did not request a password reset you can safely ignore this email, it expires in 15 minutes. Only someone with access to this email account
+          can reset your password.
+        subject: Reset your password

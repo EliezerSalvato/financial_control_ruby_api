@@ -1,0 +1,21 @@
+---
+pt-BR:
+  mailer:
+    user:
+      email:
+        confirmation:
+          body_html: >-
+            Isto é para confirmar que <strong>%{email}</strong> é o e-mail que você deseja usar na sua conta. Se você perder a senha, é para lá que enviaremos
+            o link de redefinição.
+          cta: Sim, usar este e-mail na minha conta
+          greeting: Olá,
+          instruction: Você precisa clicar no link abaixo para confirmar que recebeu este e-mail.
+          subject: Verifique seu e-mail
+      password_reset:
+        body_html: Não lembra da senha de <strong>%{email}</strong>? Tudo bem, acontece. Basta clicar no link abaixo para definir uma nova.
+        cta: Redefinir minha senha
+        greeting: Olá,
+        ignore_notice: >-
+          Se você não solicitou a redefinição de senha, pode ignorar este e-mail com segurança; ele expira em 15 minutos. Apenas alguém com acesso a esta
+          conta de e-mail pode redefinir sua senha.
+        subject: Redefina sua senha
