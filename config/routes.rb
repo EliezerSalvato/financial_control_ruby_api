@@ -7,6 +7,8 @@ Rails.application.routes.draw do
 
   get "docs" => redirect("/docs/index.html")
 
+  mount MissionControl::Jobs::Engine, at: "/jobs"
+
   # Defines the root path route ("/")
   # root "posts#index"
 end

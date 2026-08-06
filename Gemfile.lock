@@ -185,6 +185,8 @@ GEM
     nio4r (2.7.5)
     nokogiri (1.19.4-x86_64-darwin)
       racc (~> 1.4)
+    nokogiri (1.19.4-x86_64-linux-gnu)
+      racc (~> 1.4)
     pagy (43.6.1)
       json
       uri
@@ -197,6 +199,7 @@ GEM
       ast (~> 2.4.1)
       racc
     pg (1.6.3-x86_64-darwin)
+    pg (1.6.3-x86_64-linux)
     pp (0.6.4)
       prettyprint
     prettyprint (0.2.0)
@@ -361,6 +364,7 @@ GEM
 
 PLATFORMS
   x86_64-darwin-25
+  x86_64-linux
 
 DEPENDENCIES
   bcrypt (~> 3.1)

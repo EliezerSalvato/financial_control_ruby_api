@@ -48,6 +48,15 @@ module FinancialControlRubyApi
     config.middleware.use ActionDispatch::Cookies
     config.middleware.use Rack::Attack
 
+
+    # Mission Control — Jobs (dashboard for Solid Queue)
+    config.mission_control.jobs.http_basic_auth_user = ENV.fetch("MISSION_CONTROL_HTTP_BASIC_AUTH_USER") do
+      Rails.application.credentials.dig(:mission_control, :jobs, :http_basic_auth_user)
+    end
+    config.mission_control.jobs.http_basic_auth_password = ENV.fetch("MISSION_CONTROL_HTTP_BASIC_AUTH_PASSWORD") do
+      Rails.application.credentials.dig(:mission_control, :jobs, :http_basic_auth_password)
+    end
+
     config.generators do |g|
       g.orm :active_record, primary_key_type: :uuid
     end
