@@ -1,0 +1,205 @@
+AuthenticationRequest:
+  type: object
+  required: [email, password]
+  properties:
+    email:
+      type: string
+      format: email
+    password:
+      type: string
+      format: password
+      minLength: 8
+
+RegistrationRequest:
+  type: object
+  required: [first_name, last_name, email, password, password_confirmation]
+  properties:
+    first_name:
+      type: string
+    last_name:
+      type: string
+    email:
+      type: string
+      format: email
+    password:
+      type: string
+      format: password
+      minLength: 8
+    password_confirmation:
+      type: string
+      format: password
+
+RefreshSessionRequest:
+  type: object
+  required: [refresh_token]
+  properties:
+    refresh_token:
+      type: string
+
+ProfileUpdateRequest:
+  type: object
+  required: [first_name, last_name]
+  properties:
+    first_name:
+      type: string
+    last_name:
+      type: string
+
+AccountDeletionRequest:
+  type: object
+  required: [password]
+  properties:
+    password:
+      type: string
+      format: password
+
+EmailConfirmationRequest:
+  type: object
+  required: [token]
+  properties:
+    token:
+      type: string
+
+EmailChangeRequest:
+  type: object
+  required: [current_password, new_email]
+  properties:
+    current_password:
+      type: string
+      format: password
+    new_email:
+      type: string
+      format: email
+
+PasswordChangeRequest:
+  type: object
+  required: [current_password, password, password_confirmation]
+  properties:
+    current_password:
+      type: string
+      format: password
+    password:
+      type: string
+      format: password
+      minLength: 8
+    password_confirmation:
+      type: string
+      format: password
+
+PasswordResetRequest:
+  type: object
+  required: [email]
+  properties:
+    email:
+      type: string
+      format: email
+
+PasswordResetUpdateRequest:
+  type: object
+  required: [token, password, password_confirmation]
+  properties:
+    token:
+      type: string
+    password:
+      type: string
+      format: password
+      minLength: 8
+    password_confirmation:
+      type: string
+      format: password
+
+TokensData:
+  type: object
+  required: [token, refresh_token, user]
+  properties:
+    token:
+      type: string
+      description: Session token (Bearer). Expires in 15 minutes.
+    refresh_token:
+      type: string
+      description: Refresh token. Expires in 30 days. Used to obtain a new session token.
+    user:
+      $ref: "#/UserResource"
+
+TokensSuccessResponse:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: object
+    data:
+      $ref: "#/TokensData"
+
+MessageSuccessResponse:
+  type: object
+  required: [status]
+  properties:
+    status:
+      type: string
+      const: success
+    message:
+      type: string
+
+UserAttributes:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    first_name:
+      type: string
+    last_name:
+      type: string
+    email:
+      type: string
+      format: email
+
+UserResource:
+  type: object
+  properties:
+    data:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          const: user
+        attributes:
+          $ref: "#/UserAttributes"
+
+RegistrationSuccessResponse:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: object
+    data:
+      type: object
+      properties:
+        user:
+          $ref: "#/UserResource"
+
+ErrorResponse:
+  type: object
+  required: [status, message, details]
+  properties:
+    status:
+      type: string
+      const: error
+    message:
+      type: string
+    details:
+      type: object
+      additionalProperties:
+        type: array
+        items:
+          type: string

@@ -1,0 +1,41 @@
+openapi: 3.1.0
+
+info:
+  $ref: "./info.yml"
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  $ref: "./tags.yml"
+
+paths:
+  /api/v1/user/authentications:
+    $ref: "./paths/authentication/authentications.yml"
+  /api/v1/user/session/refreshes:
+    $ref: "./paths/authentication/session_refreshes.yml"
+  /api/v1/user/session/revokes:
+    $ref: "./paths/authentication/session_revokes.yml"
+  /api/v1/user/registrations:
+    $ref: "./paths/user/registrations.yml"
+  /api/v1/user/profiles:
+    $ref: "./paths/user/profiles.yml"
+  /api/v1/user/accounts:
+    $ref: "./paths/user/accounts.yml"
+  /api/v1/user/email/confirmations:
+    $ref: "./paths/user/email_confirmations.yml"
+  /api/v1/user/email/changes:
+    $ref: "./paths/user/email_changes.yml"
+  /api/v1/user/password/changes:
+    $ref: "./paths/user/password_changes.yml"
+  /api/v1/user/password/resets:
+    $ref: "./paths/user/password_resets.yml"
+
+components:
+  securitySchemes:
+    $ref: "./components/security_schemes.yml"
+  responses:
+    $ref: "./components/responses.yml"
+  schemas:
+    $ref: "./components/schemas.yml"

@@ -1,0 +1,11 @@
+bearerAuth:
+  type: http
+  scheme: bearer
+  bearerFormat: signed session token
+  description: |
+    Session token returned by `POST /api/v1/user/authentications`
+    or `PATCH /api/v1/user/session/refreshes`.
+
+    ```http
+    Authorization: Bearer <token>
+    ```

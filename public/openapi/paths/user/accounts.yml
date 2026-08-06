@@ -1,0 +1,26 @@
+delete:
+  tags: [User]
+  summary: Delete account
+  description: Permanently deletes the authenticated user. Requires the current password.
+  operationId: deleteAccount
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../../components/schemas.yml#/AccountDeletionRequest"
+        example:
+          password: password123
+  responses:
+    "200":
+      description: Account deleted
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/schemas.yml#/MessageSuccessResponse"
+    "422":
+      $ref: "../../components/responses.yml#/UnprocessableContent"
+    "500":
+      $ref: "../../components/responses.yml#/Unauthorized"

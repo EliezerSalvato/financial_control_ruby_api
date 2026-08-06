@@ -1,0 +1,24 @@
+patch:
+  tags: [Authentication]
+  summary: Refresh session
+  description: |
+    Exchanges a valid `refresh_token` for a new session `token` and a rotated `refresh_token`.
+    Does not require the Bearer header.
+  operationId: refreshSession
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../../components/schemas.yml#/RefreshSessionRequest"
+        example:
+          refresh_token: a1b2c3d4e5f6...
+  responses:
+    "200":
+      description: Tokens rotated
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/schemas.yml#/TokensSuccessResponse"
+    "422":
+      $ref: "../../components/responses.yml#/UnprocessableContent"

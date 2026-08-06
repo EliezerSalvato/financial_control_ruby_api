@@ -1,0 +1,4 @@
+- name: Authentication
+  description: Sign in, refresh session, and revoke sessions
+- name: User
+  description: Registration, profile, account, email, and password

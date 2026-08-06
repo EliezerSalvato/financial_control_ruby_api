@@ -1,0 +1,29 @@
+patch:
+  tags: [User]
+  summary: Change email
+  description: |
+    Changes the email of the authenticated user.
+    Requires the current password. Marks the user as unverified and sends a new confirmation email.
+  operationId: changeEmail
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../../components/schemas.yml#/EmailChangeRequest"
+        example:
+          current_password: password123
+          new_email: new.email@example.com
+  responses:
+    "200":
+      description: Email change initiated
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/schemas.yml#/MessageSuccessResponse"
+    "422":
+      $ref: "../../components/responses.yml#/UnprocessableContent"
+    "500":
+      $ref: "../../components/responses.yml#/Unauthorized"

@@ -1,0 +1,22 @@
+post:
+  tags: [User]
+  summary: Confirm email
+  description: Confirms the user email with the token received by email. Public endpoint.
+  operationId: confirmEmail
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../../components/schemas.yml#/EmailConfirmationRequest"
+        example:
+          token: confirmation-token-from-email
+  responses:
+    "200":
+      description: Email confirmed
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/schemas.yml#/MessageSuccessResponse"
+    "422":
+      $ref: "../../components/responses.yml#/UnprocessableContent"

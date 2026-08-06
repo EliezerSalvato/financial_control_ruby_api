@@ -1,0 +1,23 @@
+UnprocessableContent:
+  description: Validation or business rule failure
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas.yml#/ErrorResponse"
+      example:
+        status: error
+        message: "Email has already been taken"
+        details:
+          email:
+            - has already been taken
+
+Unauthorized:
+  description: Missing or invalid Bearer token
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas.yml#/ErrorResponse"
+      example:
+        status: error
+        message: Unauthorized
+        details: {}

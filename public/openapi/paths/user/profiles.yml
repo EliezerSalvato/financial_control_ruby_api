@@ -1,0 +1,27 @@
+patch:
+  tags: [User]
+  summary: Update profile
+  description: Updates `first_name` and/or `last_name` of the authenticated user.
+  operationId: updateProfile
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../../components/schemas.yml#/ProfileUpdateRequest"
+        example:
+          first_name: Jane
+          last_name: Smith
+  responses:
+    "200":
+      description: Profile updated
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/schemas.yml#/MessageSuccessResponse"
+    "422":
+      $ref: "../../components/responses.yml#/UnprocessableContent"
+    "500":
+      $ref: "../../components/responses.yml#/Unauthorized"
