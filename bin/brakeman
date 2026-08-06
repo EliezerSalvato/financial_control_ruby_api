@@ -2,6 +2,8 @@
 require "rubygems"
 require "bundler/setup"
 
-ARGV.unshift("--ensure-latest")
+# --ensure-latest queries RubyGems and fails as soon as a newer Brakeman is
+# published, so it only runs outside CI to keep builds reproducible.
+ARGV.unshift("--ensure-latest") unless ENV["CI"]
 
 load Gem.bin_path("brakeman", "brakeman")
