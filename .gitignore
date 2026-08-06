@@ -38,3 +38,6 @@ docker-compose.yml
 
 # Ignore test coverage reports.
 /coverage
+
+# Local tool version manager pin (optional).
+.tool-versions
