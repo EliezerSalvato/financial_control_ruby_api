@@ -1,0 +1,11 @@
+data:
+  read:
+    - config/locales/**/%{locale}.yml
+    - config/locales/**/*.%{locale}.yml
+  yaml:
+    write:
+      line_width: 150
+
+# Resolved dynamically via errors.add(:attr, :symbol) — scanner can't see literal t() calls
+ignore_unused:
+  - "activemodel.errors.*"
