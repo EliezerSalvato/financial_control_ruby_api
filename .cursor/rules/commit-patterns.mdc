@@ -1,0 +1,105 @@
+---
+description: Conventional Commits rules. Apply when creating or suggesting git commits.
+alwaysApply: false
+---
+
+# Commit Rules
+
+When generating or suggesting commit messages, ALWAYS follow these rules.
+
+## When to commit
+
+**Only create a git commit when the user explicitly asks.**
+
+Do not commit automatically after finishing code changes. If the user did not request a commit, leave changes unstaged/uncommitted and continue.
+
+## Mandatory format
+
+```
+<type>(<optional scope>): <short description in imperative>
+
+<optional body explaining the "why", not the "what">
+
+<optional footer: BREAKING CHANGE, Closes #123, etc>
+```
+
+## Allowed types
+
+| Type       | When to use                                                        |
+|------------|---------------------------------------------------------------------|
+| `feat`     | New functionality for the user                                      |
+| `fix`      | Bug fix                                                             |
+| `docs`     | Documentation-only changes                                          |
+| `style`    | Formatting, spaces, semicolons — no logic change                    |
+| `refactor` | Code refactoring without changing external behavior                 |
+| `perf`     | Performance improvement                                             |
+| `test`     | Test addition or correction                                         |
+| `build`    | Changes affecting build or external dependencies                    |
+| `ci`       | Changes to CI files and scripts                                     |
+| `chore`    | General maintenance, configs, tasks that don't change src or test   |
+| `revert`   | Reverts a previous commit                                           |
+
+## Writing rules
+
+1. **Always imperative**: "add", "fix", "remove" — never "added" or "adding".
+2. **Short first line**: ideally up to 50 characters, maximum 72.
+3. **No period** at the end of the first line.
+4. **Lowercase letter** after the colon (`feat: add...`, not `feat: Add...`).
+5. **Scope in parentheses** when it makes sense to indicate the affected module/area: `feat(auth):`, `fix(user):`.
+6. **Body explains the why**, doesn't repeat the diff. Use when the change is not trivial.
+7. **Breaking changes** must be marked with `!` after the type/scope and detailed in the footer:
+   ```
+   feat(api)!: remove support for /v1/users endpoint
+
+   BREAKING CHANGE: the /v1/users endpoint was removed, use /v2/users
+   ```
+8. **Reference issues** in the footer when applicable: `Closes #42`, `Refs #17`.
+
+## Granularity best practices
+
+- **Atomic commits**: each commit should represent ONE logical and complete change.
+- Don't mix `feat` with `fix` or `refactor` in the same commit.
+- Don't commit broken code or code that doesn't compile/pass tests.
+- Avoid "noise" commits like `wip`, `tweak`, `fix typo` — if unavoidable during development, they should be squashed before merge.
+- Prefer small and frequent commits instead of large and rare commits.
+
+## Correct examples
+
+```
+feat(auth): add Google OAuth login
+fix(checkout): fix shipping calculation for invalid ZIP code
+refactor(api): extract validation logic to separate module
+docs(readme): update installation instructions
+chore: update project dependencies
+test(auth): add tests for password recovery flow
+perf(query): optimize product listing query
+```
+
+## Incorrect examples (avoid)
+
+```
+fix bug                    -> lacks formal type and context
+Updated file               -> not imperative, no type
+WIP                        -> doesn't describe the change
+feat: Add New Feature.      -> wrong capitalization and period at the end
+miscellaneous changes      -> vague, no type, no scope
+```
+
+## Workflow (only when the user asked to commit)
+
+```bash
+git status
+git diff
+git add <relevant-files>
+git commit
+```
+
+## Checklist before finalizing a commit
+
+- [ ] Did the user explicitly ask to commit?
+- [ ] Does the chosen type correctly reflect the nature of the change?
+- [ ] Is the first line in imperative mood and within the character limit?
+- [ ] Does the commit represent a single logical change?
+- [ ] If there is a breaking change, is it marked with `!` and documented in the footer?
+- [ ] Is the committed code functional (compiles and passes tests)?
+- [ ] Does the commit message follow the rules?

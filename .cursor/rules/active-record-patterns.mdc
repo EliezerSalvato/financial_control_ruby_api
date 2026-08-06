@@ -1,0 +1,131 @@
+---
+description: Persistence patterns for *::Record, mappers, and migrations. Use when working with ActiveRecord records (not core processes).
+globs:
+  - app/models/**/*.rb
+  - db/migrate/**/*.rb
+excludeGlobs:
+  - app/models/core/**/*.rb
+alwaysApply: false
+---
+
+# Active Record Patterns
+
+This project does **not** use fat `ApplicationRecord` domain models or `app/services/`.
+
+Persistence lives in `*::Record` classes. Domain orchestration lives in `ApplicationSolidProcess` under `app/models/core/`. See `AGENTS.md` for the full layer map.
+
+## Records
+
+```ruby
+class User::Record < ApplicationRecord
+  self.table_name = "users"
+
+  has_many :sessions, class_name: "User::Session::Record", foreign_key: :user_id, dependent: :destroy
+
+  has_secure_password
+end
+```
+
+Rules:
+
+- Name persistence classes `*::Record` (never expose them as the public domain model).
+- Always set `self.table_name` when the class name does not match the table.
+- Always declare `dependent:` on associations that own child records.
+- Prefer `class_name:` + `foreign_key:` for nested record namespaces.
+- Keep Records thin: associations, `has_secure_password`, `generates_token_for`, and DB-level concerns only.
+- Do **not** put use-case orchestration, mail delivery, or multi-step workflows in Records — use solid-process.
+
+## Mappers
+
+Convert between Records and domain entities:
+
+```ruby
+module User::Mapper
+  extend self
+
+  def to_entity(record)
+    return if record.nil?
+
+    Core::User::Entity.new(
+      id: record.id,
+      first_name: record.first_name,
+      last_name: record.last_name,
+      email: record.email,
+      verified: record.verified,
+      active: record.active
+    )
+  end
+
+  def to_record(entity)
+    User::Record.find(entity.id)
+  end
+
+  def to_errors(record)
+    Core::Errors.new(record.errors.messages)
+  end
+end
+```
+
+Adapters under `app/models/<context>/**/adapters/` talk to Records and return entities / `Solid::Success` / `Solid::Failure`. Controllers and processes must not reach into Records when an adapter/facade exists.
+
+## Associations & queries
+
+- Use scopes on Records for simple, reusable filters.
+- Prevent N+1 with `includes` / `preload` when reading associations.
+- Use `joins` when filtering without loading associated records.
+- Prefer `find_each` for large batches.
+
+```ruby
+# Bad — N+1
+User::Record.all.each { |user| user.sessions.count }
+
+# Good
+User::Record.includes(:sessions)
+```
+
+## Callbacks
+
+Avoid callbacks for business logic and side effects.
+
+```ruby
+# Avoid — side effect buried in the Record
+class User::Record < ApplicationRecord
+  after_create :send_welcome_email
+end
+
+# Prefer — explicit orchestration in a solid-process (see Core::User::Registration)
+```
+
+## Migrations
+
+```ruby
+class CreateUsers < ActiveRecord::Migration[8.1]
+  def change
+    create_table :users, id: :uuid do |t|
+      t.string :first_name, null: false
+      t.string :last_name, null: false
+      t.string :email, null: false, index: { unique: true }
+      t.string :password_digest, null: false
+      t.boolean :verified, null: false, default: false
+      t.boolean :active, null: false, default: true
+
+      t.timestamps
+    end
+  end
+end
+```
+
+- Prefer UUID primary keys (project standard via `pgcrypto`).
+- Add `null:` and sensible `default:` constraints at the DB level.
+- Add indexes for columns used in `where` / `order` / joins and unique business keys.
+- In data migrations, prefer `find_each`; `update_column(s)` skips validations, callbacks, and timestamps — use deliberately.
+
+## Concerns
+
+Use only for genuinely shared, cohesive persistence behavior — not as a dumping ground for domain logic.
+
+## Performance
+
+- Add DB indexes for frequently queried columns.
+- Use `select` to limit columns; `pluck` instead of `map` for single attributes.
+- Use `find_each` for large datasets.

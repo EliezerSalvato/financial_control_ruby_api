@@ -1,0 +1,28 @@
+---
+description: README conventions
+globs: README.md
+alwaysApply: false
+---
+
+When creating or updating README.md:
+
+Follow this exact structure:
+
+1. Project overview
+2. Tech stack
+3. Requirements
+4. Setup instructions
+5. Environment variables
+6. Running locally
+7. Running tests
+8. API documentation
+9. Deployment
+10. Troubleshooting
+
+Rules:
+- Keep sections concise
+- Use markdown tables for env vars
+- Include copy-pasteable commands
+- Never leave TODO placeholders
+- Prefer examples over explanations
+- Use English
