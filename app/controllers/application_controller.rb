@@ -1,6 +1,8 @@
 class ApplicationController < ActionController::API
   include ActionController::Cookies
 
+  before_action :set_paper_trail_whodunnit
+
   around_action :switch_locale
 
   private
