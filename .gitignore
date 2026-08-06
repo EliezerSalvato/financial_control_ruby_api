@@ -35,3 +35,6 @@
 
 # Local Compose override (keep sample tracked)
 docker-compose.yml
+
+# Ignore test coverage reports.
+/coverage
