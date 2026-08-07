@@ -11,6 +11,10 @@ tags:
   $ref: "./tags.yml"
 
 paths:
+  /api/v1/tags:
+    $ref: "./paths/tags.yml"
+  /api/v1/tags/{id}:
+    $ref: "./paths/tag.yml"
   /api/v1/user/authentications:
     $ref: "./paths/authentication/authentications.yml"
   /api/v1/user/session/refreshes:
@@ -37,5 +41,7 @@ components:
     $ref: "./components/security_schemes.yml"
   responses:
     $ref: "./components/responses.yml"
+  parameters:
+    $ref: "./components/parameters.yml"
   schemas:
     $ref: "./components/schemas.yml"

@@ -40,7 +40,7 @@ class API::V1::BaseController < ApplicationController
     cookies.encrypted[:refresh_token] = cookie_options
   end
 
-  def render_json_with_success(status:, data: nil, message: nil)
+  def render_json_with_success(status:, data: nil, message: nil, meta: nil)
     json = { status: :success }
 
     case data
@@ -50,6 +50,7 @@ class API::V1::BaseController < ApplicationController
 
     json[:data] = data if data
     json[:message] = message if message
+    json[:meta] = meta if meta
 
     render status:, json:
   end
@@ -73,5 +74,9 @@ class API::V1::BaseController < ApplicationController
 
   def bearer_token
     request.headers["Authorization"]&.remove("Bearer ")
+  end
+
+  def ransack_filter_params
+    params[:q].to_unsafe_h if params[:q].present?
   end
 end

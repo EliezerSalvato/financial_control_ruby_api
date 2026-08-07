@@ -10,10 +10,22 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_06_145103) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_06_160442) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
+
+  create_table "tags", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.string "color", limit: 9, null: false
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index "user_id, lower((name)::text)", name: "index_tags_on_user_id_and_lower_name", unique: true
+    t.index ["user_id", "active"], name: "index_tags_on_user_id_and_active"
+    t.index ["user_id"], name: "index_tags_on_user_id"
+  end
 
   create_table "user_email_confirmations", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
     t.datetime "confirmed_at"
@@ -76,6 +88,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_06_145103) do
     t.index ["whodunnit"], name: "index_versions_on_whodunnit"
   end
 
+  add_foreign_key "tags", "users"
   add_foreign_key "user_email_confirmations", "users"
   add_foreign_key "user_password_resets", "users"
   add_foreign_key "user_sessions", "users"

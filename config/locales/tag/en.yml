@@ -1,0 +1,40 @@
+---
+en:
+  activemodel:
+    errors:
+      models:
+        core/tag/creation/input:
+          attributes:
+            base:
+              tag_creation_failed: Tag creation failed
+            name:
+              taken: has already been taken
+        core/tag/deletion/input:
+          attributes:
+            base:
+              tag_destruction_failed: Tag deletion failed
+              tag_not_found: Tag not found
+        core/tag/listing/input:
+          attributes:
+            q:
+              invalid: is invalid
+        core/tag/update/input:
+          attributes:
+            base:
+              tag_not_found: Tag not found
+              tag_update_failed: Tag update failed
+            name:
+              taken: has already been taken
+  tag:
+    creation:
+      failure: Tag creation failed
+      success: Tag created successfully
+    deletion:
+      failure: Tag deletion failed
+      success: Tag deleted successfully
+    errors:
+      invalid_filters: Invalid filter
+      not_found: Tag not found
+    update:
+      failure: Tag update failed
+      success: Tag updated successfully

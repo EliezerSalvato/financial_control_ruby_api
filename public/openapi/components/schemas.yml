@@ -203,3 +203,118 @@ ErrorResponse:
         type: array
         items:
           type: string
+
+TagAttributes:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+    color:
+      type: string
+      pattern: '^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$'
+      description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+      example: "#3B82F6"
+    active:
+      type: boolean
+
+TagResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: tag
+    attributes:
+      $ref: "#/TagAttributes"
+
+TagRequest:
+  type: object
+  required: [tag]
+  properties:
+    tag:
+      type: object
+      required: [name, color]
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+          pattern: '^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$'
+          description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+          example: "#3B82F6"
+        active:
+          type: boolean
+          default: true
+          description: Defaults to `true` when omitted
+
+TagUpdateRequest:
+  type: object
+  required: [tag]
+  properties:
+    tag:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+          pattern: '^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$'
+          description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+          example: "#3B82F6"
+        active:
+          type: boolean
+      description: Partial update — only provided fields are changed
+
+TagSuccessResponse:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: object
+    message:
+      type: string
+    data:
+      $ref: "#/TagResource"
+
+PaginationMeta:
+  type: object
+  properties:
+    page:
+      type: integer
+    per_page:
+      type: integer
+    count:
+      type: integer
+    pages:
+      type: integer
+    next_page:
+      type: [integer, "null"]
+    prev_page:
+      type: [integer, "null"]
+
+TagCollection:
+  type: object
+  required: [status, type, data, meta]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: collection
+    data:
+      type: array
+      items:
+        $ref: "#/TagResource"
+    meta:
+      $ref: "#/PaginationMeta"

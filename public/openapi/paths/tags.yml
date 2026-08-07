@@ -1,0 +1,87 @@
+get:
+  tags: [Tags]
+  summary: List tags
+  description: Returns a paginated list of tags for the authenticated user. Supports Ransack filters via `q`.
+  operationId: listTags
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: q[name_cont]
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Filter tags whose name contains the given value
+    - name: q[active_eq]
+      in: query
+      required: false
+      schema:
+        type: boolean
+      description: Filter by active flag
+    - name: sort
+      in: query
+      required: false
+      schema:
+        type: string
+        example: name asc
+      description: Sort expression (default `active desc, name asc`)
+    - name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    - name: per_page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+  responses:
+    "200":
+      description: Tags listed
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TagCollection"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+
+post:
+  tags: [Tags]
+  summary: Create tag
+  description: Creates a new tag for the authenticated user.
+  operationId: createTag
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/TagRequest"
+        example:
+          tag:
+            name: Vacation
+            color: "#3B82F6"
+            active: true
+  responses:
+    "201":
+      description: Tag created
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TagSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

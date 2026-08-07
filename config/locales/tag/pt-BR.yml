@@ -1,0 +1,40 @@
+---
+pt-BR:
+  activemodel:
+    errors:
+      models:
+        core/tag/creation/input:
+          attributes:
+            base:
+              tag_creation_failed: Falha ao criar a tag
+            name:
+              taken: já está em uso
+        core/tag/deletion/input:
+          attributes:
+            base:
+              tag_destruction_failed: Falha ao excluir a tag
+              tag_not_found: Tag não encontrada
+        core/tag/listing/input:
+          attributes:
+            q:
+              invalid: é inválido
+        core/tag/update/input:
+          attributes:
+            base:
+              tag_not_found: Tag não encontrada
+              tag_update_failed: Falha ao atualizar a tag
+            name:
+              taken: já está em uso
+  tag:
+    creation:
+      failure: Falha ao criar a tag
+      success: Tag criada com sucesso
+    deletion:
+      failure: Falha ao excluir a tag
+      success: Tag excluída com sucesso
+    errors:
+      invalid_filters: Filtro inválido
+      not_found: Tag não encontrada
+    update:
+      failure: Falha ao atualizar a tag
+      success: Tag atualizada com sucesso

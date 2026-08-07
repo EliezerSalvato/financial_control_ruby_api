@@ -1,0 +1,79 @@
+get:
+  tags: [Tags]
+  summary: Show tag
+  description: Returns a single tag owned by the authenticated user.
+  operationId: showTag
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Tag found
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TagSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+
+patch:
+  tags: [Tags]
+  summary: Update tag
+  description: Updates an existing tag owned by the authenticated user.
+  operationId: updateTag
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/TagUpdateRequest"
+        example:
+          tag:
+            name: Vacation
+            color: "#10B981"
+            active: false
+  responses:
+    "200":
+      description: Tag updated
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TagSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+
+delete:
+  tags: [Tags]
+  summary: Delete tag
+  description: Deletes a tag owned by the authenticated user.
+  operationId: deleteTag
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Tag deleted
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/MessageSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

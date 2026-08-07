@@ -21,3 +21,25 @@ Unauthorized:
         status: error
         message: Unauthorized
         details: {}
+
+BadRequest:
+  description: Invalid request parameters or filters
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas.yml#/ErrorResponse"
+      example:
+        status: error
+        message: Invalid request
+        details: {}
+
+NotFound:
+  description: Resource not found
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas.yml#/ErrorResponse"
+      example:
+        status: error
+        message: Not found
+        details: {}
