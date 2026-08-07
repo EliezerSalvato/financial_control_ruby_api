@@ -1,0 +1,87 @@
+get:
+  tags: [Categories]
+  summary: List categories
+  description: Returns a paginated list of categories for the authenticated user. Supports Ransack filters via `q`.
+  operationId: listCategories
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: q[name_cont]
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Filter categories whose name contains the given value
+    - name: q[active_eq]
+      in: query
+      required: false
+      schema:
+        type: boolean
+      description: Filter by active flag
+    - name: sort
+      in: query
+      required: false
+      schema:
+        type: string
+        example: name asc
+      description: Sort expression (default `active desc, name asc`)
+    - name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    - name: per_page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+  responses:
+    "200":
+      description: Categories listed
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/CategoryCollection"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+
+post:
+  tags: [Categories]
+  summary: Create category
+  description: Creates a new category for the authenticated user.
+  operationId: createCategory
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/CategoryRequest"
+        example:
+          category:
+            name: Vacation
+            color: "#3B82F6"
+            active: true
+  responses:
+    "201":
+      description: Category created
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/CategorySuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

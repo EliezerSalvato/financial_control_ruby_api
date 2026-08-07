@@ -15,6 +15,10 @@ paths:
     $ref: "./paths/tags.yml"
   /api/v1/tags/{id}:
     $ref: "./paths/tag.yml"
+  /api/v1/categories:
+    $ref: "./paths/categories.yml"
+  /api/v1/categories/{id}:
+    $ref: "./paths/category.yml"
   /api/v1/user/authentications:
     $ref: "./paths/authentication/authentications.yml"
   /api/v1/user/session/refreshes:

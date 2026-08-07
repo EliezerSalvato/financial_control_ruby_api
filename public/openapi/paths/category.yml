@@ -1,0 +1,79 @@
+get:
+  tags: [Categories]
+  summary: Show category
+  description: Returns a single category owned by the authenticated user.
+  operationId: showCategory
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Category found
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/CategorySuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+
+patch:
+  tags: [Categories]
+  summary: Update category
+  description: Updates an existing category owned by the authenticated user.
+  operationId: updateCategory
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/CategoryUpdateRequest"
+        example:
+          category:
+            name: Vacation
+            color: "#10B981"
+            active: false
+  responses:
+    "200":
+      description: Category updated
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/CategorySuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+
+delete:
+  tags: [Categories]
+  summary: Delete category
+  description: Deletes a category owned by the authenticated user.
+  operationId: deleteCategory
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Category deleted
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/MessageSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

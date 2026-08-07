@@ -4,3 +4,5 @@
   description: Registration, profile, account, email, and password
 - name: Tags
   description: User-owned labels for categorizing transactions
+- name: Categories
+  description: User-owned categories for organizing transactions

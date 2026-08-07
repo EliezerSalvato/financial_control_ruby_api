@@ -1,0 +1,40 @@
+---
+pt-BR:
+  activemodel:
+    errors:
+      models:
+        core/category/creation/input:
+          attributes:
+            base:
+              category_creation_failed: Falha ao criar a categoria
+            name:
+              taken: já está em uso
+        core/category/deletion/input:
+          attributes:
+            base:
+              category_destruction_failed: Falha ao excluir a categoria
+              category_not_found: Categoria não encontrada
+        core/category/listing/input:
+          attributes:
+            q:
+              invalid: é inválido
+        core/category/update/input:
+          attributes:
+            base:
+              category_not_found: Categoria não encontrada
+              category_update_failed: Falha ao atualizar a categoria
+            name:
+              taken: já está em uso
+  category:
+    creation:
+      failure: Falha ao criar a categoria
+      success: Categoria criada com sucesso
+    deletion:
+      failure: Falha ao excluir a categoria
+      success: Categoria excluída com sucesso
+    errors:
+      invalid_filters: Filtro inválido
+      not_found: Categoria não encontrada
+    update:
+      failure: Falha ao atualizar a categoria
+      success: Categoria atualizada com sucesso
