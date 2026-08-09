@@ -8,3 +8,5 @@
   description: User-owned categories for organizing transactions
 - name: Institutions
   description: User-owned financial institutions
+- name: Accounts
+  description: User-owned financial accounts (bank accounts and cash)

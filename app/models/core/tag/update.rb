@@ -18,7 +18,7 @@ class Core::Tag::Update < ApplicationSolidProcess
     validates :user, :id, presence: true
     validates :user, kind_of: Core::User::Entity
     validates :name, presence: true, allow_nil: true
-    validates :color, presence: true, format: { with: Core::Tag::Color::FORMAT }, allow_nil: true
+    validates :color, presence: true, format: { with: Core::Color::FORMAT }, allow_nil: true
   end
 
 

@@ -1,0 +1,132 @@
+get:
+  tags: [Accounts]
+  summary: List accounts
+  description: Returns a paginated list of accounts for the authenticated user. Supports Ransack filters via `q`.
+  operationId: listAccounts
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: q[name_cont]
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Filter accounts whose name contains the given value
+    - name: q[kind_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [bank_account, cash]
+      description: Filter by account kind
+    - name: q[bank_account_type_eq]
+      in: query
+      required: false
+      schema:
+        $ref: "../components/schemas.yml#/BankAccountType"
+      description: Filter by bank account type (relevant for `bank_account` kind)
+    - name: q[institution_id_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Filter by institution id (relevant for `bank_account` kind)
+    - name: q[current_balance_eq]
+      in: query
+      required: false
+      schema:
+        type: number
+      description: Filter by exact current balance
+    - name: q[active_eq]
+      in: query
+      required: false
+      schema:
+        type: boolean
+      description: Filter by active flag
+    - name: sort
+      in: query
+      required: false
+      schema:
+        type: string
+        example: name asc
+      description: Sort expression (default `active desc, name asc`)
+    - name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    - name: per_page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+  responses:
+    "200":
+      description: Accounts listed
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/AccountCollection"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+
+post:
+  tags: [Accounts]
+  summary: Create account
+  description: |
+    Creates a new account for the authenticated user.
+
+    Permitted fields depend on `kind`:
+    - `bank_account` — requires `institution_id` (must belong to the user and be active) and `bank_account_type`
+    - `cash` — must omit `institution_id` and `bank_account_type`
+  operationId: createAccount
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/AccountRequest"
+        examples:
+          bank_account:
+            summary: Bank account
+            value:
+              account:
+                name: Nubank Checking
+                kind: bank_account
+                institution_id: 0198f0c2-7b3a-7b6e-9f2d-1a2b3c4d5e6f
+                bank_account_type: checking
+                color: "#820AD1"
+                active: true
+          cash:
+            summary: Cash
+            value:
+              account:
+                name: Wallet
+                kind: cash
+                color: "#10B981"
+                active: true
+  responses:
+    "201":
+      description: Account created
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/AccountSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

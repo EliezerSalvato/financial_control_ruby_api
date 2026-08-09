@@ -16,7 +16,7 @@ class Core::Category::Creation < ApplicationSolidProcess
 
     validates :user, :name, :color, presence: true
     validates :user, kind_of: Core::User::Entity
-    validates :color, format: { with: Core::Category::Color::FORMAT }
+    validates :color, format: { with: Core::Color::FORMAT }
   end
 
 

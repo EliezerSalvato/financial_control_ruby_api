@@ -1,0 +1,86 @@
+get:
+  tags: [Accounts]
+  summary: Show account
+  description: Returns a single account owned by the authenticated user.
+  operationId: showAccount
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Account found
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/AccountSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+
+patch:
+  tags: [Accounts]
+  summary: Update account
+  description: |
+    Updates an existing account owned by the authenticated user.
+
+    Permitted fields depend on `kind` (from the request body, or the existing account when omitted):
+    - `bank_account` — may include `institution_id` (when changing, must belong to the user and be active) and `bank_account_type`
+    - `cash` — `institution_id` and `bank_account_type` are not permitted
+
+    An already linked institution may be inactive; updates that keep the current `institution_id` are allowed.
+  operationId: updateAccount
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/AccountUpdateRequest"
+        example:
+          account:
+            name: Updated Wallet
+            color: "#10B981"
+            active: false
+  responses:
+    "200":
+      description: Account updated
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/AccountSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+
+delete:
+  tags: [Accounts]
+  summary: Delete account
+  description: Deletes an account owned by the authenticated user.
+  operationId: deleteAccount
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Account deleted
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/MessageSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

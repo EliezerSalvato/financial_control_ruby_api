@@ -10,10 +10,33 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_09_163047) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_09_180459) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
+
+  # Custom types defined in this database.
+  # Note that some types may not work with other database engines. Be careful if changing database.
+  create_enum "account_kind", ["bank_account", "cash"]
+  create_enum "bank_account_type", ["checking", "savings", "investment", "salary"]
+
+  create_table "accounts", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.enum "bank_account_type", enum_type: "bank_account_type"
+    t.string "color", limit: 9, null: false
+    t.datetime "created_at", null: false
+    t.decimal "current_balance", precision: 15, scale: 2, default: "0.0", null: false
+    t.uuid "institution_id"
+    t.enum "kind", null: false, enum_type: "account_kind"
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index "user_id, lower((name)::text)", name: "index_accounts_on_user_id_and_lower_name", unique: true
+    t.index ["institution_id"], name: "index_accounts_on_institution_id"
+    t.index ["user_id", "active"], name: "index_accounts_on_user_id_and_active"
+    t.index ["user_id"], name: "index_accounts_on_user_id"
+    t.check_constraint "kind = 'bank_account'::account_kind AND bank_account_type IS NOT NULL AND institution_id IS NOT NULL OR kind = 'cash'::account_kind AND bank_account_type IS NULL AND institution_id IS NULL", name: "accounts_kind_consistency"
+  end
 
   create_table "categories", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
     t.boolean "active", default: true, null: false
@@ -112,6 +135,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_163047) do
     t.index ["whodunnit"], name: "index_versions_on_whodunnit"
   end
 
+  add_foreign_key "accounts", "institutions"
+  add_foreign_key "accounts", "users"
   add_foreign_key "categories", "users"
   add_foreign_key "institutions", "users"
   add_foreign_key "tags", "users"

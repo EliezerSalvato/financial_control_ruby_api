@@ -192,6 +192,7 @@ Always:
 - use serializers (`jsonapi-serializer`, e.g. `User::Serializer`) wrapping entities from the facade
 - use I18n for messages under `config/locales/<context>/` (e.g. `en.yml`, `pt-BR.yml`, mailer locales)
 - keep OpenAPI docs in sync: add/update path files under `public/openapi/paths/`, wire them in `public/openapi/spec.yml`, update `components/` when needed (Redoc UI at `/docs`)
+- whenever OpenAPI docs change, bump the docs version in `public/docs/index.html` (`spec-url` query param `?v=...`) so clients reload the latest spec; keep `public/openapi/info.yml` `version` in sync when the API docs version itself changes
 - return proper HTTP status codes
 - keep response consistency (`render_json_with_success` / `render_json_with_error` / `render_json_with_model_errors`)
 - use Zeitwerk conventions
@@ -236,7 +237,7 @@ Ask yourself:
 4. Are there security concerns (auth, tokens, cookies)?
 5. Are there performance concerns?
 6. Does this require request specs / factories?
-7. Does this require OpenAPI / I18n updates?
+7. Does this require OpenAPI / I18n updates? If OpenAPI changed, was the docs version bumped (`public/docs/index.html` `?v=...`)?
 8. Did the user ask for a commit?
 
 Only then implement.

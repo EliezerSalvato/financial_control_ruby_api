@@ -16,7 +16,7 @@ class Core::Tag::Creation < ApplicationSolidProcess
 
     validates :user, :name, :color, presence: true
     validates :user, kind_of: Core::User::Entity
-    validates :color, format: { with: Core::Tag::Color::FORMAT }
+    validates :color, format: { with: Core::Color::FORMAT }
   end
 
 

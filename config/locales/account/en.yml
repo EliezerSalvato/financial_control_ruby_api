@@ -1,0 +1,56 @@
+---
+en:
+  account:
+    creation:
+      failure: Account creation failed
+      success: Account created successfully
+    deletion:
+      failure: Account deletion failed
+      success: Account deleted successfully
+    errors:
+      invalid_filters: Invalid filter
+      not_found: Account not found
+    update:
+      failure: Account update failed
+      success: Account updated successfully
+  activemodel:
+    errors:
+      models:
+        core/account/creation/input:
+          attributes:
+            bank_account_type:
+              blank: can't be blank
+              present: must be blank
+            base:
+              account_creation_failed: Account creation failed
+            institution_id:
+              blank: can't be blank
+              inactive: is inactive
+              not_found: was not found
+              present: must be blank
+            name:
+              taken: has already been taken
+        core/account/deletion/input:
+          attributes:
+            base:
+              account_destruction_failed: Account deletion failed
+              account_not_found: Account not found
+        core/account/listing/input:
+          attributes:
+            q:
+              invalid: is invalid
+        core/account/update/input:
+          attributes:
+            bank_account_type:
+              blank: can't be blank
+              present: must be blank
+            base:
+              account_not_found: Account not found
+              account_update_failed: Account update failed
+            institution_id:
+              blank: can't be blank
+              inactive: is inactive
+              not_found: was not found
+              present: must be blank
+            name:
+              taken: has already been taken

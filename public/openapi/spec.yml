@@ -23,6 +23,10 @@ paths:
     $ref: "./paths/institutions.yml"
   /api/v1/institutions/{id}:
     $ref: "./paths/institution.yml"
+  /api/v1/accounts:
+    $ref: "./paths/accounts.yml"
+  /api/v1/accounts/{id}:
+    $ref: "./paths/account.yml"
   /api/v1/user/authentications:
     $ref: "./paths/authentication/authentications.yml"
   /api/v1/user/session/refreshes:

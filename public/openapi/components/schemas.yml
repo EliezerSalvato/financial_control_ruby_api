@@ -513,3 +513,150 @@ InstitutionCollection:
         $ref: "#/InstitutionResource"
     meta:
       $ref: "#/PaginationMeta"
+
+AccountKind:
+  type: string
+  enum: [bank_account, cash]
+
+BankAccountType:
+  type: string
+  enum: [checking, savings, investment, salary]
+
+AccountAttributes:
+  type: object
+  description: |
+    Common attributes are always present. `institution_id` and `bank_account_type`
+    are only included when `kind` is `bank_account`.
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+    kind:
+      $ref: "#/AccountKind"
+    institution_id:
+      type: string
+      format: uuid
+      description: Present only when `kind` is `bank_account`
+    bank_account_type:
+      $ref: "#/BankAccountType"
+      description: Present only when `kind` is `bank_account`
+    current_balance:
+      type: string
+      description: Decimal amount as string (precision 15, scale 2)
+      example: "0.0"
+    color:
+      type: string
+      pattern: '^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$'
+      description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+      example: "#3B82F6"
+    active:
+      type: boolean
+
+AccountResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: account
+    attributes:
+      $ref: "#/AccountAttributes"
+
+AccountRequest:
+  type: object
+  required: [account]
+  properties:
+    account:
+      type: object
+      required: [name, kind, color]
+      properties:
+        name:
+          type: string
+        kind:
+          $ref: "#/AccountKind"
+        institution_id:
+          type: string
+          format: uuid
+          description: Required when `kind` is `bank_account`; not permitted for `cash`
+        bank_account_type:
+          $ref: "#/BankAccountType"
+          description: Required when `kind` is `bank_account`; not permitted for `cash`
+        current_balance:
+          type: number
+          default: 0
+          description: Defaults to `0` when omitted
+        color:
+          type: string
+          pattern: '^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$'
+          description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+          example: "#3B82F6"
+        active:
+          type: boolean
+          default: true
+          description: Defaults to `true` when omitted
+
+AccountUpdateRequest:
+  type: object
+  required: [account]
+  properties:
+    account:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+        kind:
+          $ref: "#/AccountKind"
+        institution_id:
+          type: string
+          format: uuid
+          description: Permitted only when resulting `kind` is `bank_account`
+        bank_account_type:
+          $ref: "#/BankAccountType"
+          description: Permitted only when resulting `kind` is `bank_account`
+        current_balance:
+          type: number
+        color:
+          type: string
+          pattern: '^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$'
+          description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+          example: "#3B82F6"
+        active:
+          type: boolean
+      description: Partial update — only provided fields are changed
+
+AccountSuccessResponse:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: object
+    message:
+      type: string
+    data:
+      $ref: "#/AccountResource"
+
+AccountCollection:
+  type: object
+  required: [status, type, data, meta]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: collection
+    data:
+      type: array
+      items:
+        $ref: "#/AccountResource"
+    meta:
+      $ref: "#/PaginationMeta"

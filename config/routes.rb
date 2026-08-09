@@ -10,6 +10,7 @@ Rails.application.routes.draw do
       resources :tags, only: %i[index show create update destroy]
       resources :categories, only: %i[index show create update destroy]
       resources :institutions, only: %i[index show create update destroy]
+      resources :accounts, only: %i[index show create update destroy]
 
       namespace :user do
         resource :registrations, only: %i[create]
