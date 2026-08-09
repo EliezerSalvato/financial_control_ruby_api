@@ -9,6 +9,7 @@ Rails.application.routes.draw do
     namespace :v1 do
       resources :tags, only: %i[index show create update destroy]
       resources :categories, only: %i[index show create update destroy]
+      resources :institutions, only: %i[index show create update destroy]
 
       namespace :user do
         resource :registrations, only: %i[create]

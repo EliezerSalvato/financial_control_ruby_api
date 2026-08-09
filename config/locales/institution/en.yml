@@ -1,0 +1,40 @@
+---
+en:
+  activemodel:
+    errors:
+      models:
+        core/institution/creation/input:
+          attributes:
+            base:
+              institution_creation_failed: Institution creation failed
+            name:
+              taken: has already been taken
+        core/institution/deletion/input:
+          attributes:
+            base:
+              institution_destruction_failed: Institution deletion failed
+              institution_not_found: Institution not found
+        core/institution/listing/input:
+          attributes:
+            q:
+              invalid: is invalid
+        core/institution/update/input:
+          attributes:
+            base:
+              institution_not_found: Institution not found
+              institution_update_failed: Institution update failed
+            name:
+              taken: has already been taken
+  institution:
+    creation:
+      failure: Institution creation failed
+      success: Institution created successfully
+    deletion:
+      failure: Institution deletion failed
+      success: Institution deleted successfully
+    errors:
+      invalid_filters: Invalid filter
+      not_found: Institution not found
+    update:
+      failure: Institution update failed
+      success: Institution updated successfully

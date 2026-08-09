@@ -1,0 +1,79 @@
+get:
+  tags: [Institutions]
+  summary: Show institution
+  description: Returns a single institution owned by the authenticated user.
+  operationId: showInstitution
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Institution found
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/InstitutionSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+
+patch:
+  tags: [Institutions]
+  summary: Update institution
+  description: Updates an existing institution owned by the authenticated user.
+  operationId: updateInstitution
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/InstitutionUpdateRequest"
+        example:
+          institution:
+            name: Nubank
+            logo_key: institutions/nubank-v2.png
+            active: false
+  responses:
+    "200":
+      description: Institution updated
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/InstitutionSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+
+delete:
+  tags: [Institutions]
+  summary: Delete institution
+  description: Deletes an institution owned by the authenticated user.
+  operationId: deleteInstitution
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Institution deleted
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/MessageSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

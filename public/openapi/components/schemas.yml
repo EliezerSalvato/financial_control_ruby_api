@@ -417,3 +417,99 @@ CategoryCollection:
         $ref: "#/CategoryResource"
     meta:
       $ref: "#/PaginationMeta"
+
+InstitutionAttributes:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+    logo_key:
+      type: [string, "null"]
+      description: Storage key for the institution logo
+      example: institutions/nubank.png
+    active:
+      type: boolean
+
+InstitutionResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: institution
+    attributes:
+      $ref: "#/InstitutionAttributes"
+
+InstitutionRequest:
+  type: object
+  required: [institution]
+  properties:
+    institution:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        logo_key:
+          type: string
+          description: Storage key for the institution logo
+          example: institutions/nubank.png
+        active:
+          type: boolean
+          default: true
+          description: Defaults to `true` when omitted
+
+InstitutionUpdateRequest:
+  type: object
+  required: [institution]
+  properties:
+    institution:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+        logo_key:
+          type: string
+          description: Storage key for the institution logo
+          example: institutions/nubank.png
+        active:
+          type: boolean
+      description: Partial update — only provided fields are changed
+
+InstitutionSuccessResponse:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: object
+    message:
+      type: string
+    data:
+      $ref: "#/InstitutionResource"
+
+InstitutionCollection:
+  type: object
+  required: [status, type, data, meta]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: collection
+    data:
+      type: array
+      items:
+        $ref: "#/InstitutionResource"
+    meta:
+      $ref: "#/PaginationMeta"
