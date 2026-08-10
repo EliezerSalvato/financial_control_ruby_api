@@ -1,0 +1,82 @@
+get:
+  tags: [Credit Cards]
+  summary: Show credit card
+  description: Returns a single credit card owned by the authenticated user.
+  operationId: showCreditCard
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Credit card found
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/CreditCardSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+
+patch:
+  tags: [Credit Cards]
+  summary: Update credit card
+  description: |
+    Updates an existing credit card owned by the authenticated user.
+    Changing `total_limit` adjusts `available_limit` by the same delta and
+    is rejected when that would make `available_limit` negative.
+  operationId: updateCreditCard
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/CreditCardUpdateRequest"
+        example:
+          credit_card:
+            name: Nubank Ultravioleta
+            total_limit: 7000
+            active: false
+  responses:
+    "200":
+      description: Credit card updated
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/CreditCardSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+
+delete:
+  tags: [Credit Cards]
+  summary: Delete credit card
+  description: Deletes a credit card owned by the authenticated user.
+  operationId: deleteCreditCard
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Credit card deleted
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/MessageSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

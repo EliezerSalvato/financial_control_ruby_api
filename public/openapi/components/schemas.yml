@@ -660,3 +660,155 @@ AccountCollection:
         $ref: "#/AccountResource"
     meta:
       $ref: "#/PaginationMeta"
+
+CreditCardAttributes:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    institution_id:
+      type: string
+      format: uuid
+    default_payment_account_id:
+      type: string
+      format: uuid
+    name:
+      type: string
+    total_limit:
+      type: string
+      description: Decimal amount as string (precision 15, scale 2)
+      example: "5000.0"
+    available_limit:
+      type: string
+      description: Decimal amount as string (precision 15, scale 2). Must be between 0 and `total_limit`.
+      example: "5000.0"
+    closing_day:
+      type: integer
+      minimum: 1
+      maximum: 31
+    due_day:
+      type: integer
+      minimum: 1
+      maximum: 31
+    network:
+      type: string
+      example: mastercard
+    active:
+      type: boolean
+
+CreditCardResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: credit_card
+    attributes:
+      $ref: "#/CreditCardAttributes"
+
+CreditCardRequest:
+  type: object
+  required: [credit_card]
+  properties:
+    credit_card:
+      type: object
+      required:
+        - institution_id
+        - default_payment_account_id
+        - name
+        - closing_day
+        - due_day
+        - network
+      properties:
+        institution_id:
+          type: string
+          format: uuid
+        default_payment_account_id:
+          type: string
+          format: uuid
+          description: Must reference an account owned by the authenticated user
+        name:
+          type: string
+        total_limit:
+          type: number
+          minimum: 0
+          default: 0
+          description: Defaults to `0` when omitted. `available_limit` is initialized with the same value.
+        closing_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        due_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        network:
+          type: string
+        active:
+          type: boolean
+          default: true
+          description: Defaults to `true` when omitted
+
+CreditCardUpdateRequest:
+  type: object
+  required: [credit_card]
+  properties:
+    credit_card:
+      type: object
+      minProperties: 1
+      properties:
+        institution_id:
+          type: string
+          format: uuid
+        default_payment_account_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        total_limit:
+          type: number
+          minimum: 0
+          description: |
+            When changed, `available_limit` is adjusted by the same delta
+            (`new_total_limit - old_total_limit`). Rejected if the resulting
+            `available_limit` would be negative.
+        network:
+          type: string
+        active:
+          type: boolean
+      description: Partial update — only provided fields are changed
+
+CreditCardSuccessResponse:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: object
+    message:
+      type: string
+    data:
+      $ref: "#/CreditCardResource"
+
+CreditCardCollection:
+  type: object
+  required: [status, type, data, meta]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: collection
+    data:
+      type: array
+      items:
+        $ref: "#/CreditCardResource"
+    meta:
+      $ref: "#/PaginationMeta"

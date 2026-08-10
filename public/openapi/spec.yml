@@ -27,6 +27,10 @@ paths:
     $ref: "./paths/accounts.yml"
   /api/v1/accounts/{id}:
     $ref: "./paths/account.yml"
+  /api/v1/credit_cards:
+    $ref: "./paths/credit_cards.yml"
+  /api/v1/credit_cards/{id}:
+    $ref: "./paths/credit_card.yml"
   /api/v1/user/authentications:
     $ref: "./paths/authentication/authentications.yml"
   /api/v1/user/session/refreshes:

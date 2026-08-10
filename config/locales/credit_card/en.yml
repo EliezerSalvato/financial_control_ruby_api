@@ -1,0 +1,54 @@
+---
+en:
+  activemodel:
+    errors:
+      models:
+        core/credit_card/creation/input:
+          attributes:
+            base:
+              credit_card_creation_failed: Credit card creation failed
+            default_payment_account_id:
+              inactive: is inactive
+              not_found: was not found
+            institution_id:
+              inactive: is inactive
+              not_found: was not found
+            name:
+              taken: has already been taken
+        core/credit_card/deletion/input:
+          attributes:
+            base:
+              credit_card_destruction_failed: Credit card deletion failed
+              credit_card_not_found: Credit card not found
+        core/credit_card/listing/input:
+          attributes:
+            q:
+              invalid: is invalid
+        core/credit_card/update/input:
+          attributes:
+            base:
+              credit_card_not_found: Credit card not found
+              credit_card_update_failed: Credit card update failed
+            default_payment_account_id:
+              inactive: is inactive
+              not_found: was not found
+            institution_id:
+              inactive: is inactive
+              not_found: was not found
+            name:
+              taken: has already been taken
+            total_limit:
+              insufficient_available_limit: would result in a negative available limit
+  credit_card:
+    creation:
+      failure: Credit card creation failed
+      success: Credit card created successfully
+    deletion:
+      failure: Credit card deletion failed
+      success: Credit card deleted successfully
+    errors:
+      invalid_filters: Invalid filter
+      not_found: Credit card not found
+    update:
+      failure: Credit card update failed
+      success: Credit card updated successfully

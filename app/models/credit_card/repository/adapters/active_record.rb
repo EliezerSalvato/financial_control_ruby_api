@@ -1,0 +1,70 @@
+module CreditCard::Repository::Adapters::ActiveRecord
+  include Core::CreditCard::Repository::Interface
+  extend Solid::Output.mixin
+  extend self
+
+  def list(user:, filters:, sorting:, page:, per_page:)
+    scope = user_credit_cards(user)
+    sorts = sorting.to_s.split(",").map(&:strip)
+    query = scope.ransack(filters.merge(s: sorts))
+    records, pagination = Pagination.paginate(query.result, page:, per_page:)
+
+    Success(:credit_cards_listed, credit_cards: CreditCard::Mapper.to_entities(records), pagination:)
+  rescue Ransack::InvalidSearchError, ArgumentError, Pagy::OptionError
+    Failure(:invalid_filters)
+  end
+
+  def find_by_id(user:, id:)
+    credit_card = user_credit_cards(user).find_by(id:)
+
+    return Success(:credit_card_found, credit_card: CreditCard::Mapper.to_entity(credit_card)) if credit_card.present?
+
+    Failure(:credit_card_not_found)
+  end
+
+  def exists?(user:, name:, excluding_id: nil)
+    scope = user_credit_cards(user).where("LOWER(name) = LOWER(?)", name)
+    scope = scope.where.not(id: excluding_id) if excluding_id.present?
+
+    scope.exists?
+  end
+
+  def create(user:, attributes:)
+    credit_card = user_credit_cards(user).create(attributes)
+
+    return Success(:credit_card_created, credit_card: CreditCard::Mapper.to_entity(credit_card)) if credit_card.persisted?
+
+    Failure(
+      :credit_card_creation_failed,
+      credit_card: CreditCard::Mapper.to_entity(credit_card),
+      errors: CreditCard::Mapper.to_errors(credit_card)
+    )
+  end
+
+  def update(credit_card:, attributes:)
+    record = CreditCard::Mapper.to_record(credit_card)
+    updated = record.update(attributes)
+
+    return Success(:credit_card_updated, credit_card: CreditCard::Mapper.to_entity(record)) if updated
+
+    Failure(
+      :credit_card_update_failed,
+      credit_card: CreditCard::Mapper.to_entity(record),
+      errors: CreditCard::Mapper.to_errors(record)
+    )
+  end
+
+  def destroy(credit_card:)
+    record = CreditCard::Mapper.to_record(credit_card)
+
+    return Success(:credit_card_destroyed) if record.destroy
+
+    Failure(:credit_card_destruction_failed)
+  end
+
+  private
+
+  def user_credit_cards(user)
+    CreditCard::Record.where(user_id: user.id)
+  end
+end

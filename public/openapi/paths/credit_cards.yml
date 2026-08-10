@@ -1,0 +1,112 @@
+get:
+  tags: [Credit Cards]
+  summary: List credit cards
+  description: Returns a paginated list of credit cards for the authenticated user. Supports Ransack filters via `q`.
+  operationId: listCreditCards
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: q[name_cont]
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Filter credit cards whose name contains the given value
+    - name: q[network_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Filter by network
+    - name: q[institution_id_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Filter by institution id
+    - name: q[default_payment_account_id_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Filter by default payment account id
+    - name: q[active_eq]
+      in: query
+      required: false
+      schema:
+        type: boolean
+      description: Filter by active flag
+    - name: sort
+      in: query
+      required: false
+      schema:
+        type: string
+        example: name asc
+      description: Sort expression (default `active desc, name asc`)
+    - name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    - name: per_page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+  responses:
+    "200":
+      description: Credit cards listed
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/CreditCardCollection"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+
+post:
+  tags: [Credit Cards]
+  summary: Create credit card
+  description: Creates a new credit card for the authenticated user.
+  operationId: createCreditCard
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/CreditCardRequest"
+        example:
+          credit_card:
+            institution_id: "018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b"
+            default_payment_account_id: "018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6c"
+            name: Nubank Platinum
+            total_limit: 5000
+            closing_day: 10
+            due_day: 17
+            network: mastercard
+            active: true
+  responses:
+    "201":
+      description: Credit card created
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/CreditCardSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

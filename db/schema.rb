@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_09_180459) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_10_143100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -48,6 +48,30 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_180459) do
     t.index "user_id, lower((name)::text)", name: "index_categories_on_user_id_and_lower_name", unique: true
     t.index ["user_id", "active"], name: "index_categories_on_user_id_and_active"
     t.index ["user_id"], name: "index_categories_on_user_id"
+  end
+
+  create_table "credit_cards", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.decimal "available_limit", precision: 15, scale: 2, default: "0.0", null: false
+    t.integer "closing_day", null: false
+    t.datetime "created_at", null: false
+    t.uuid "default_payment_account_id", null: false
+    t.integer "due_day", null: false
+    t.uuid "institution_id", null: false
+    t.string "name", null: false
+    t.string "network", null: false
+    t.decimal "total_limit", precision: 15, scale: 2, default: "0.0", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index "user_id, lower((name)::text)", name: "index_credit_cards_on_user_id_and_lower_name", unique: true
+    t.index ["default_payment_account_id"], name: "index_credit_cards_on_default_payment_account_id"
+    t.index ["institution_id"], name: "index_credit_cards_on_institution_id"
+    t.index ["user_id", "active"], name: "index_credit_cards_on_user_id_and_active"
+    t.index ["user_id"], name: "index_credit_cards_on_user_id"
+    t.check_constraint "available_limit >= 0::numeric AND available_limit <= total_limit", name: "credit_cards_available_limit_within_total"
+    t.check_constraint "closing_day >= 1 AND closing_day <= 31", name: "credit_cards_closing_day_range"
+    t.check_constraint "due_day >= 1 AND due_day <= 31", name: "credit_cards_due_day_range"
+    t.check_constraint "total_limit >= 0::numeric", name: "credit_cards_total_limit_non_negative"
   end
 
   create_table "institutions", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
@@ -138,6 +162,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_09_180459) do
   add_foreign_key "accounts", "institutions"
   add_foreign_key "accounts", "users"
   add_foreign_key "categories", "users"
+  add_foreign_key "credit_cards", "accounts", column: "default_payment_account_id"
+  add_foreign_key "credit_cards", "institutions"
+  add_foreign_key "credit_cards", "users"
   add_foreign_key "institutions", "users"
   add_foreign_key "tags", "users"
   add_foreign_key "user_email_confirmations", "users"
