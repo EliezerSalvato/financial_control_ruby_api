@@ -7,24 +7,16 @@ en:
           attributes:
             base:
               category_creation_failed: Category creation failed
-            name:
-              taken: has already been taken
         core/category/deletion/input:
           attributes:
             base:
               category_destruction_failed: Category deletion failed
               category_not_found: Category not found
-        core/category/listing/input:
-          attributes:
-            q:
-              invalid: is invalid
         core/category/update/input:
           attributes:
             base:
               category_not_found: Category not found
               category_update_failed: Category update failed
-            name:
-              taken: has already been taken
   category:
     creation:
       failure: Category creation failed

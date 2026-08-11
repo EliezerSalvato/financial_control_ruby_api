@@ -1,0 +1,6 @@
+---
+pt-BR:
+  errors:
+    messages:
+      inactive: está inativa
+      not_found: não foi encontrada

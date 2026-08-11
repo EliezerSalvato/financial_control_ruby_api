@@ -1,0 +1,6 @@
+---
+en:
+  errors:
+    messages:
+      inactive: is inactive
+      not_found: was not found

@@ -24,8 +24,6 @@ pt-BR:
               email_confirmations_invalidation_failed: Falha ao invalidar as confirmações de e-mail
               new_email_is_the_same_as_the_current_email: O novo e-mail é igual ao e-mail atual
               sessions_revocation_failed: Falha ao revogar as sessões
-            new_email:
-              taken: já está em uso
         core/user/email/confirmation/input:
           attributes:
             base:

@@ -7,24 +7,16 @@ pt-BR:
           attributes:
             base:
               institution_creation_failed: Falha ao criar a instituição
-            name:
-              taken: já está em uso
         core/institution/deletion/input:
           attributes:
             base:
               institution_destruction_failed: Falha ao excluir a instituição
               institution_not_found: Instituição não encontrada
-        core/institution/listing/input:
-          attributes:
-            q:
-              invalid: é inválido
         core/institution/update/input:
           attributes:
             base:
               institution_not_found: Instituição não encontrada
               institution_update_failed: Falha ao atualizar a instituição
-            name:
-              taken: já está em uso
   institution:
     creation:
       failure: Falha ao criar a instituição

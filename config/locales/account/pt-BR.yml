@@ -18,39 +18,15 @@ pt-BR:
       models:
         core/account/creation/input:
           attributes:
-            bank_account_type:
-              blank: não pode ficar em branco
-              present: deve ficar em branco
             base:
               account_creation_failed: Falha ao criar a conta
-            institution_id:
-              blank: não pode ficar em branco
-              inactive: está inativa
-              not_found: não foi encontrada
-              present: deve ficar em branco
-            name:
-              taken: já está em uso
         core/account/deletion/input:
           attributes:
             base:
               account_destruction_failed: Falha ao excluir a conta
               account_not_found: Conta não encontrada
-        core/account/listing/input:
-          attributes:
-            q:
-              invalid: é inválido
         core/account/update/input:
           attributes:
-            bank_account_type:
-              blank: não pode ficar em branco
-              present: deve ficar em branco
             base:
               account_not_found: Conta não encontrada
               account_update_failed: Falha ao atualizar a conta
-            institution_id:
-              blank: não pode ficar em branco
-              inactive: está inativa
-              not_found: não foi encontrada
-              present: deve ficar em branco
-            name:
-              taken: já está em uso

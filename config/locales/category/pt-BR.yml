@@ -7,24 +7,16 @@ pt-BR:
           attributes:
             base:
               category_creation_failed: Falha ao criar a categoria
-            name:
-              taken: já está em uso
         core/category/deletion/input:
           attributes:
             base:
               category_destruction_failed: Falha ao excluir a categoria
               category_not_found: Categoria não encontrada
-        core/category/listing/input:
-          attributes:
-            q:
-              invalid: é inválido
         core/category/update/input:
           attributes:
             base:
               category_not_found: Categoria não encontrada
               category_update_failed: Falha ao atualizar a categoria
-            name:
-              taken: já está em uso
   category:
     creation:
       failure: Falha ao criar a categoria

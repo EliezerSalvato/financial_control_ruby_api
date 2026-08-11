@@ -7,36 +7,16 @@ pt-BR:
           attributes:
             base:
               credit_card_creation_failed: Falha ao criar o cartão de crédito
-            default_payment_account_id:
-              inactive: está inativa
-              not_found: não foi encontrada
-            institution_id:
-              inactive: está inativa
-              not_found: não foi encontrada
-            name:
-              taken: já está em uso
         core/credit_card/deletion/input:
           attributes:
             base:
               credit_card_destruction_failed: Falha ao excluir o cartão de crédito
               credit_card_not_found: Cartão de crédito não encontrado
-        core/credit_card/listing/input:
-          attributes:
-            q:
-              invalid: é inválido
         core/credit_card/update/input:
           attributes:
             base:
               credit_card_not_found: Cartão de crédito não encontrado
               credit_card_update_failed: Falha ao atualizar o cartão de crédito
-            default_payment_account_id:
-              inactive: está inativa
-              not_found: não foi encontrada
-            institution_id:
-              inactive: está inativa
-              not_found: não foi encontrada
-            name:
-              taken: já está em uso
             total_limit:
               insufficient_available_limit: resultaria em um limite disponível negativo
   credit_card:

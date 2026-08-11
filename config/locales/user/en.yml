@@ -24,8 +24,6 @@ en:
               email_confirmations_invalidation_failed: Email confirmations invalidation failed
               new_email_is_the_same_as_the_current_email: New email is the same as the current email
               sessions_revocation_failed: Sessions revocation failed
-            new_email:
-              taken: has already been taken
         core/user/email/confirmation/input:
           attributes:
             base:
@@ -36,8 +34,6 @@ en:
           attributes:
             base:
               sessions_revocation_failed: Sessions revocation failed
-            current_password:
-              invalid: is invalid
             password:
               same_as_current_password: is the same as the current password
         core/user/password/reset/input:
