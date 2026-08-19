@@ -34,6 +34,8 @@ en:
           attributes:
             base:
               sessions_revocation_failed: Sessions revocation failed
+            current_password:
+              invalid: is invalid
             password:
               same_as_current_password: is the same as the current password
         core/user/password/reset/input:
