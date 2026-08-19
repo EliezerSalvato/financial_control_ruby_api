@@ -1,0 +1,79 @@
+---
+en:
+  activemodel:
+    errors:
+      models:
+        core/transaction/cancellation/input:
+          attributes:
+            base:
+              cannot_be_canceled: Transaction cannot be canceled in the current status
+              transaction_cancellation_failed: Transaction cancellation failed
+        core/transaction/creation/input:
+          attributes:
+            base:
+              transaction_creation_failed: Transaction creation failed
+            destination_account_id:
+              same_as_source: must be different from source account
+            ends_on:
+              before_starts_on: must be on or after starts_on
+              invalid_installments_count: must result in more than one installment
+              present: must be empty for one-time transactions
+            payment_method:
+              invalid_for_kind: is not allowed for this kind
+              present: must be empty for transfers between accounts
+            tag_ids:
+              inactive: contains an inactive tag
+              not_found: contains a tag that was not found
+        core/transaction/deletion/input:
+          attributes:
+            base:
+              cannot_be_destroyed: Transaction cannot be deleted in the current status
+              transaction_destruction_failed: Transaction deletion failed
+        core/transaction/recurrence/change/input:
+          attributes:
+            base:
+              cannot_be_changed: Recurrence cannot be changed in the current status
+              invalid_recurrence_type: Recurrence value changes are not allowed for one-time transactions
+              recurrence_change_failed: Recurrence change failed
+            starts_on:
+              after_ends_on: must be on or before ends_on
+              in_the_past: cannot be before the current month
+        core/transaction/update/input:
+          attributes:
+            base:
+              transaction_update_failed: Transaction update failed
+            destination_account_id:
+              same_as_source: must be different from source account
+            ends_on:
+              before_existing_recurrence: cannot be before an existing value change
+              before_starts_on: must be on or after starts_on
+              invalid_installments_count: must result in more than one installment
+              present: must be empty for one-time transactions
+            payment_method:
+              invalid_for_kind: is not allowed for this kind
+              present: must be empty for transfers between accounts
+            starts_on:
+              after_ends_on: must be on or before ends_on
+            tag_ids:
+              inactive: contains an inactive tag
+              not_found: contains a tag that was not found
+  transaction:
+    cancellation:
+      failure: Transaction cancellation failed
+      success: Transaction canceled successfully
+    creation:
+      failure: Transaction creation failed
+      success: Transaction created successfully
+    deletion:
+      failure: Transaction deletion failed
+      success: Transaction deleted successfully
+    errors:
+      invalid_filters: Invalid filter
+      not_found: Transaction not found
+    recurrence:
+      change:
+        failure: Recurrence change failed
+        success: Recurrence created or updated successfully
+    update:
+      failure: Transaction update failed
+      success: Transaction updated successfully

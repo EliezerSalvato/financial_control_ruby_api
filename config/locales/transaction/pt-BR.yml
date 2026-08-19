@@ -1,0 +1,79 @@
+---
+pt-BR:
+  activemodel:
+    errors:
+      models:
+        core/transaction/cancellation/input:
+          attributes:
+            base:
+              cannot_be_canceled: A transação não pode ser cancelada no status atual
+              transaction_cancellation_failed: Falha ao cancelar a transação
+        core/transaction/creation/input:
+          attributes:
+            base:
+              transaction_creation_failed: Falha ao criar a transação
+            destination_account_id:
+              same_as_source: deve ser diferente da conta de origem
+            ends_on:
+              before_starts_on: deve ser igual ou posterior a starts_on
+              invalid_installments_count: deve resultar em mais de uma parcela
+              present: deve ficar em branco para transações pontuais
+            payment_method:
+              invalid_for_kind: não é permitido para este tipo
+              present: deve ficar em branco para transferências entre contas
+            tag_ids:
+              inactive: contém uma tag inativa
+              not_found: contém uma tag que não foi encontrada
+        core/transaction/deletion/input:
+          attributes:
+            base:
+              cannot_be_destroyed: A transação não pode ser excluída no status atual
+              transaction_destruction_failed: Falha ao excluir a transação
+        core/transaction/recurrence/change/input:
+          attributes:
+            base:
+              cannot_be_changed: A recorrência não pode ser alterada no status atual
+              invalid_recurrence_type: Alterações de valor da recorrência não são permitidas para transações pontuais
+              recurrence_change_failed: Falha ao alterar a recorrência
+            starts_on:
+              after_ends_on: deve ser igual ou anterior a ends_on
+              in_the_past: não pode ser anterior ao mês atual
+        core/transaction/update/input:
+          attributes:
+            base:
+              transaction_update_failed: Falha ao atualizar a transação
+            destination_account_id:
+              same_as_source: deve ser diferente da conta de origem
+            ends_on:
+              before_existing_recurrence: não pode ser anterior a uma alteração de valor já existente
+              before_starts_on: deve ser igual ou posterior a starts_on
+              invalid_installments_count: deve resultar em mais de uma parcela
+              present: deve ficar em branco para transações pontuais
+            payment_method:
+              invalid_for_kind: não é permitido para este tipo
+              present: deve ficar em branco para transferências entre contas
+            starts_on:
+              after_ends_on: deve ser igual ou anterior a ends_on
+            tag_ids:
+              inactive: contém uma tag inativa
+              not_found: contém uma tag que não foi encontrada
+  transaction:
+    cancellation:
+      failure: Falha ao cancelar a transação
+      success: Transação cancelada com sucesso
+    creation:
+      failure: Falha ao criar a transação
+      success: Transação criada com sucesso
+    deletion:
+      failure: Falha ao excluir a transação
+      success: Transação excluída com sucesso
+    errors:
+      invalid_filters: Filtro inválido
+      not_found: Transação não encontrada
+    recurrence:
+      change:
+        failure: Falha ao alterar a recorrência
+        success: Recorrência criada ou atualizada com sucesso
+    update:
+      failure: Falha ao atualizar a transação
+      success: Transação atualizada com sucesso

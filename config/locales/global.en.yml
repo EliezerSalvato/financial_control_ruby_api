@@ -2,5 +2,6 @@
 en:
   errors:
     messages:
+      cannot_be_changed: cannot be changed in the current status
       inactive: is inactive
       not_found: was not found

@@ -1,0 +1,172 @@
+get:
+  tags: [Transactions]
+  summary: List transactions
+  description: |
+    Returns a paginated list of transactions for the authenticated user. Supports Ransack filters via `q`.
+    List items include recurrences and `current_value`.
+    Payment targets (`account_id`, `credit_card_id`, `limit_consumption_type`, `source_account_id`, `destination_account_id`) and `tag_ids` are not loaded; use show to read them.
+  operationId: listTransactions
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: q[id_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Filter by transaction id
+    - name: q[description_cont]
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Filter transactions whose description contains the given value
+    - name: q[kind_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [income, expense, transfer_between_accounts]
+      description: Filter by kind
+    - name: q[status_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [pending, active, completed, canceled]
+      description: Filter by status
+    - name: q[payment_method_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [pix, debit, credit_card, ted, doc, deposit, cash, boleto]
+      description: Filter by payment method
+    - name: q[recurrence_type_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [one_time, installment, recurring]
+      description: Filter by recurrence type
+    - name: q[category_id_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Filter by category id
+    - name: q[installments_count_eq]
+      in: query
+      required: false
+      schema:
+        type: integer
+      description: Filter by installments count
+    - name: q[created_at_gteq]
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date-time
+      description: Filter transactions created on or after the given datetime
+    - name: q[created_at_lteq]
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date-time
+      description: Filter transactions created on or before the given datetime
+    - name: q[ends_on_gteq]
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+      description: Filter transactions whose ends_on is on or after the given date
+    - name: q[ends_on_lteq]
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+      description: Filter transactions whose ends_on is on or before the given date
+    - name: sort
+      in: query
+      required: false
+      schema:
+        type: string
+        example: status, created_at desc
+      description: Sort expression (default `status, created_at desc`)
+    - name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    - name: per_page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+  responses:
+    "200":
+      description: Transactions listed
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TransactionCollection"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+
+post:
+  tags: [Transactions]
+  summary: Create transaction
+  description: |
+    Creates a new transaction for the authenticated user.
+    `installments_count` is calculated from `recurrence_type`, `starts_on`, and `ends_on`.
+    `status` is always set to `pending` and cannot be provided.
+    `starts_on` is write-only on the request; the response exposes it on each item in `recurrences`.
+    Category, tags, account, and credit card must belong to the authenticated user and be active.
+  operationId: createTransaction
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/TransactionRequest"
+        example:
+          transaction:
+            description: Grocery shopping
+            kind: expense
+            payment_method: pix
+            recurrence_type: one_time
+            starts_on: "2026-08-11"
+            value: 100
+            account_id: "018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b"
+            category_id: "018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6c"
+            tag_ids:
+              - "018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6d"
+  responses:
+    "201":
+      description: Transaction created
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TransactionSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

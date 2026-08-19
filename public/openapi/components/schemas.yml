@@ -812,3 +812,363 @@ CreditCardCollection:
         $ref: "#/CreditCardResource"
     meta:
       $ref: "#/PaginationMeta"
+
+TransactionRecurrenceAttributes:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    starts_on:
+      type: string
+      format: date
+    value:
+      type: string
+      description: Decimal amount as string (precision 15, scale 2)
+      example: "100.0"
+
+TransactionRecurrenceResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: transaction_recurrence
+    attributes:
+      $ref: "#/TransactionRecurrenceAttributes"
+
+TransactionAttributes:
+  type: object
+  description: |
+    Common attributes, recurrences, and `current_value` are present on list and show.
+    `account_id`, `credit_card_id`, `limit_consumption_type`, `source_account_id`, `destination_account_id`, and `tag_ids` are populated on show, create, update, and cancel. On list they are null.
+    `account_id` is only included for account-based payment methods.
+    `credit_card_id` and `limit_consumption_type` are only included when `payment_method` is `credit_card`.
+    `source_account_id` and `destination_account_id` are only included when `kind` is `transfer_between_accounts`.
+    `starts_on` is not a top-level attribute; it is returned on each item in `recurrences`.
+  properties:
+    id:
+      type: string
+      format: uuid
+    category_id:
+      type: string
+      format: uuid
+      nullable: true
+    description:
+      type: string
+    kind:
+      type: string
+      enum: [income, expense, transfer_between_accounts]
+    status:
+      type: string
+      enum: [pending, active, completed, canceled]
+      description: Always `pending` on create. Not writable via update.
+    payment_method:
+      type: string
+      nullable: true
+      enum: [pix, debit, credit_card, ted, doc, deposit, cash, boleto]
+    recurrence_type:
+      type: string
+      enum: [one_time, installment, recurring]
+    installments_count:
+      type: integer
+      nullable: true
+    ends_on:
+      type: string
+      format: date
+      nullable: true
+    account_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: Present only for account-based payment methods. Null on list.
+    credit_card_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: Present only when `payment_method` is `credit_card`. Null on list.
+    limit_consumption_type:
+      type: string
+      nullable: true
+      enum: [upfront, monthly]
+      description: Present only when `payment_method` is `credit_card`. Null on list.
+    source_account_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: Present only when `kind` is `transfer_between_accounts`. Null on list.
+    destination_account_id:
+      type: string
+      format: uuid
+      nullable: true
+      description: Present only when `kind` is `transfer_between_accounts`. Null on list.
+    tag_ids:
+      type: array
+      nullable: true
+      items:
+        type: string
+        format: uuid
+      description: Null on list. Populated on show, create, update, and cancel.
+    current_value:
+      type: string
+      nullable: true
+      description: |
+        Applicable amount for the current month: the latest recurrence whose year-month is on or before the current month.
+        If every recurrence starts in a future month, the earliest recurrence value is used.
+      example: "100.0"
+    recurrences:
+      type: array
+      description: Value history ordered by `starts_on`
+      items:
+        $ref: "#/TransactionRecurrenceResource"
+
+TransactionResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: transaction
+    attributes:
+      $ref: "#/TransactionAttributes"
+
+TransactionRequest:
+  type: object
+  required: [transaction]
+  properties:
+    transaction:
+      type: object
+      description: |
+        Category, tags, account, and credit card must belong to the authenticated user and be active.
+        `starts_on` is write-only; the response returns it on each item in `recurrences`.
+      required:
+        - category_id
+        - description
+        - kind
+        - recurrence_type
+        - starts_on
+        - value
+      properties:
+        category_id:
+          type: string
+          format: uuid
+          description: Must belong to the authenticated user and be active
+        description:
+          type: string
+        kind:
+          type: string
+          enum: [income, expense, transfer_between_accounts]
+        payment_method:
+          type: string
+          nullable: true
+          enum: [pix, debit, credit_card, ted, doc, deposit, cash, boleto]
+          description: |
+            Required for income/expense. Must be null for transfer_between_accounts.
+            Income allows pix|ted|doc|deposit|cash|boleto.
+            Expense allows pix|debit|credit_card|ted|doc|deposit|cash|boleto.
+        recurrence_type:
+          type: string
+          enum: [one_time, installment, recurring]
+        starts_on:
+          type: string
+          format: date
+          description: First recurrence date. Write-only; the response exposes it on `recurrences`.
+        ends_on:
+          type: string
+          format: date
+          nullable: true
+          description: |
+            Required for installment. Optional for recurring. Must be null for one_time.
+            Must be on or after `starts_on`.
+            For installment, must fall in a later month than `starts_on` so `installments_count` is greater than 1.
+        value:
+          type: number
+          minimum: 0
+        limit_consumption_type:
+          type: string
+          nullable: true
+          enum: [upfront, monthly]
+          description: |
+            Used when payment_method is credit_card.
+            Optional for one_time (defaults to upfront).
+            Required for installment and recurring.
+        account_id:
+          type: string
+          format: uuid
+          description: |
+            Required when payment_method is account-based (pix, debit, ted, doc, deposit, cash, boleto).
+            Must belong to the authenticated user and be active.
+        credit_card_id:
+          type: string
+          format: uuid
+          description: Required when payment_method is credit_card. Must belong to the authenticated user and be active.
+        source_account_id:
+          type: string
+          format: uuid
+          description: Required when kind is transfer_between_accounts. Must belong to the authenticated user and be active.
+        destination_account_id:
+          type: string
+          format: uuid
+          description: |
+            Required when kind is transfer_between_accounts. Must differ from source_account_id.
+            Must belong to the authenticated user and be active.
+        tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Each tag must belong to the authenticated user and be active
+
+TransactionUpdateRequest:
+  type: object
+  required: [transaction]
+  properties:
+    transaction:
+      type: object
+      minProperties: 1
+      properties:
+        category_id:
+          type: string
+          format: uuid
+        description:
+          type: string
+        kind:
+          type: string
+          enum: [income, expense, transfer_between_accounts]
+          description: Writable only when status is pending
+        payment_method:
+          type: string
+          nullable: true
+          enum: [pix, debit, credit_card, ted, doc, deposit, cash, boleto]
+          description: Writable only when status is pending
+        recurrence_type:
+          type: string
+          enum: [one_time, installment, recurring]
+          description: Writable only when status is pending
+        ends_on:
+          type: string
+          format: date
+          nullable: true
+          description: |
+            Writable when status is pending, or when status is active and recurrence_type is recurring.
+            Cleared automatically when recurrence_type is one_time.
+            Must be on or after `starts_on`.
+            For installment, must fall in a later month than `starts_on` so `installments_count` is greater than 1.
+            When active, cannot be before the latest existing recurrence `starts_on`.
+        starts_on:
+          type: string
+          format: date
+          description: |
+            Writable only when status is pending. Updates the existing recurrence in place.
+            Write-only; the response exposes it on `recurrences`.
+            Must be on or before `ends_on` when `ends_on` is present.
+        value:
+          type: number
+          minimum: 0
+          description: Writable only when status is pending. Updates the existing recurrence in place.
+        limit_consumption_type:
+          type: string
+          nullable: true
+          enum: [upfront, monthly]
+          description: Writable only when status is pending
+        account_id:
+          type: string
+          format: uuid
+          description: Writable when status is pending or active
+        credit_card_id:
+          type: string
+          format: uuid
+          description: Writable when status is pending or active
+        source_account_id:
+          type: string
+          format: uuid
+          description: Writable when status is pending or active
+        destination_account_id:
+          type: string
+          format: uuid
+          description: Writable when status is pending or active
+        tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+      description: |
+        Partial update. Description, category, and tags are always writable.
+        Account, card, source, destination, and recurring ends_on are writable unless status is completed or canceled.
+        Kind, payment method, recurrence type, starts_on, value, and limit consumption are writable only when pending.
+        `installments_count` is calculated and is not a request field.
+        Completed and canceled accept only description, category_id, and tag_ids.
+        Mutually exclusive payment fields are cleared to match the resulting kind and payment method.
+        An already linked inactive category, account, card, or tag may be kept; a newly selected inactive one is rejected.
+
+TransactionRecurrenceRequest:
+  type: object
+  required: [transaction_recurrence]
+  properties:
+    transaction_recurrence:
+      type: object
+      required:
+        - starts_on
+        - value
+      properties:
+        starts_on:
+          type: string
+          format: date
+          description: |
+            Month that should receive the new value.
+            If a recurrence already exists in the same year-month, it is updated in place
+            (including the day of `starts_on`).
+            Otherwise a new recurrence is created for this date.
+            Cannot be in a month before the current month.
+            Cannot be after the transaction `ends_on`.
+        value:
+          type: number
+          minimum: 0
+          description: New amount for the given month.
+        change_for_next_months:
+          type: boolean
+          default: false
+          description: |
+            When `false` or omitted, only the given month is changed.
+            If the next month already has a recurrence, it is kept; otherwise one is created
+            with the previous amount, unless that next month would be after `ends_on`.
+            Later recurrences are left unchanged.
+            When `true`, the new amount applies from the given month onward and every later
+            recurrence is removed.
+            Allowed only when the transaction `status` is `active`.
+
+TransactionSuccessResponse:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: object
+    message:
+      type: string
+    data:
+      $ref: "#/TransactionResource"
+
+TransactionCollection:
+  type: object
+  required: [status, type, data, meta]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: collection
+    data:
+      type: array
+      items:
+        $ref: "#/TransactionResource"
+    meta:
+      $ref: "#/PaginationMeta"

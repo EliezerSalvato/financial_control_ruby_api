@@ -61,6 +61,38 @@ RSpec.describe Tag::Repository::Adapters::ActiveRecord do
     end
   end
 
+  describe "#find_by_ids" do
+    it "returns Success when all tags belong to the user" do
+      tag_a = create(:tag, user:, name: "Vacation")
+      tag_b = create(:tag, user:, name: "Groceries")
+
+      result = repository.find_by_ids(user: user_entity, ids: [ tag_a.id, tag_b.id ])
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:tags_found)
+      expect(result.value[:tags].map(&:id)).to contain_exactly(tag_a.id, tag_b.id)
+    end
+
+    it "returns Failure when any tag belongs to another user" do
+      own_tag = create(:tag, user:, name: "Vacation")
+      other_tag = create(:tag)
+
+      result = repository.find_by_ids(user: user_entity, ids: [ own_tag.id, other_tag.id ])
+
+      expect(result).to be_a(Solid::Failure)
+      expect(result.type).to eq(:tags_not_found)
+    end
+
+    it "returns Failure when any tag is missing" do
+      tag = create(:tag, user:, name: "Vacation")
+
+      result = repository.find_by_ids(user: user_entity, ids: [ tag.id, SecureRandom.uuid ])
+
+      expect(result).to be_a(Solid::Failure)
+      expect(result.type).to eq(:tags_not_found)
+    end
+  end
+
   describe "#exists?" do
     before { create(:tag, user:, name: "Vacation") }
 

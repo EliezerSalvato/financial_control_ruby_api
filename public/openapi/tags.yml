@@ -12,3 +12,5 @@
   description: User-owned financial accounts (bank accounts and cash)
 - name: Credit Cards
   description: User-owned credit cards
+- name: Transactions
+  description: User-owned financial transactions (income, expense, and transfers)

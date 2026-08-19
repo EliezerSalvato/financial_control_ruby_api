@@ -31,6 +31,14 @@ paths:
     $ref: "./paths/credit_cards.yml"
   /api/v1/credit_cards/{id}:
     $ref: "./paths/credit_card.yml"
+  /api/v1/transactions:
+    $ref: "./paths/transactions.yml"
+  /api/v1/transactions/{id}:
+    $ref: "./paths/transaction.yml"
+  /api/v1/transactions/{id}/cancel:
+    $ref: "./paths/transaction_cancel.yml"
+  /api/v1/transactions/{transaction_id}/recurrences:
+    $ref: "./paths/transaction_recurrences.yml"
   /api/v1/user/authentications:
     $ref: "./paths/authentication/authentications.yml"
   /api/v1/user/session/refreshes:

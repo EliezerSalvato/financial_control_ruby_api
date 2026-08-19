@@ -1,0 +1,25 @@
+post:
+  tags: [Transactions]
+  summary: Cancel transaction
+  description: |
+    Cancels an active transaction owned by the authenticated user by setting `status` to `canceled`.
+    Pending, completed, and already canceled transactions are rejected.
+    To delete a pending transaction, use `DELETE /api/v1/transactions/{id}`.
+  operationId: cancelTransaction
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Transaction canceled
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TransactionSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

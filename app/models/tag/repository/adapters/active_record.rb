@@ -22,6 +22,14 @@ module Tag::Repository::Adapters::ActiveRecord
     Failure(:tag_not_found)
   end
 
+  def find_by_ids(user:, ids:)
+    records = user_tags(user).where(id: ids).to_a
+
+    return Failure(:tags_not_found) unless records.size == ids.uniq.size
+
+    Success(:tags_found, tags: Tag::Mapper.to_entities(records))
+  end
+
   def exists?(user:, name:, excluding_id: nil)
     scope = user_tags(user).where("LOWER(name) = LOWER(?)", name)
     scope = scope.where.not(id: excluding_id) if excluding_id.present?

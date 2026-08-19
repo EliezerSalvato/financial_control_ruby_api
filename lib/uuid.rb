@@ -12,4 +12,8 @@ module UUID
 
     uuid.match?(REGEXP)
   end
+
+  def same?(left, right)
+    left.is_a?(String) && right.is_a?(String) && valid?(left) && valid?(right) && left == right
+  end
 end

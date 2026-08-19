@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_10_143100) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_11_160500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -19,6 +19,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_143100) do
   # Note that some types may not work with other database engines. Be careful if changing database.
   create_enum "account_kind", ["bank_account", "cash"]
   create_enum "bank_account_type", ["checking", "savings", "investment", "salary"]
+  create_enum "transaction_kind", ["income", "expense", "transfer_between_accounts"]
+  create_enum "transaction_limit_consumption_type", ["upfront", "monthly"]
+  create_enum "transaction_payment_method", ["pix", "debit", "credit_card", "ted", "doc", "deposit", "cash", "boleto"]
+  create_enum "transaction_recurrence_type", ["one_time", "installment", "recurring"]
+  create_enum "transaction_status", ["pending", "active", "completed", "canceled"]
 
   create_table "accounts", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
     t.boolean "active", default: true, null: false
@@ -98,6 +103,80 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_143100) do
     t.index ["user_id"], name: "index_tags_on_user_id"
   end
 
+  create_table "transaction_for_accounts", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.uuid "account_id", null: false
+    t.datetime "created_at", null: false
+    t.uuid "transaction_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_transaction_for_accounts_on_account_id"
+    t.index ["transaction_id"], name: "index_transaction_for_accounts_on_transaction_id", unique: true
+  end
+
+  create_table "transaction_for_credit_cards", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "credit_card_id", null: false
+    t.enum "limit_consumption_type", enum_type: "transaction_limit_consumption_type"
+    t.uuid "transaction_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["credit_card_id"], name: "index_transaction_for_credit_cards_on_credit_card_id"
+    t.index ["transaction_id"], name: "index_transaction_for_credit_cards_on_transaction_id", unique: true
+  end
+
+  create_table "transaction_for_transfer_between_accounts", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "destination_account_id", null: false
+    t.uuid "source_account_id", null: false
+    t.uuid "transaction_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["destination_account_id"], name: "idx_on_destination_account_id_311c4ea7c5"
+    t.index ["source_account_id"], name: "idx_on_source_account_id_be1ca23848"
+    t.index ["transaction_id"], name: "idx_on_transaction_id_ef58530096", unique: true
+    t.check_constraint "source_account_id <> destination_account_id", name: "transaction_for_transfer_between_accounts_distinct_accounts"
+  end
+
+  create_table "transaction_recurrences", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.virtual "month", type: :integer, null: false, as: "(EXTRACT(month FROM starts_on))::integer", stored: true
+    t.date "starts_on", null: false
+    t.uuid "transaction_id", null: false
+    t.datetime "updated_at", null: false
+    t.decimal "value", precision: 15, scale: 2, null: false
+    t.virtual "year", type: :integer, null: false, as: "(EXTRACT(year FROM starts_on))::integer", stored: true
+    t.index ["transaction_id", "month", "year"], name: "idx_on_transaction_id_month_year_9d19fc02b4", unique: true
+    t.check_constraint "value >= 0::numeric", name: "transaction_recurrences_value_non_negative"
+  end
+
+  create_table "transaction_tags", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "tag_id", null: false
+    t.uuid "transaction_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["tag_id"], name: "index_transaction_tags_on_tag_id"
+    t.index ["transaction_id", "tag_id"], name: "index_transaction_tags_on_transaction_id_and_tag_id", unique: true
+  end
+
+  create_table "transactions", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.uuid "category_id", null: false
+    t.datetime "created_at", null: false
+    t.string "description", null: false
+    t.date "ends_on"
+    t.integer "installments_count"
+    t.enum "kind", null: false, enum_type: "transaction_kind"
+    t.enum "payment_method", enum_type: "transaction_payment_method"
+    t.enum "recurrence_type", null: false, enum_type: "transaction_recurrence_type"
+    t.enum "status", default: "pending", null: false, enum_type: "transaction_status"
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index ["category_id"], name: "index_transactions_on_category_id"
+    t.index ["description"], name: "index_transactions_on_description"
+    t.index ["kind"], name: "index_transactions_on_kind"
+    t.index ["payment_method"], name: "index_transactions_on_payment_method"
+    t.index ["recurrence_type"], name: "index_transactions_on_recurrence_type"
+    t.index ["status"], name: "index_transactions_on_status"
+    t.index ["user_id"], name: "index_transactions_on_user_id"
+    t.check_constraint "recurrence_type = 'one_time'::transaction_recurrence_type AND installments_count IS NULL AND ends_on IS NULL OR recurrence_type = 'installment'::transaction_recurrence_type AND installments_count > 1 AND ends_on IS NOT NULL OR recurrence_type = 'recurring'::transaction_recurrence_type AND installments_count IS NULL", name: "transactions_recurrence_type_consistency"
+  end
+
   create_table "user_email_confirmations", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
     t.datetime "confirmed_at"
     t.datetime "created_at", null: false
@@ -167,6 +246,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_10_143100) do
   add_foreign_key "credit_cards", "users"
   add_foreign_key "institutions", "users"
   add_foreign_key "tags", "users"
+  add_foreign_key "transaction_for_accounts", "accounts"
+  add_foreign_key "transaction_for_accounts", "transactions"
+  add_foreign_key "transaction_for_credit_cards", "credit_cards"
+  add_foreign_key "transaction_for_credit_cards", "transactions"
+  add_foreign_key "transaction_for_transfer_between_accounts", "accounts", column: "destination_account_id"
+  add_foreign_key "transaction_for_transfer_between_accounts", "accounts", column: "source_account_id"
+  add_foreign_key "transaction_for_transfer_between_accounts", "transactions"
+  add_foreign_key "transaction_recurrences", "transactions"
+  add_foreign_key "transaction_tags", "tags"
+  add_foreign_key "transaction_tags", "transactions"
+  add_foreign_key "transactions", "categories"
+  add_foreign_key "transactions", "users"
   add_foreign_key "user_email_confirmations", "users"
   add_foreign_key "user_password_resets", "users"
   add_foreign_key "user_sessions", "users"

@@ -1,5 +1,5 @@
 title: Financial Control Ruby API
-version: "1.0"
+version: "1.0.5"
 description: |
   ## Authentication
 
@@ -32,7 +32,7 @@ description: |
   | Access | Endpoints |
   |--------|-----------|
   | Public | registrations, authentications, email confirmations, password resets, session refreshes |
-  | Bearer required | accounts, profiles, email changes, password changes, session revokes |
+  | Bearer required | tags, categories, institutions, accounts, credit cards, transactions, profiles, email changes, password changes, session revokes |
 
   ---
 

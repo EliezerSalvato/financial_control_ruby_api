@@ -29,6 +29,18 @@ module Core::Tag::Repository::Interface
       end
     end
 
+    def find_by_ids(user:, ids:)
+      user => Core::User::Entity
+      ids => Array
+
+      super.tap do
+        _1 => (
+          Solid::Failure(:tags_not_found, {}) |
+          Solid::Success(:tags_found, { tags: Array })
+        )
+      end
+    end
+
     def exists?(user:, name:, excluding_id: nil)
       user => Core::User::Entity
       name => String

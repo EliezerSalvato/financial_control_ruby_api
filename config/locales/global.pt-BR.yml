@@ -2,5 +2,6 @@
 pt-BR:
   errors:
     messages:
+      cannot_be_changed: não pode ser alterado no status atual
       inactive: está inativa
       not_found: não foi encontrada

@@ -1,0 +1,67 @@
+post:
+  tags: [Transactions]
+  summary: Create or split a transaction recurrence
+  description: |
+    Adds a value change to a recurring or installment transaction owned by the authenticated user.
+
+    Recurrences apply from `starts_on` until the next recurrence, and the response lists them ordered by `starts_on`.
+    If a recurrence already exists in the same year-month as `starts_on`, it is updated in place
+    (including the day of `starts_on`); otherwise a new recurrence is created.
+
+    Allowed only when `status` is `active`. `starts_on` cannot be in a month before the current month
+    and cannot be after the transaction `ends_on`.
+    Pending, completed, and canceled transactions are rejected. One-time transactions are rejected.
+
+    When `change_for_next_months` is omitted or `false`, only the given month is changed.
+    If the next month already has a recurrence, it is kept; otherwise a recurrence is created
+    for the next month with the previous amount, unless that next month would be after `ends_on`.
+    All other recurrences are left unchanged.
+
+    When `change_for_next_months` is `true`, the given month is updated and every later
+    recurrence is removed so the new amount applies from that month onward.
+  operationId: createTransactionRecurrence
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: transaction_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Transaction UUID
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/TransactionRecurrenceRequest"
+        examples:
+          currentMonthOnly:
+            summary: Change only the given month
+            value:
+              transaction_recurrence:
+                value: 120
+                starts_on: "2026-01-01"
+          currentAndNextMonths:
+            summary: Change the given month and all following months
+            value:
+              transaction_recurrence:
+                value: 120
+                starts_on: "2026-01-01"
+                change_for_next_months: true
+  responses:
+    "200":
+      description: Recurrence created or updated
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TransactionSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

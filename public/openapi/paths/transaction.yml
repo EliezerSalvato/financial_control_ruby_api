@@ -1,0 +1,87 @@
+get:
+  tags: [Transactions]
+  summary: Show transaction
+  description: Returns a single transaction owned by the authenticated user, including payment targets, tags, and recurrences.
+  operationId: showTransaction
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Transaction found
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TransactionSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+
+patch:
+  tags: [Transactions]
+  summary: Update transaction
+  description: |
+    Updates an existing transaction owned by the authenticated user.
+    Editable fields depend on `status` (see `TransactionUpdateRequest`).
+    When pending, `starts_on` and `value` update the existing recurrence in place.
+    `starts_on` is write-only on the request; the response exposes it on each item in `recurrences`.
+    `status` cannot be changed.
+  operationId: updateTransaction
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/TransactionUpdateRequest"
+        example:
+          transaction:
+            description: Grocery shopping (updated)
+            value: 120
+            starts_on: "2026-10-11"
+  responses:
+    "200":
+      description: Transaction updated
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TransactionSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+
+delete:
+  tags: [Transactions]
+  summary: Delete transaction
+  description: |
+    Deletes a pending transaction owned by the authenticated user, including dependents.
+    Active, completed, and canceled transactions are rejected.
+    To cancel an active transaction, use `POST /api/v1/transactions/{id}/cancel`.
+  operationId: deleteTransaction
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Transaction deleted
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/MessageSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

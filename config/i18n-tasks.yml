@@ -9,3 +9,4 @@ data:
 # Resolved dynamically via errors.add(:attr, :symbol) — scanner can't see literal t() calls
 ignore_unused:
   - "activemodel.errors.*"
+  - "errors.messages.*"
