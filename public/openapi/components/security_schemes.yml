@@ -3,8 +3,9 @@ bearerAuth:
   scheme: bearer
   bearerFormat: signed session token
   description: |
-    Session token returned by `POST /api/v1/user/authentications`
-    or `PATCH /api/v1/user/session/refreshes`.
+    Session token returned in the JSON body by `POST /api/v1/user/authentications`
+    or `PATCH /api/v1/user/session/refreshes`. The refresh token is an encrypted
+    httpOnly cookie, not a Bearer header.
 
     ```http
     Authorization: Bearer <token>

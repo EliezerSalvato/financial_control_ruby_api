@@ -4,7 +4,9 @@ post:
   description: |
     Authenticates with email and password.
     The user must be **verified** and **active**.
-    Returns a short-lived session `token` and a long-lived `refresh_token`.
+    Returns a short-lived session `token` in the JSON body and sets an encrypted
+    httpOnly `refresh_token` cookie (`SameSite=Lax`). The refresh token is never
+    returned in the JSON body. Optional `remember_me` controls cookie and refresh lifetime.
   operationId: createAuthentication
   requestBody:
     required: true
@@ -12,12 +14,28 @@ post:
       application/json:
         schema:
           $ref: "../../components/schemas.yml#/AuthenticationRequest"
-        example:
-          email: john.doe@example.com
-          password: password123
+        examples:
+          default:
+            summary: Session cookie (1 day server-side)
+            value:
+              email: john.doe@example.com
+              password: password123
+          rememberMe:
+            summary: Persistent refresh cookie (30 days)
+            value:
+              email: john.doe@example.com
+              password: password123
+              remember_me: true
   responses:
     "200":
-      description: Authenticated
+      description: Authenticated. Sets the encrypted httpOnly `refresh_token` cookie.
+      headers:
+        Set-Cookie:
+          schema:
+            type: string
+          description: |
+            Encrypted httpOnly `refresh_token` cookie (`SameSite=Lax`).
+            Session cookie by default. Persistent (30 days) when `remember_me` is true.
       content:
         application/json:
           schema:
@@ -27,6 +45,14 @@ post:
             type: object
             data:
               token: eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaEpJaWs9IiwiZXhwIjpudWxsLCJwdXIiOiJzZXNzaW9uX3Rva2VuIn19--abc
-              refresh_token: a1b2c3d4e5f6...
+              user:
+                data:
+                  id: "019abc..."
+                  type: user
+                  attributes:
+                    id: "019abc..."
+                    first_name: John
+                    last_name: Doe
+                    email: john.doe@example.com
     "422":
       $ref: "../../components/responses.yml#/UnprocessableContent"

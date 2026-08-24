@@ -2,20 +2,35 @@ patch:
   tags: [Authentication]
   summary: Refresh session
   description: |
-    Exchanges a valid `refresh_token` for a new session `token` and a rotated `refresh_token`.
-    Does not require the Bearer header.
+    Reads the encrypted httpOnly `refresh_token` cookie and returns a new session `token`.
+    Rotates the refresh cookie. Does not require the Bearer header.
+    Optional `remember_me` in the body controls the rotated cookie lifetime.
   operationId: refreshSession
+  parameters:
+    - name: refresh_token
+      in: cookie
+      required: true
+      schema:
+        type: string
+      description: Encrypted httpOnly refresh token cookie set on sign in
   requestBody:
-    required: true
+    required: false
     content:
       application/json:
         schema:
           $ref: "../../components/schemas.yml#/RefreshSessionRequest"
         example:
-          refresh_token: a1b2c3d4e5f6...
+          remember_me: true
   responses:
     "200":
-      description: Tokens rotated
+      description: Session token rotated. Sets a new encrypted httpOnly `refresh_token` cookie.
+      headers:
+        Set-Cookie:
+          schema:
+            type: string
+          description: |
+            Rotated encrypted httpOnly `refresh_token` cookie (`SameSite=Lax`).
+            Session cookie by default. Persistent (30 days) when `remember_me` is true.
       content:
         application/json:
           schema:

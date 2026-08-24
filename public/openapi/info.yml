@@ -1,5 +1,5 @@
 title: Financial Control Ruby API
-version: "1.0.5"
+version: "1.0.6"
 description: |
   ## Authentication
 
@@ -13,17 +13,18 @@ description: |
 
   1. **Register** — `POST /api/v1/user/registrations`
   2. **Confirm email** — `POST /api/v1/user/email/confirmations` (token from email)
-  3. **Sign in** — `POST /api/v1/user/authentications` → receives `token` + `refresh_token`
+  3. **Sign in** — `POST /api/v1/user/authentications` → `token` in the JSON body; `refresh_token` is set as an encrypted httpOnly cookie. Optional `remember_me` controls cookie and refresh lifetime
   4. **Call protected endpoints** with `Authorization: Bearer <token>`
-  5. **Refresh** — when the session token expires, `PATCH /api/v1/user/session/refreshes` with `refresh_token`
-  6. **Revoke** — `DELETE /api/v1/user/session/revokes` to invalidate all active sessions
+  5. **Refresh** — when the session token expires, `PATCH /api/v1/user/session/refreshes` (reads the `refresh_token` cookie; optional `remember_me` in the body)
+  6. **Revoke** — `DELETE /api/v1/user/session/revokes` to invalidate all active sessions (Bearer required)
 
   ### Token lifetimes
 
   | Token | Lifetime |
   |-------|----------|
   | Session (`token`) | 15 minutes |
-  | Refresh (`refresh_token`) | 30 days |
+  | Refresh cookie (`remember_me: true`) | 30 days |
+  | Refresh cookie (without `remember_me`) | session cookie / 1 day server-side |
   | Email confirmation | 24 hours |
   | Password reset | 15 minutes |
 
@@ -32,7 +33,7 @@ description: |
   | Access | Endpoints |
   |--------|-----------|
   | Public | registrations, authentications, email confirmations, password resets, session refreshes |
-  | Bearer required | tags, categories, institutions, accounts, credit cards, transactions, profiles, email changes, password changes, session revokes |
+  | Bearer required | tags, categories, institutions, accounts, credit cards, transactions, profiles, account deletion, email changes, password changes, session revokes |
 
   ---
 

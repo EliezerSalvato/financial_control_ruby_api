@@ -38,6 +38,34 @@ get:
       schema:
         type: boolean
       description: Filter by active flag
+    - name: q[total_limit_eq]
+      in: query
+      required: false
+      schema:
+        type: number
+      description: Filter by exact total limit
+    - name: q[available_limit_eq]
+      in: query
+      required: false
+      schema:
+        type: number
+      description: Filter by exact available limit
+    - name: q[closing_day_eq]
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 31
+      description: Filter by closing day
+    - name: q[due_day_eq]
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 31
+      description: Filter by due day
     - name: sort
       in: query
       required: false

@@ -12,7 +12,7 @@ delete:
         application/json:
           schema:
             $ref: "../../components/schemas.yml#/MessageSuccessResponse"
+    "401":
+      $ref: "../../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../../components/responses.yml#/UnprocessableContent"
-    "500":
-      $ref: "../../components/responses.yml#/Unauthorized"
