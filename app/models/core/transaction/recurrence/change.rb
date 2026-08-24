@@ -28,6 +28,7 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
         .and_then(:reject_past_month)
         .and_then(:validate_starts_on_window)
         .and_then(:resolve_existing_recurrence)
+        .and_then(:reject_same_value)
         .and_then(:upsert_current_month)
         .and_then(:apply_following_months_policy)
         .and_then(:reload_transaction)
@@ -86,6 +87,14 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
     Continue(existing_recurrence:, old_value:)
   end
 
+  def reject_same_value(value:, old_value:, **)
+    return Continue() if old_value.nil? || value != old_value
+
+    input.errors.add(:value, :same_as_previous)
+
+    Failure(:invalid_input, input:)
+  end
+
   def upsert_current_month(transaction:, existing_recurrence:, starts_on:, value:, **)
     if existing_recurrence
       update_existing_recurrence(existing_recurrence:, starts_on:, value:)
@@ -115,11 +124,29 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
   def ensure_next_month_with_previous_value(transaction:, starts_on:, old_value:)
     return Continue() if old_value.nil?
 
-    next_starts_on = starts_on.next_month
+    next_starts_on = next_month_starts_on(transaction:, starts_on:)
     return Continue() if transaction.ends_on.present? && next_starts_on > transaction.ends_on
     return Continue() if find_recurrence_by_starts_on(transaction:, starts_on: next_starts_on)
 
     create_recurrence(transaction:, starts_on: next_starts_on, value: old_value)
+  end
+
+  def next_month_starts_on(transaction:, starts_on:)
+    following_month = starts_on.beginning_of_month.next_month
+    day = next_month_day(transaction:, starts_on:)
+
+    Date.new(following_month.year, following_month.month, [ day, following_month.end_of_month.day ].min)
+  end
+
+  def next_month_day(transaction:, starts_on:)
+    series_day = transaction.recurrences.map { |recurrence| recurrence.starts_on.day }.max
+    return starts_on.day if series_day.nil?
+
+    if starts_on == starts_on.end_of_month && series_day > starts_on.day
+      series_day
+    else
+      starts_on.day
+    end
   end
 
   def reload_transaction(user:, transaction:, **)

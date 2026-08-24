@@ -38,6 +38,8 @@ en:
             starts_on:
               after_ends_on: must be on or before ends_on
               in_the_past: cannot be before the current month
+            value:
+              same_as_previous: must be different from the previous recurrence
         core/transaction/update/input:
           attributes:
             base:

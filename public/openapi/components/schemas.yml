@@ -1146,7 +1146,9 @@ TransactionRecurrenceRequest:
         value:
           type: number
           minimum: 0
-          description: New amount for the given month.
+          description: |
+            New amount for the given month.
+            Must be different from the amount already applied by the previous recurrence.
         change_for_next_months:
           type: boolean
           default: false

@@ -65,6 +65,34 @@ RSpec.describe "API::V1::Transaction::Recurrences", type: :request do
           )
         end
 
+        it "clamps a month-end change and restores the original day afterwards" do
+          end_of_month_transaction = create(
+            :transaction,
+            :recurring,
+            :active,
+            user:,
+            account:,
+            category:,
+            starts_on: Date.new(2026, 5, 31),
+            value: 77
+          )
+          create(:transaction_recurrence, financial_transaction: end_of_month_transaction, starts_on: Date.new(2026, 8, 31), value: 78)
+
+          expect {
+            create_recurrence(end_of_month_transaction.id, { value: 79, starts_on: "2026-09-30" })
+          }.to change(Transaction::Recurrence::Record, :count).by(2)
+
+          expect(response).to have_http_status(:ok)
+          expect(recurrence_pairs(response.parsed_body)).to eq(
+            [
+              [ "2026-05-31", "77.0" ],
+              [ "2026-08-31", "78.0" ],
+              [ "2026-09-30", "79.0" ],
+              [ "2026-10-31", "78.0" ]
+            ]
+          )
+        end
+
         it "updates the existing recurrence when starts_on is a different day in the same month" do
           transaction
 
@@ -146,6 +174,32 @@ RSpec.describe "API::V1::Transaction::Recurrences", type: :request do
           expect(response).to have_http_status(:ok)
           expect(recurrence_pairs(response.parsed_body)).to eq(
             [ [ "2026-08-01", "100.0" ], [ "2026-10-01", "120.0" ] ]
+          )
+        end
+
+        it "does not restore the previous value in the next month" do
+          end_of_month_transaction = create(
+            :transaction,
+            :recurring,
+            :active,
+            user:,
+            account:,
+            category:,
+            starts_on: Date.new(2026, 5, 31),
+            value: 77
+          )
+          create(:transaction_recurrence, financial_transaction: end_of_month_transaction, starts_on: Date.new(2026, 8, 31), value: 78)
+
+          expect {
+            create_recurrence(
+              end_of_month_transaction.id,
+              { value: 79, starts_on: "2026-09-30", change_for_next_months: true }
+            )
+          }.to change(Transaction::Recurrence::Record, :count).by(1)
+
+          expect(response).to have_http_status(:ok)
+          expect(recurrence_pairs(response.parsed_body)).to eq(
+            [ [ "2026-05-31", "77.0" ], [ "2026-08-31", "78.0" ], [ "2026-09-30", "79.0" ] ]
           )
         end
       end
@@ -304,6 +358,32 @@ RSpec.describe "API::V1::Transaction::Recurrences", type: :request do
 
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.parsed_body.dig("details", "value")).to be_present
+      end
+
+      it "rejects the same value as the current month recurrence" do
+        transaction
+
+        expect {
+          create_recurrence(transaction.id, { value: 100, starts_on: "2026-08-01" })
+        }.not_to change(Transaction::Recurrence::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "value")).to eq(
+          [ "must be different from the previous recurrence" ]
+        )
+      end
+
+      it "rejects the same value as the previous recurrence for a later month" do
+        transaction
+
+        expect {
+          create_recurrence(transaction.id, { value: 100, starts_on: "2026-10-01" })
+        }.not_to change(Transaction::Recurrence::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "value")).to eq(
+          [ "must be different from the previous recurrence" ]
+        )
       end
 
       it "returns 404 for another user's transaction" do

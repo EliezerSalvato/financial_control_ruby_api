@@ -38,6 +38,8 @@ pt-BR:
             starts_on:
               after_ends_on: deve ser igual ou anterior a ends_on
               in_the_past: não pode ser anterior ao mês atual
+            value:
+              same_as_previous: deve ser diferente da recorrência anterior
         core/transaction/update/input:
           attributes:
             base:
