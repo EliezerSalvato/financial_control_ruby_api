@@ -1192,3 +1192,103 @@ TransactionCollection:
         $ref: "#/TransactionResource"
     meta:
       $ref: "#/PaginationMeta"
+
+MonthlyStatementAttributes:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: Transaction id
+    kind:
+      type: string
+      enum: [income, expense]
+      description: Transfer between accounts is never included in the statement
+    description:
+      type: string
+    recurrence_type:
+      type: string
+      enum: [one_time, installment, recurring]
+    payment_method:
+      type: string
+      enum: [credit_card, account]
+      description: Statement grouping. `account` covers all account-based payment methods.
+    resource_id:
+      type: string
+      format: uuid
+      description: Credit card id or account id
+    resource_name:
+      type: string
+      description: Credit card name or account name
+    resource_brand:
+      type: string
+      description: |
+        Credit card network, or institution `logo_key` for bank accounts
+        (falls back to the account color when the institution has no logo).
+        Cash accounts use the account color.
+    opening_date:
+      type: string
+      format: date
+    closing_date:
+      type: string
+      format: date
+    due_date:
+      type: [string, "null"]
+      format: date
+      description: Present for credit cards. Always `null` for accounts.
+    value:
+      type: string
+      description: Decimal amount as string (precision 15, scale 2) from the current recurrence
+      example: "100.0"
+    first_recurrence_on:
+      type: string
+      format: date
+      description: Earliest `starts_on` across all recurrences of the transaction
+    current_recurrence_on:
+      type: string
+      format: date
+      description: |
+        First recurrence day projected onto the period opening month. If that date is before
+        `opening_date`, it advances one month. If that date is after `closing_date` and the previous
+        month is shorter than the cycle closing day, it moves to the day after that previous
+        month's last day. The day is clamped to the last day of the month when needed. Never
+        precedes `first_recurrence_on`. Recurring items are omitted when this date is outside the
+        period.
+    starts_on:
+      type: string
+      format: date
+      description: "`starts_on` of the current recurrence"
+    ends_on:
+      type: [string, "null"]
+      format: date
+    canceled_on:
+      type: [string, "null"]
+      format: date
+      description: Set when the transaction is canceled. Null otherwise.
+
+MonthlyStatementResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: monthly_statement
+    attributes:
+      $ref: "#/MonthlyStatementAttributes"
+
+MonthlyStatementCollection:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: collection
+    data:
+      type: array
+      items:
+        $ref: "#/MonthlyStatementResource"

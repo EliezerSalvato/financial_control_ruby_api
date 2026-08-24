@@ -1,0 +1,5 @@
+---
+pt-BR:
+  monthly_statement:
+    errors:
+      invalid_period: Período inválido

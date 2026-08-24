@@ -33,7 +33,7 @@ description: |
   | Access | Endpoints |
   |--------|-----------|
   | Public | registrations, authentications, email confirmations, password resets, session refreshes |
-  | Bearer required | tags, categories, institutions, accounts, credit cards, transactions, profiles, account deletion, email changes, password changes, session revokes |
+  | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, transactions, profiles, account deletion, email changes, password changes, session revokes |
 
   ---
 

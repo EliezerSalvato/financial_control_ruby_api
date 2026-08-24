@@ -1,0 +1,55 @@
+get:
+  tags: [Monthly Statements]
+  summary: List monthly statement items
+  description: |
+    Returns the authenticated user's transactions that belong to the given calendar month.
+    Credit card items use the card billing cycle for that month (`opening_date`, `closing_date`, `due_date`).
+    `opening_date` is the day after the previous cycle's closing date (clamped when the closing day
+    does not exist in that month). Account items use the first and last days of the month and have no `due_date`.
+    `payment_method` is `credit_card` or `account`. `value` and `starts_on` come from the latest recurrence
+    whose `starts_on` is on or before the period closing date. `first_recurrence_on` is the earliest
+    `starts_on` across all recurrences of the transaction.     `current_recurrence_on` is that first
+    recurrence day projected onto the period opening month. If that date is before `opening_date`,
+    it advances one month. If that date is after `closing_date` and the previous month is shorter
+    than the cycle closing day, it moves to the day after that previous month's last day so it
+    falls in the current cycle. It never precedes `first_recurrence_on`. Recurring and installment items
+    are included when `current_recurrence_on` falls in the period and `ends_on` is null or
+    `current_recurrence_on` is on or before `ends_on`. If that date was shifted to `opening_date`
+    because the projected day falls after `closing_date`, the item is still included when
+    `opening_date` is the day after `ends_on`.
+    Transfers between accounts are not included.
+    Pending, active, and completed transactions are included. Transactions canceled before
+    `current_recurrence_on` are not included. Included canceled transactions expose `canceled_on`.
+  operationId: listMonthlyStatements
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: month
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 12
+      description: Calendar month of the statement (1-12)
+    - name: year
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 9999
+      description: Calendar year of the statement
+  responses:
+    "200":
+      description: Monthly statement items listed
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/MonthlyStatementCollection"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

@@ -1,0 +1,5 @@
+---
+en:
+  monthly_statement:
+    errors:
+      invalid_period: Invalid period

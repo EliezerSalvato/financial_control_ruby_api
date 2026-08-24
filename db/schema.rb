@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_21_203900) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_22_182700) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -24,6 +24,108 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_203900) do
   create_enum "transaction_payment_method", ["pix", "debit", "credit_card", "ted", "doc", "deposit", "cash", "boleto"]
   create_enum "transaction_recurrence_type", ["one_time", "installment", "recurring"]
   create_enum "transaction_status", ["pending", "active", "completed", "canceled"]
+
+  # Custom PostgreSQL functions defined in this database.
+  execute <<-'SQL'
+    CREATE OR REPLACE FUNCTION public.credit_card_billing_cycle_dates(_credit_card_id uuid, _month integer, _year integer)
+     RETURNS TABLE(opening_date date, closing_date date, due_date date)
+     LANGUAGE plpgsql
+    AS $function$
+              DECLARE
+                _due_day INT;
+                _closing_day INT;
+                _closing_month DATE;
+                _previous_closing_date DATE;
+              BEGIN
+                SELECT due_day,
+                       closing_day
+                  INTO _due_day,
+                       _closing_day
+                  FROM credit_cards
+                 WHERE id = _credit_card_id;
+    
+                _closing_month := make_date(_year, _month, 1);
+    
+                IF _closing_day > _due_day THEN
+                  _closing_month := _closing_month - INTERVAL '1 month';
+                END IF;
+    
+                closing_date := make_date_clamped(
+                  EXTRACT(YEAR FROM _closing_month)::INT,
+                  EXTRACT(MONTH FROM _closing_month)::INT,
+                  _closing_day
+                );
+    
+                due_date := make_date_clamped(
+                  _year,
+                  _month,
+                  _due_day
+                );
+    
+                _previous_closing_date := make_date_clamped(
+                  EXTRACT(YEAR FROM closing_date - INTERVAL '1 month')::INT,
+                  EXTRACT(MONTH FROM closing_date - INTERVAL '1 month')::INT,
+                  _closing_day
+                );
+    
+                opening_date := _previous_closing_date + 1;
+    
+                RETURN NEXT;
+              END;
+              $function$
+  SQL
+
+  execute <<-'SQL'
+    CREATE OR REPLACE FUNCTION public.make_date_clamped(_year integer, _month integer, _day integer)
+     RETURNS date
+     LANGUAGE sql
+     IMMUTABLE STRICT
+    AS $function$
+                SELECT make_date(
+                  _year,
+                  _month,
+                  LEAST(
+                    _day,
+                    EXTRACT(
+                      DAY FROM (
+                        make_date(_year, _month, 1)
+                        + INTERVAL '1 month - 1 day'
+                      )
+                    )::INT
+                  )
+                );
+              $function$
+  SQL
+
+  execute <<-'SQL'
+    CREATE OR REPLACE FUNCTION public.monthly_occurrence_on(_first_starts_on date, _opening_date date, _closing_date date)
+     RETURNS date
+     LANGUAGE sql
+     IMMUTABLE
+    AS $function$
+                SELECT GREATEST(
+                         _first_starts_on,
+                         CASE
+                           WHEN projected < _opening_date THEN
+                             make_date_clamped(
+                               EXTRACT(YEAR FROM (_opening_date + INTERVAL '1 month'))::INT,
+                               EXTRACT(MONTH FROM (_opening_date + INTERVAL '1 month'))::INT,
+                               EXTRACT(DAY FROM _first_starts_on)::INT
+                             )
+                           WHEN projected > _closing_date THEN
+                             _opening_date
+                           ELSE projected
+                         END
+                       )
+                  FROM (
+                         SELECT make_date_clamped(
+                                  EXTRACT(YEAR FROM _opening_date)::INT,
+                                  EXTRACT(MONTH FROM _opening_date)::INT,
+                                  EXTRACT(DAY FROM _first_starts_on)::INT
+                                ) AS projected
+                       ) AS projection
+              $function$
+  SQL
 
   create_table "accounts", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
     t.boolean "active", default: true, null: false
