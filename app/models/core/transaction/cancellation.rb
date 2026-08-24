@@ -38,7 +38,13 @@ class Core::Transaction::Cancellation < ApplicationSolidProcess
   end
 
   def cancel_transaction(transaction:, **)
-    case deps.transaction_repository.update(transaction:, attributes: { status: Core::Transaction::Status::CANCELED })
+    case deps.transaction_repository.update(
+      transaction:,
+      attributes: {
+        status: Core::Transaction::Status::CANCELED,
+        canceled_on: Date.current
+      }
+    )
     in Solid::Success(transaction:) then Continue(transaction:)
     in Solid::Failure
       input.errors.add(:base, :transaction_cancellation_failed)

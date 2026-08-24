@@ -11,6 +11,7 @@ class Transaction::Serializer
              :recurrence_type,
              :installments_count,
              :ends_on,
+             :canceled_on,
              :tag_ids,
              :current_value
 

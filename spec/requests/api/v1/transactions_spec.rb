@@ -299,6 +299,7 @@ RSpec.describe "API::V1::Transactions", type: :request do
           "recurrence_type" => "one_time",
           "installments_count" => nil,
           "ends_on" => nil,
+          "canceled_on" => nil,
           "account_id" => account.id
         )
         expect(attributes).not_to include(
@@ -1178,16 +1179,24 @@ RSpec.describe "API::V1::Transactions", type: :request do
     context "when authenticated" do
       context "when the transaction is active" do
         it "cancels the transaction" do
-          expect {
-            cancel_transaction(transaction.id)
-          }.to change(Transaction::Record, :count).by(0)
-            .and change(Transaction::ForAccount::Record, :count).by(0)
-            .and change(Transaction::Recurrence::Record, :count).by(0)
+          travel_to(Date.new(2026, 8, 21)) do
+            expect {
+              cancel_transaction(transaction.id)
+            }.to change(Transaction::Record, :count).by(0)
+              .and change(Transaction::ForAccount::Record, :count).by(0)
+              .and change(Transaction::Recurrence::Record, :count).by(0)
 
-          expect(response).to have_http_status(:ok)
-          expect(response.parsed_body["message"]).to eq("Transaction canceled successfully")
-          expect(transaction_attributes(response.parsed_body)).to include("status" => "canceled")
-          expect(transaction.reload.status).to eq("canceled")
+            expect(response).to have_http_status(:ok)
+            expect(response.parsed_body["message"]).to eq("Transaction canceled successfully")
+            expect(transaction_attributes(response.parsed_body)).to include(
+              "status" => "canceled",
+              "canceled_on" => "2026-08-21"
+            )
+            expect(transaction.reload).to have_attributes(
+              status: "canceled",
+              canceled_on: Date.new(2026, 8, 21)
+            )
+          end
         end
       end
 

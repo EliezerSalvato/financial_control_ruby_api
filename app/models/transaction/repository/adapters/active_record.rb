@@ -83,7 +83,8 @@ module Transaction::Repository::Adapters::ActiveRecord
       :payment_method,
       :recurrence_type,
       :installments_count,
-      :ends_on
+      :ends_on,
+      :canceled_on
     )
   end
 end

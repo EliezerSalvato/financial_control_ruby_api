@@ -886,6 +886,11 @@ TransactionAttributes:
       type: string
       format: date
       nullable: true
+    canceled_on:
+      type: string
+      format: date
+      nullable: true
+      description: Set to the current date when the transaction is canceled. Null otherwise. Not writable.
     account_id:
       type: string
       format: uuid

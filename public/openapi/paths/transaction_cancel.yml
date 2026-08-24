@@ -2,7 +2,8 @@ post:
   tags: [Transactions]
   summary: Cancel transaction
   description: |
-    Cancels an active transaction owned by the authenticated user by setting `status` to `canceled`.
+    Cancels an active transaction owned by the authenticated user by setting `status` to `canceled`
+    and `canceled_on` to the current date.
     Pending, completed, and already canceled transactions are rejected.
     To delete a pending transaction, use `DELETE /api/v1/transactions/{id}`.
   operationId: cancelTransaction

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_11_160500) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_21_203900) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -156,6 +156,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_11_160500) do
   end
 
   create_table "transactions", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.date "canceled_on"
     t.uuid "category_id", null: false
     t.datetime "created_at", null: false
     t.string "description", null: false
@@ -175,6 +176,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_11_160500) do
     t.index ["status"], name: "index_transactions_on_status"
     t.index ["user_id"], name: "index_transactions_on_user_id"
     t.check_constraint "recurrence_type = 'one_time'::transaction_recurrence_type AND installments_count IS NULL AND ends_on IS NULL OR recurrence_type = 'installment'::transaction_recurrence_type AND installments_count > 1 AND ends_on IS NOT NULL OR recurrence_type = 'recurring'::transaction_recurrence_type AND installments_count IS NULL", name: "transactions_recurrence_type_consistency"
+    t.check_constraint "status = 'canceled'::transaction_status AND canceled_on IS NOT NULL OR status <> 'canceled'::transaction_status AND canceled_on IS NULL", name: "transactions_canceled_on_consistency"
   end
 
   create_table "user_email_confirmations", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|

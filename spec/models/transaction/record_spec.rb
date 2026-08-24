@@ -12,5 +12,18 @@ RSpec.describe Transaction::Record, type: :model do
     transaction = create(:transaction)
 
     expect(transaction.status).to eq("pending")
+    expect(transaction.canceled_on).to be_nil
+  end
+
+  it "requires canceled_on when status is canceled" do
+    expect {
+      create(:transaction, status: "canceled", canceled_on: nil)
+    }.to raise_error(ActiveRecord::StatementInvalid)
+  end
+
+  it "rejects canceled_on when status is not canceled" do
+    expect {
+      create(:transaction, canceled_on: Date.current)
+    }.to raise_error(ActiveRecord::StatementInvalid)
   end
 end

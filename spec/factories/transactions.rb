@@ -94,6 +94,7 @@ FactoryBot.define do
 
     trait :canceled do
       status { "canceled" }
+      canceled_on { Date.current }
     end
   end
 
