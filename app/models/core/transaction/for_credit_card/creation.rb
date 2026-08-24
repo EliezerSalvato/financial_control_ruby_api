@@ -36,7 +36,7 @@ class Core::Transaction::ForCreditCard::Creation < ApplicationSolidProcess
 
   def validate_limit_consumption(payment_method:, recurrence_type:, limit_consumption_type:, **)
     return Continue() unless payment_method == Core::Transaction::PaymentMethod::CREDIT_CARD
-    return Continue() if recurrence_type == Core::Transaction::RecurrenceType::ONE_TIME
+    return Continue() unless recurrence_type == Core::Transaction::RecurrenceType::INSTALLMENT
 
     input.errors.add(:limit_consumption_type, :blank) if limit_consumption_type.blank?
 

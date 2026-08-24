@@ -78,6 +78,7 @@ FactoryBot.define do
       recurrence_type { "recurring" }
       installments_count { nil }
       ends_on { nil }
+      limit_consumption_type { "monthly" }
     end
 
     trait :with_credit_card do

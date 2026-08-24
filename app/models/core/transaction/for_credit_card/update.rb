@@ -41,10 +41,8 @@ class Core::Transaction::ForCreditCard::Update < ApplicationSolidProcess
 
   def resolve_credit_card(transaction:, credit_card_id:, limit_consumption_type:, recurrence_type:, **)
     credit_card_id = credit_card_id.nil? ? transaction.credit_card_id : credit_card_id
-    switching_to_one_time = recurrence_type == Core::Transaction::RecurrenceType::ONE_TIME &&
-      transaction.recurrence_type != Core::Transaction::RecurrenceType::ONE_TIME
 
-    if limit_consumption_type.nil? && !switching_to_one_time
+    if limit_consumption_type.nil? && recurrence_type == Core::Transaction::RecurrenceType::INSTALLMENT
       limit_consumption_type = transaction.limit_consumption_type
     end
 
@@ -68,7 +66,7 @@ class Core::Transaction::ForCreditCard::Update < ApplicationSolidProcess
   def validate_limit_consumption(transaction:, payment_method:, recurrence_type:, limit_consumption_type:, **)
     return Continue() unless transaction.pending?
     return Continue() unless payment_method == Core::Transaction::PaymentMethod::CREDIT_CARD
-    return Continue() if recurrence_type == Core::Transaction::RecurrenceType::ONE_TIME
+    return Continue() unless recurrence_type == Core::Transaction::RecurrenceType::INSTALLMENT
 
     input.errors.add(:limit_consumption_type, :blank) if limit_consumption_type.blank?
 

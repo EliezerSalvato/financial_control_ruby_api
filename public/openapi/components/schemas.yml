@@ -905,7 +905,10 @@ TransactionAttributes:
       type: string
       nullable: true
       enum: [upfront, monthly]
-      description: Present only when `payment_method` is `credit_card`. Null on list.
+      description: |
+        Present only when `payment_method` is `credit_card`. Null on list.
+        Always `upfront` for `one_time` and `monthly` for `recurring`.
+        `installment` may be `upfront` or `monthly`.
     source_account_id:
       type: string
       format: uuid
@@ -1006,8 +1009,8 @@ TransactionRequest:
           enum: [upfront, monthly]
           description: |
             Used when payment_method is credit_card.
-            Optional for one_time (defaults to upfront).
-            Required for installment and recurring.
+            Ignored for one_time (always upfront) and recurring (always monthly).
+            Required for installment, which may choose upfront or monthly.
         account_id:
           type: string
           format: uuid
@@ -1086,7 +1089,10 @@ TransactionUpdateRequest:
           type: string
           nullable: true
           enum: [upfront, monthly]
-          description: Writable only when status is pending
+          description: |
+            Writable only when status is pending.
+            Ignored for one_time (always upfront) and recurring (always monthly).
+            Required for installment unless the transaction already has a credit card limit consumption type.
         account_id:
           type: string
           format: uuid

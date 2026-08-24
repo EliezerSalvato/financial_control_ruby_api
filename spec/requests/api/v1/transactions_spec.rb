@@ -346,8 +346,7 @@ RSpec.describe "API::V1::Transactions", type: :request do
           create_params(
             payment_method: "credit_card",
             account_id: nil,
-            credit_card_id: credit_card.id,
-            limit_consumption_type: "monthly"
+            credit_card_id: credit_card.id
           ).tap { |params| params[:transaction].delete(:account_id) }
         )
 
@@ -357,7 +356,7 @@ RSpec.describe "API::V1::Transactions", type: :request do
         expect(attributes).to include(
           "payment_method" => "credit_card",
           "credit_card_id" => credit_card.id,
-          "limit_consumption_type" => "monthly"
+          "limit_consumption_type" => "upfront"
         )
         expect(attributes).not_to include(
           "account_id",
@@ -379,6 +378,57 @@ RSpec.describe "API::V1::Transactions", type: :request do
         expect(transaction_attributes(response.parsed_body)["limit_consumption_type"]).to eq("upfront")
       end
 
+      it "forces limit_consumption_type to upfront when a one-time credit card expense sends monthly" do
+        create_transaction(
+          create_params(
+            payment_method: "credit_card",
+            credit_card_id: credit_card.id,
+            limit_consumption_type: "monthly"
+          ).tap { |params| params[:transaction].delete(:account_id) }
+        )
+
+        expect(response).to have_http_status(:created)
+        expect(transaction_attributes(response.parsed_body)["limit_consumption_type"]).to eq("upfront")
+      end
+
+      it "creates a credit card installment with monthly limit consumption" do
+        create_transaction(
+          create_params(
+            payment_method: "credit_card",
+            recurrence_type: "installment",
+            starts_on: "2026-08-11",
+            ends_on: "2026-09-11",
+            credit_card_id: credit_card.id,
+            limit_consumption_type: "monthly"
+          ).tap { |params| params[:transaction].delete(:account_id) }
+        )
+
+        expect(response).to have_http_status(:created)
+        expect(transaction_attributes(response.parsed_body)).to include(
+          "recurrence_type" => "installment",
+          "limit_consumption_type" => "monthly"
+        )
+      end
+
+      it "creates a credit card installment with upfront limit consumption" do
+        create_transaction(
+          create_params(
+            payment_method: "credit_card",
+            recurrence_type: "installment",
+            starts_on: "2026-08-11",
+            ends_on: "2026-09-11",
+            credit_card_id: credit_card.id,
+            limit_consumption_type: "upfront"
+          ).tap { |params| params[:transaction].delete(:account_id) }
+        )
+
+        expect(response).to have_http_status(:created)
+        expect(transaction_attributes(response.parsed_body)).to include(
+          "recurrence_type" => "installment",
+          "limit_consumption_type" => "upfront"
+        )
+      end
+
       it "rejects a credit card installment without limit_consumption_type" do
         create_transaction(
           create_params(
@@ -394,7 +444,7 @@ RSpec.describe "API::V1::Transactions", type: :request do
         expect(response.parsed_body.dig("details", "limit_consumption_type")).to be_present
       end
 
-      it "rejects a credit card recurring without limit_consumption_type" do
+      it "defaults limit_consumption_type to monthly for a recurring credit card expense" do
         create_transaction(
           create_params(
             payment_method: "credit_card",
@@ -403,8 +453,22 @@ RSpec.describe "API::V1::Transactions", type: :request do
           ).tap { |params| params[:transaction].delete(:account_id) }
         )
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.parsed_body.dig("details", "limit_consumption_type")).to be_present
+        expect(response).to have_http_status(:created)
+        expect(transaction_attributes(response.parsed_body)["limit_consumption_type"]).to eq("monthly")
+      end
+
+      it "forces limit_consumption_type to monthly when a recurring credit card expense sends upfront" do
+        create_transaction(
+          create_params(
+            payment_method: "credit_card",
+            recurrence_type: "recurring",
+            credit_card_id: credit_card.id,
+            limit_consumption_type: "upfront"
+          ).tap { |params| params[:transaction].delete(:account_id) }
+        )
+
+        expect(response).to have_http_status(:created)
+        expect(transaction_attributes(response.parsed_body)["limit_consumption_type"]).to eq("monthly")
       end
 
       it "does not persist account_id when creating a credit card expense" do
@@ -725,14 +789,58 @@ RSpec.describe "API::V1::Transactions", type: :request do
         )
       end
 
-      it "rejects changing a pending recurring expense to credit card without limit_consumption_type" do
+      it "defaults limit_consumption_type to monthly when a pending recurring expense becomes credit card" do
         update_transaction(
           transaction.id,
           transaction: { payment_method: "credit_card", credit_card_id: credit_card.id }
         )
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.parsed_body.dig("details", "limit_consumption_type")).to be_present
+        expect(response).to have_http_status(:ok)
+        expect(transaction_attributes(response.parsed_body)).to include(
+          "payment_method" => "credit_card",
+          "credit_card_id" => credit_card.id,
+          "limit_consumption_type" => "monthly"
+        )
+      end
+
+      it "forces limit_consumption_type to monthly when a pending credit card installment becomes recurring" do
+        installment = create(
+          :transaction,
+          :installment,
+          :with_credit_card,
+          user:,
+          credit_card:,
+          category:,
+          limit_consumption_type: "upfront"
+        )
+
+        update_transaction(installment.id, transaction: { recurrence_type: "recurring" })
+
+        expect(response).to have_http_status(:ok)
+        expect(transaction_attributes(response.parsed_body)).to include(
+          "recurrence_type" => "recurring",
+          "limit_consumption_type" => "monthly"
+        )
+      end
+
+      it "keeps the chosen limit_consumption_type when updating a pending credit card installment" do
+        installment = create(
+          :transaction,
+          :installment,
+          :with_credit_card,
+          user:,
+          credit_card:,
+          category:,
+          limit_consumption_type: "monthly"
+        )
+
+        update_transaction(installment.id, transaction: { description: "Updated installment" })
+
+        expect(response).to have_http_status(:ok)
+        expect(transaction_attributes(response.parsed_body)).to include(
+          "description" => "Updated installment",
+          "limit_consumption_type" => "monthly"
+        )
       end
 
       it "allows changing a pending credit card back to an account payment and clears the card" do
