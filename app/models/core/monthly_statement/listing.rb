@@ -23,7 +23,7 @@ class Core::MonthlyStatement::Listing < ApplicationSolidProcess
   private
 
   def list_monthly_statements(user:, month:, year:, **)
-    case deps.monthly_statement_repository.list(user:, month:, year:)
+    case deps.monthly_statement_repository.list(user_id: user.id, month:, year:)
     in Solid::Success(monthly_statements:)
       Continue(monthly_statements:)
     end

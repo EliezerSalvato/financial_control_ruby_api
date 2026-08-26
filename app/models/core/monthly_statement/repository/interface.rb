@@ -2,8 +2,8 @@ module Core::MonthlyStatement::Repository::Interface
   include Solid::Adapters::Interface
 
   module Methods
-    def list(user:, month:, year:)
-      user => Core::User::Entity
+    def list(user_id:, month:, year:)
+      user_id => String
       month => Integer
       year => Integer
 
