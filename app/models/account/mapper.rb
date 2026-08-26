@@ -13,6 +13,7 @@ module Account::Mapper
       bank_account_type: record.bank_account_type,
       current_balance: record.current_balance,
       color: record.color,
+      allow_negative_balance: record.allow_negative_balance,
       active: record.active
     )
   end

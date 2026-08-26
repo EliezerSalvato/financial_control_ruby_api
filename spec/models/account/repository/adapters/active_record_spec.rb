@@ -87,6 +87,7 @@ RSpec.describe Account::Repository::Adapters::ActiveRecord do
           name: "Wallet",
           kind: "cash",
           color: "#3B82F6",
+          allow_negative_balance: true,
           active: true,
           current_balance: 10.5
         }
@@ -98,6 +99,7 @@ RSpec.describe Account::Repository::Adapters::ActiveRecord do
         name: "Wallet",
         kind: "cash",
         color: "#3B82F6",
+        allow_negative_balance: true,
         active: true,
         user_id: user.id,
         institution_id: nil,
@@ -135,10 +137,10 @@ RSpec.describe Account::Repository::Adapters::ActiveRecord do
     it "updates the account attributes" do
       account = Account::Mapper.to_entity(create(:account, user:, name: "Wallet", active: true))
 
-      result = repository.update(account:, attributes: { name: "Cash", color: "#10B981", active: false })
+      result = repository.update(account:, attributes: { name: "Cash", color: "#10B981", allow_negative_balance: true, active: false })
 
       expect(result).to be_a(Solid::Success)
-      expect(result.value[:account]).to have_attributes(name: "Cash", color: "#10B981", active: false)
+      expect(result.value[:account]).to have_attributes(name: "Cash", color: "#10B981", allow_negative_balance: true, active: false)
     end
   end
 

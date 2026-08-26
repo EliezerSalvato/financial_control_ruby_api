@@ -67,6 +67,16 @@ RSpec.describe "API::V1::CreditCards", type: :request do
         expect(names).to eq(%w[Platinum])
       end
 
+      it "filters by allow_negative_available_limit" do
+        create(:credit_card, :allow_negative_available_limit, user:, institution:, default_payment_account: payment_account, name: "Unlimited")
+
+        list_credit_cards(q: { allow_negative_available_limit_eq: true })
+
+        names = response.parsed_body["data"].map { |item| item.dig("attributes", "name") }
+
+        expect(names).to eq(%w[Unlimited])
+      end
+
       it "paginates the collection" do
         list_credit_cards(page: 1, per_page: 1)
 
@@ -137,6 +147,7 @@ RSpec.describe "API::V1::CreditCards", type: :request do
           "default_payment_account_id" => payment_account.id,
           "closing_day" => 10,
           "due_day" => 17,
+          "allow_negative_available_limit" => false,
           "active" => true
         )
       end
@@ -176,11 +187,12 @@ RSpec.describe "API::V1::CreditCards", type: :request do
           "network" => "mastercard",
           "institution_id" => institution.id,
           "default_payment_account_id" => payment_account.id,
+          "allow_negative_available_limit" => false,
           "active" => true
         )
       end
 
-      it "defaults active to true and limits to 0" do
+      it "defaults active to true, allow_negative_available_limit to false, and limits to 0" do
         create_credit_card(
           create_params(
             total_limit: nil,
@@ -193,8 +205,15 @@ RSpec.describe "API::V1::CreditCards", type: :request do
 
         expect(response).to have_http_status(:created)
         expect(attributes["active"]).to be(true)
+        expect(attributes["allow_negative_available_limit"]).to be(false)
         expect(attributes["total_limit"].to_d).to eq(0)
         expect(attributes["available_limit"].to_d).to eq(0)
+      end
+
+      it "creates with allow_negative_available_limit enabled" do
+        create_credit_card(create_params(allow_negative_available_limit: true))
+
+        expect(credit_card_attributes(response.parsed_body)["allow_negative_available_limit"]).to be(true)
       end
 
       it "strips the name" do
@@ -316,6 +335,14 @@ RSpec.describe "API::V1::CreditCards", type: :request do
           "active" => false
         )
         expect(credit_card.reload).to have_attributes(name: "Ultravioleta", available_limit: 5000, active: false)
+      end
+
+      it "updates allow_negative_available_limit" do
+        update_credit_card(credit_card.id, credit_card: { allow_negative_available_limit: true })
+
+        expect(response).to have_http_status(:ok)
+        expect(credit_card_attributes(response.parsed_body)["allow_negative_available_limit"]).to be(true)
+        expect(credit_card.reload.allow_negative_available_limit).to be(true)
       end
 
       it "allows partial updates" do

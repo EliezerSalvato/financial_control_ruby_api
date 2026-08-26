@@ -45,6 +45,7 @@ patch:
           account:
             name: Updated Wallet
             color: "#10B981"
+            allow_negative_balance: true
             active: false
   responses:
     "200":

@@ -18,6 +18,7 @@ class Core::CreditCard::Creation < ApplicationSolidProcess
     attribute :closing_day, :integer
     attribute :due_day, :integer
     attribute :network, :string
+    attribute :allow_negative_available_limit, :boolean, default: false
     attribute :active, :boolean, default: true
 
     normalizes :name, with: ->(value) { value.strip }
@@ -101,7 +102,7 @@ class Core::CreditCard::Creation < ApplicationSolidProcess
     end
   end
 
-  def create_credit_card(user:, institution_id:, default_payment_account_id:, name:, total_limit:, closing_day:, due_day:, network:, active:, **)
+  def create_credit_card(user:, institution_id:, default_payment_account_id:, name:, total_limit:, closing_day:, due_day:, network:, allow_negative_available_limit:, active:, **)
     attributes = {
       institution_id:,
       default_payment_account_id:,
@@ -111,6 +112,7 @@ class Core::CreditCard::Creation < ApplicationSolidProcess
       closing_day:,
       due_day:,
       network:,
+      allow_negative_available_limit:,
       active:
     }
 

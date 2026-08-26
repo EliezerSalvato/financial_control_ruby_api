@@ -15,6 +15,7 @@ module CreditCard::Mapper
       closing_day: record.closing_day,
       due_day: record.due_day,
       network: record.network,
+      allow_negative_available_limit: record.allow_negative_available_limit,
       active: record.active
     )
   end

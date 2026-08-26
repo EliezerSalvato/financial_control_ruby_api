@@ -38,6 +38,12 @@ get:
       schema:
         type: number
       description: Filter by exact current balance
+    - name: q[allow_negative_balance_eq]
+      in: query
+      required: false
+      schema:
+        type: boolean
+      description: Filter by whether negative balance is allowed
     - name: q[active_eq]
       in: query
       required: false
@@ -108,6 +114,7 @@ post:
                 institution_id: 0198f0c2-7b3a-7b6e-9f2d-1a2b3c4d5e6f
                 bank_account_type: checking
                 color: "#820AD1"
+                allow_negative_balance: false
                 active: true
           cash:
             summary: Cash
@@ -116,6 +123,7 @@ post:
                 name: Wallet
                 kind: cash
                 color: "#10B981"
+                allow_negative_balance: false
                 active: true
   responses:
     "201":

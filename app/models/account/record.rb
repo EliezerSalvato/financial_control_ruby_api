@@ -19,7 +19,7 @@ class Account::Record < ApplicationRecord
   }, validate: { allow_nil: true }
 
   def self.ransackable_attributes(_auth_object = nil)
-    %w[name kind bank_account_type active institution_id current_balance]
+    %w[name kind bank_account_type allow_negative_balance active institution_id current_balance]
   end
 
   def self.ransackable_associations(_auth_object = nil)

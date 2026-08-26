@@ -7,6 +7,7 @@ class Account::Serializer
              :kind,
              :current_balance,
              :color,
+             :allow_negative_balance,
              :active
 
   attribute :institution_id, if: ->(account) { account.bank_account? }

@@ -9,7 +9,10 @@ Core::CreditCard::Entity = Data.define(
   :closing_day,
   :due_day,
   :network,
+  :allow_negative_available_limit,
   :active
 ) do
   def active? = active
+
+  def allow_negative_available_limit? = allow_negative_available_limit
 end

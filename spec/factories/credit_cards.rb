@@ -13,5 +13,9 @@ FactoryBot.define do
     trait :inactive do
       active { false }
     end
+
+    trait :allow_negative_available_limit do
+      allow_negative_available_limit { true }
+    end
   end
 end

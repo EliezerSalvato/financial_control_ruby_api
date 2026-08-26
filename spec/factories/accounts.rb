@@ -17,5 +17,9 @@ FactoryBot.define do
     trait :inactive do
       active { false }
     end
+
+    trait :allow_negative_balance do
+      allow_negative_balance { true }
+    end
   end
 end

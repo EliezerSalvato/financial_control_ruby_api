@@ -32,6 +32,12 @@ get:
         type: string
         format: uuid
       description: Filter by default payment account id
+    - name: q[allow_negative_available_limit_eq]
+      in: query
+      required: false
+      schema:
+        type: boolean
+      description: Filter by whether negative available limit is allowed
     - name: q[active_eq]
       in: query
       required: false
@@ -124,6 +130,7 @@ post:
             closing_day: 10
             due_day: 17
             network: mastercard
+            allow_negative_available_limit: false
             active: true
   responses:
     "201":

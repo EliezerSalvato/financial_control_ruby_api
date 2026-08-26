@@ -11,5 +11,6 @@ class CreditCard::Serializer
              :closing_day,
              :due_day,
              :network,
+             :allow_negative_available_limit,
              :active
 end

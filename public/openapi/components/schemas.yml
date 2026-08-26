@@ -558,6 +558,9 @@ AccountAttributes:
       pattern: '^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$'
       description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
       example: "#3B82F6"
+    allow_negative_balance:
+      type: boolean
+      description: When true, settlement may leave `current_balance` negative
     active:
       type: boolean
 
@@ -601,6 +604,10 @@ AccountRequest:
           pattern: '^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$'
           description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
           example: "#3B82F6"
+        allow_negative_balance:
+          type: boolean
+          default: false
+          description: Defaults to `false` when omitted. When true, settlement may leave `current_balance` negative.
         active:
           type: boolean
           default: true
@@ -632,6 +639,8 @@ AccountUpdateRequest:
           pattern: '^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$'
           description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
           example: "#3B82F6"
+        allow_negative_balance:
+          type: boolean
         active:
           type: boolean
       description: Partial update — only provided fields are changed
@@ -701,6 +710,9 @@ CreditCardAttributes:
     network:
       type: string
       example: mastercard
+    allow_negative_available_limit:
+      type: boolean
+      description: When true, settlement may leave `available_limit` negative
     active:
       type: boolean
 
@@ -754,6 +766,10 @@ CreditCardRequest:
           maximum: 31
         network:
           type: string
+        allow_negative_available_limit:
+          type: boolean
+          default: false
+          description: Defaults to `false` when omitted. When true, settlement may leave `available_limit` negative.
         active:
           type: boolean
           default: true
@@ -784,6 +800,8 @@ CreditCardUpdateRequest:
             `available_limit` would be negative.
         network:
           type: string
+        allow_negative_available_limit:
+          type: boolean
         active:
           type: boolean
       description: Partial update — only provided fields are changed

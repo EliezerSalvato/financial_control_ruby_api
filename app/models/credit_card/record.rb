@@ -11,6 +11,7 @@ class CreditCard::Record < ApplicationRecord
     %w[
       name
       network
+      allow_negative_available_limit
       active
       institution_id
       default_payment_account_id

@@ -41,6 +41,7 @@ patch:
           credit_card:
             name: Nubank Ultravioleta
             total_limit: 7000
+            allow_negative_available_limit: true
             active: false
   responses:
     "200":

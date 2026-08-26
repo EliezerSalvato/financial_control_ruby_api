@@ -83,9 +83,9 @@ class API::V1::CreditCardsController < API::V1::BaseController
     credit_card_params = params.require(:credit_card)
 
     if action_name == "update" && params[:id].present?
-      credit_card_params.permit(:institution_id, :default_payment_account_id, :name, :total_limit, :network, :active)
+      credit_card_params.permit(:institution_id, :default_payment_account_id, :name, :total_limit, :network, :allow_negative_available_limit, :active)
     else
-      credit_card_params.permit(:institution_id, :default_payment_account_id, :name, :total_limit, :closing_day, :due_day, :network, :active)
+      credit_card_params.permit(:institution_id, :default_payment_account_id, :name, :total_limit, :closing_day, :due_day, :network, :allow_negative_available_limit, :active)
     end
   end
 end

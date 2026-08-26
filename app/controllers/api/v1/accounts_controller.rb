@@ -85,9 +85,9 @@ class API::V1::AccountsController < API::V1::BaseController
 
     case kind
     when Core::Account::Kind::BANK_ACCOUNT
-      account_params.permit(:name, :kind, :institution_id, :bank_account_type, :current_balance, :color, :active)
+      account_params.permit(:name, :kind, :institution_id, :bank_account_type, :current_balance, :color, :allow_negative_balance, :active)
     else
-      account_params.permit(:name, :kind, :current_balance, :color, :active)
+      account_params.permit(:name, :kind, :current_balance, :color, :allow_negative_balance, :active)
     end
   end
 

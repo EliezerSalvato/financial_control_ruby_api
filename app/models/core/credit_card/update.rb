@@ -17,6 +17,7 @@ class Core::CreditCard::Update < ApplicationSolidProcess
     attribute :name, :string
     attribute :total_limit, :decimal
     attribute :network, :string
+    attribute :allow_negative_available_limit, :boolean
     attribute :active, :boolean
 
     normalizes :name, with: ->(value) { value&.strip }
@@ -135,7 +136,7 @@ class Core::CreditCard::Update < ApplicationSolidProcess
     end
   end
 
-  def update_credit_card(credit_card:, institution_id:, default_payment_account_id:, name:, total_limit:, network:, active:, available_limit: nil, **)
+  def update_credit_card(credit_card:, institution_id:, default_payment_account_id:, name:, total_limit:, network:, allow_negative_available_limit:, active:, available_limit: nil, **)
     attributes = {
       institution_id:,
       default_payment_account_id:,
@@ -143,6 +144,7 @@ class Core::CreditCard::Update < ApplicationSolidProcess
       total_limit:,
       available_limit:,
       network:,
+      allow_negative_available_limit:,
       active:
     }.compact
 

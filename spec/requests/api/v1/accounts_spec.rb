@@ -86,6 +86,16 @@ RSpec.describe "API::V1::Accounts", type: :request do
         expect(names).to eq(%w[Seeded])
       end
 
+      it "filters by allow_negative_balance" do
+        create(:account, :allow_negative_balance, user:, name: "Overdraft")
+
+        list_accounts(q: { allow_negative_balance_eq: true })
+
+        names = response.parsed_body["data"].map { |item| item.dig("attributes", "name") }
+
+        expect(names).to eq(%w[Overdraft])
+      end
+
       it "paginates the collection" do
         list_accounts(page: 1, per_page: 1)
 
@@ -156,6 +166,7 @@ RSpec.describe "API::V1::Accounts", type: :request do
           "name" => "Wallet",
           "kind" => "cash",
           "color" => "#3B82F6",
+          "allow_negative_balance" => false,
           "active" => true
         )
         expect(attributes).not_to include("institution_id", "bank_account_type")
@@ -212,6 +223,7 @@ RSpec.describe "API::V1::Accounts", type: :request do
           "name" => "Wallet",
           "kind" => "cash",
           "color" => "#3B82F6",
+          "allow_negative_balance" => false,
           "active" => true
         )
         expect(attributes).not_to include("institution_id", "bank_account_type")
@@ -242,13 +254,20 @@ RSpec.describe "API::V1::Accounts", type: :request do
         )
       end
 
-      it "defaults active to true and current_balance to 0" do
+      it "defaults active to true, allow_negative_balance to false, and current_balance to 0" do
         create_account(account: { name: "Wallet", kind: "cash", color: "#3B82F6" })
 
         attributes = account_attributes(response.parsed_body)
 
         expect(attributes["active"]).to be(true)
+        expect(attributes["allow_negative_balance"]).to be(false)
         expect(attributes["current_balance"].to_d).to eq(0)
+      end
+
+      it "creates with allow_negative_balance enabled" do
+        create_account(account: { name: "Wallet", kind: "cash", color: "#3B82F6", allow_negative_balance: true })
+
+        expect(account_attributes(response.parsed_body)["allow_negative_balance"]).to be(true)
       end
 
       it "strips the name" do
@@ -380,6 +399,14 @@ RSpec.describe "API::V1::Accounts", type: :request do
           "active" => false
         )
         expect(account.reload).to have_attributes(name: "Cash", color: "#10B981", active: false)
+      end
+
+      it "updates allow_negative_balance" do
+        update_account(account.id, account: { allow_negative_balance: true })
+
+        expect(response).to have_http_status(:ok)
+        expect(account_attributes(response.parsed_body)["allow_negative_balance"]).to be(true)
+        expect(account.reload.allow_negative_balance).to be(true)
       end
 
       it "allows partial updates" do

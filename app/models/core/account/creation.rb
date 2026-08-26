@@ -15,6 +15,7 @@ class Core::Account::Creation < ApplicationSolidProcess
     attribute :bank_account_type, :string
     attribute :current_balance, :decimal, default: 0
     attribute :color, :string
+    attribute :allow_negative_balance, :boolean, default: false
     attribute :active, :boolean, default: true
 
     normalizes :name, with: ->(value) { value.strip }
@@ -80,7 +81,7 @@ class Core::Account::Creation < ApplicationSolidProcess
     end
   end
 
-  def create_account(user:, name:, kind:, institution_id:, bank_account_type:, current_balance:, color:, active:, **)
+  def create_account(user:, name:, kind:, institution_id:, bank_account_type:, current_balance:, color:, allow_negative_balance:, active:, **)
     attributes = {
       name:,
       kind:,
@@ -88,6 +89,7 @@ class Core::Account::Creation < ApplicationSolidProcess
       bank_account_type:,
       current_balance:,
       color:,
+      allow_negative_balance:,
       active:
     }
 

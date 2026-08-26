@@ -96,6 +96,7 @@ RSpec.describe CreditCard::Repository::Adapters::ActiveRecord do
           closing_day: 10,
           due_day: 17,
           network: "mastercard",
+          allow_negative_available_limit: true,
           active: true
         }
       )
@@ -105,6 +106,7 @@ RSpec.describe CreditCard::Repository::Adapters::ActiveRecord do
       expect(result.value[:credit_card]).to have_attributes(
         name: "Platinum",
         network: "mastercard",
+        allow_negative_available_limit: true,
         active: true,
         user_id: user.id
       )
@@ -117,10 +119,15 @@ RSpec.describe CreditCard::Repository::Adapters::ActiveRecord do
         create(:credit_card, user:, institution:, default_payment_account: account, name: "Platinum", active: true)
       )
 
-      result = repository.update(credit_card:, attributes: { name: "Ultravioleta", available_limit: 4200, active: false })
+      result = repository.update(credit_card:, attributes: { name: "Ultravioleta", available_limit: 4200, allow_negative_available_limit: true, active: false })
 
       expect(result).to be_a(Solid::Success)
-      expect(result.value[:credit_card]).to have_attributes(name: "Ultravioleta", available_limit: 4200, active: false)
+      expect(result.value[:credit_card]).to have_attributes(
+        name: "Ultravioleta",
+        available_limit: 4200,
+        allow_negative_available_limit: true,
+        active: false
+      )
     end
   end
 

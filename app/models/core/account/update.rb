@@ -16,6 +16,7 @@ class Core::Account::Update < ApplicationSolidProcess
     attribute :bank_account_type, :string
     attribute :current_balance, :decimal
     attribute :color, :string
+    attribute :allow_negative_balance, :boolean
     attribute :active, :boolean
 
     normalizes :name, with: ->(value) { value&.strip }
@@ -115,8 +116,8 @@ class Core::Account::Update < ApplicationSolidProcess
     end
   end
 
-  def update_account(account:, name:, kind:, institution_id:, bank_account_type:, current_balance:, color:, active:, resulting_kind:, **)
-    attributes = { name:, kind:, current_balance:, color:, active: }.compact
+  def update_account(account:, name:, kind:, institution_id:, bank_account_type:, current_balance:, color:, allow_negative_balance:, active:, resulting_kind:, **)
+    attributes = { name:, kind:, current_balance:, color:, allow_negative_balance:, active: }.compact
 
     if resulting_kind == Core::Account::Kind::CASH
       attributes[:institution_id] = nil
