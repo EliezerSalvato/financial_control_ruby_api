@@ -35,6 +35,7 @@ pt-BR:
               cannot_be_changed: A recorrência não pode ser alterada no status atual
               invalid_recurrence_type: Alterações de valor da recorrência não são permitidas para transações pontuais
               recurrence_change_failed: Falha ao alterar a recorrência
+              upfront_limit_consumption: O valor da recorrência não pode ser alterado quando o consumo de limite é à vista
             starts_on:
               after_ends_on: deve ser igual ou anterior a ends_on
               in_the_past: não pode ser anterior ao mês atual

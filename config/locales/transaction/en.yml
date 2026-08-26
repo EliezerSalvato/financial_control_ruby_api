@@ -35,6 +35,7 @@ en:
               cannot_be_changed: Recurrence cannot be changed in the current status
               invalid_recurrence_type: Recurrence value changes are not allowed for one-time transactions
               recurrence_change_failed: Recurrence change failed
+              upfront_limit_consumption: Recurrence value cannot be changed when limit consumption is upfront
             starts_on:
               after_ends_on: must be on or before ends_on
               in_the_past: cannot be before the current month

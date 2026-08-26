@@ -332,6 +332,70 @@ RSpec.describe "API::V1::Transaction::Recurrences", type: :request do
         end
       end
 
+      context "when the transaction consumes the credit card limit upfront" do
+        let(:credit_card) { create(:credit_card, user:) }
+        let(:transaction) do
+          create(
+            :transaction,
+            :installment,
+            :active,
+            :with_credit_card,
+            user:,
+            category:,
+            credit_card:,
+            limit_consumption_type: "upfront",
+            starts_on:,
+            ends_on: Date.new(2026, 9, 1),
+            value: 100
+          )
+        end
+
+        it "rejects the change" do
+          transaction
+
+          expect {
+            create_recurrence(transaction.id, { value: 120, starts_on: "2026-08-01" })
+          }.not_to change(Transaction::Recurrence::Record, :count)
+
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(response.parsed_body.dig("details", "base")).to eq(
+            [ "Recurrence value cannot be changed when limit consumption is upfront" ]
+          )
+        end
+      end
+
+      context "when the transaction consumes the credit card limit monthly" do
+        let(:credit_card) { create(:credit_card, user:) }
+        let(:transaction) do
+          create(
+            :transaction,
+            :installment,
+            :active,
+            :with_credit_card,
+            user:,
+            category:,
+            credit_card:,
+            limit_consumption_type: "monthly",
+            starts_on:,
+            ends_on: Date.new(2026, 9, 1),
+            value: 100
+          )
+        end
+
+        it "allows the change" do
+          create(:transaction_recurrence, financial_transaction: transaction, starts_on: Date.new(2026, 9, 1), value: 100)
+
+          expect {
+            create_recurrence(transaction.id, { value: 120, starts_on: "2026-09-01" })
+          }.not_to change(Transaction::Recurrence::Record, :count)
+
+          expect(response).to have_http_status(:ok)
+          expect(recurrence_pairs(response.parsed_body)).to eq(
+            [ [ "2026-08-01", "100.0" ], [ "2026-09-01", "120.0" ] ]
+          )
+        end
+      end
+
       it "rejects starts_on after ends_on" do
         installment = create(
           :transaction,

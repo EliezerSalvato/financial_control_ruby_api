@@ -25,6 +25,7 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
         .and_then(:find_transaction)
         .and_then(:reject_invalid_status)
         .and_then(:reject_one_time)
+        .and_then(:reject_upfront_limit_consumption)
         .and_then(:reject_past_month)
         .and_then(:validate_starts_on_window)
         .and_then(:resolve_existing_recurrence)
@@ -57,6 +58,13 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
     return Continue() unless transaction.recurrence_type == Core::Transaction::RecurrenceType::ONE_TIME
 
     input.errors.add(:base, :invalid_recurrence_type)
+    Failure(:invalid_input, input:)
+  end
+
+  def reject_upfront_limit_consumption(transaction:, **)
+    return Continue() unless transaction.limit_consumption_type == Core::Transaction::LimitConsumptionType::UPFRONT
+
+    input.errors.add(:base, :upfront_limit_consumption)
     Failure(:invalid_input, input:)
   end
 

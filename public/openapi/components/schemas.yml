@@ -1149,6 +1149,7 @@ TransactionRecurrenceRequest:
           description: |
             New amount for the given month.
             Must be different from the amount already applied by the previous recurrence.
+            Cannot be changed when the transaction `limit_consumption_type` is `upfront`.
         change_for_next_months:
           type: boolean
           default: false

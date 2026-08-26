@@ -12,6 +12,7 @@ post:
     and cannot be after the transaction `ends_on`.
     `value` must be different from the amount already applied by the previous recurrence.
     Pending, completed, and canceled transactions are rejected. One-time transactions are rejected.
+    Credit card installments with `limit_consumption_type` `upfront` cannot change recurrence values.
 
     When `change_for_next_months` is omitted or `false`, only the given month is changed.
     If the next month already has a recurrence, it is kept; otherwise a recurrence is created
