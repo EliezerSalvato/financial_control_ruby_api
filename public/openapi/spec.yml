@@ -33,6 +33,8 @@ paths:
     $ref: "./paths/credit_card.yml"
   /api/v1/monthly_statements:
     $ref: "./paths/monthly_statements.yml"
+  /api/v1/monthly_statements/transfers:
+    $ref: "./paths/monthly_statement_transfers.yml"
   /api/v1/transactions:
     $ref: "./paths/transactions.yml"
   /api/v1/transactions/{id}:

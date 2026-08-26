@@ -11,5 +11,15 @@ module Core::MonthlyStatement::Repository::Interface
         _1 => Solid::Success(:monthly_statements_listed, { monthly_statements: Array })
       end
     end
+
+    def list_transfers(user_id:, month:, year:)
+      user_id => String
+      month => Integer
+      year => Integer
+
+      super.tap do
+        _1 => Solid::Success(:monthly_statement_transfers_listed, { monthly_statement_transfers: Array })
+      end
+    end
   end
 end

@@ -1292,3 +1292,103 @@ MonthlyStatementCollection:
       type: array
       items:
         $ref: "#/MonthlyStatementResource"
+
+MonthlyStatementTransferAttributes:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: Transaction id
+    kind:
+      type: string
+      const: transfer_between_accounts
+    description:
+      type: string
+    recurrence_type:
+      type: string
+      enum: [one_time, installment, recurring]
+    source_account_id:
+      type: string
+      format: uuid
+    source_account_name:
+      type: string
+    source_account_brand:
+      type: string
+      description: |
+        Institution `logo_key` for bank accounts (falls back to the account color when the
+        institution has no logo). Cash accounts use the account color.
+    destination_account_id:
+      type: string
+      format: uuid
+    destination_account_name:
+      type: string
+    destination_account_brand:
+      type: string
+      description: |
+        Institution `logo_key` for bank accounts (falls back to the account color when the
+        institution has no logo). Cash accounts use the account color.
+    opening_date:
+      type: string
+      format: date
+      description: First day of the calendar month
+    closing_date:
+      type: string
+      format: date
+      description: Last day of the calendar month
+    value:
+      type: string
+      description: Decimal amount as string (precision 15, scale 2) from the current recurrence
+      example: "100.0"
+    first_recurrence_on:
+      type: string
+      format: date
+      description: Earliest `starts_on` across all recurrences of the transfer
+    current_recurrence_on:
+      type: string
+      format: date
+      description: |
+        First recurrence day projected onto the period opening month. If that date is before
+        `opening_date`, it advances one month. If that date is after `closing_date` and the previous
+        month is shorter than the period closing day, it moves to the day after that previous
+        month's last day. The day is clamped to the last day of the month when needed. Never
+        precedes `first_recurrence_on`. Recurring items are omitted when this date is outside the
+        period.
+    starts_on:
+      type: string
+      format: date
+      description: "`starts_on` of the current recurrence"
+    ends_on:
+      type: [string, "null"]
+      format: date
+    canceled_on:
+      type: [string, "null"]
+      format: date
+      description: Set when the transfer is canceled. Null otherwise.
+
+MonthlyStatementTransferResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: monthly_statement_transfer
+    attributes:
+      $ref: "#/MonthlyStatementTransferAttributes"
+
+MonthlyStatementTransferCollection:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: collection
+    data:
+      type: array
+      items:
+        $ref: "#/MonthlyStatementTransferResource"

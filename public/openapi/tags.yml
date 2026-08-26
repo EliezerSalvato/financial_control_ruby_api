@@ -15,4 +15,4 @@
 - name: Transactions
   description: User-owned financial transactions (income, expense, and transfers)
 - name: Monthly Statements
-  description: Monthly statement items for accounts and credit cards
+  description: Monthly statement items for accounts, credit cards, and transfers between accounts

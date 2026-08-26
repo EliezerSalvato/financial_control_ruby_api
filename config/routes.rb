@@ -12,13 +12,19 @@ Rails.application.routes.draw do
       resources :institutions, only: %i[index show create update destroy]
       resources :accounts, only: %i[index show create update destroy]
       resources :credit_cards, only: %i[index show create update destroy]
-      resources :monthly_statements, only: %i[index]
+
       resources :transactions, only: %i[index show create update destroy] do
         member do
           post :cancel
         end
 
         resources :recurrences, only: %i[create], module: :transaction
+      end
+
+      resources :monthly_statements, only: %i[index] do
+        collection do
+          get :transfers
+        end
       end
 
       namespace :user do
