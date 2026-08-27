@@ -6,7 +6,7 @@ ruby "~> 3.4.5"
 gem "rails", "~> 8.1"
 gem "pg", "~> 1.6"
 gem "puma", "~> 8.0"
-gem "bootsnap", "~> 1.24", require: false
+gem "bootsnap", "~> 1.25", require: false
 gem "propshaft", "~> 1.3"
 
 # API
