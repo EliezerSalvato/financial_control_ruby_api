@@ -73,5 +73,18 @@ module Core::CreditCard::Repository::Interface
         )
       end
     end
+
+    def billing_cycle_month(user:, credit_card_id:, date:)
+      user => Core::User::Entity
+      credit_card_id => String
+      date => Date
+
+      super.tap do
+        _1 => (
+          Solid::Failure(:credit_card_not_found, {}) |
+          Solid::Success(:credit_card_billing_cycle_month_resolved, { month: Integer, year: Integer })
+        )
+      end
+    end
   end
 end

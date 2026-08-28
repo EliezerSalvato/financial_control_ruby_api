@@ -11,6 +11,7 @@ pt-BR:
         core/transaction/creation/input:
           attributes:
             base:
+              monthly_status_closed: pertence a um mês fechado
               transaction_creation_failed: Falha ao criar a transação
             destination_account_id:
               same_as_source: deve ser diferente da conta de origem
@@ -38,7 +39,6 @@ pt-BR:
               upfront_limit_consumption: O valor da recorrência não pode ser alterado quando o consumo de limite é à vista
             starts_on:
               after_ends_on: deve ser igual ou anterior a ends_on
-              in_the_past: não pode ser anterior ao mês atual
             value:
               same_as_previous: deve ser diferente da recorrência anterior
         core/transaction/update/input:

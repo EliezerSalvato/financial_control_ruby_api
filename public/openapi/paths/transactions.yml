@@ -136,6 +136,8 @@ post:
     `status` is always set to `pending` and cannot be provided.
     `starts_on` is write-only on the request; the response exposes it on each item in `recurrences`.
     Category, tags, account, and credit card must belong to the authenticated user and be active.
+    A date that belongs to a closed month is rejected with 422 (`monthly_status_closed` on `base`).
+    Credit card transactions use the card billing cycle month, not the civil month of `starts_on`.
   operationId: createTransaction
   security:
     - bearerAuth: []

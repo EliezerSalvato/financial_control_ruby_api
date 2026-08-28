@@ -62,9 +62,47 @@ module CreditCard::Repository::Adapters::ActiveRecord
     Failure(:credit_card_destruction_failed)
   end
 
+  def billing_cycle_month(user:, credit_card_id:, date:)
+    return Failure(:credit_card_not_found) unless user_credit_cards(user).exists?(id: credit_card_id)
+
+    invoice_month_candidates(date).each do |month, year|
+      cycle = billing_cycle_dates(credit_card_id, month, year)
+
+      next if cycle.blank?
+
+      opening_date = cast_date(cycle.opening_date)
+      closing_date = cast_date(cycle.closing_date)
+
+      next unless (opening_date..closing_date).cover?(date)
+
+      return Success(:credit_card_billing_cycle_month_resolved, month:, year:)
+    end
+
+    Success(:credit_card_billing_cycle_month_resolved, month: date.month, year: date.year)
+  end
+
   private
 
   def user_credit_cards(user)
     CreditCard::Record.where(user_id: user.id)
+  end
+
+  def invoice_month_candidates(date)
+    current = Date.new(date.year, date.month, 1)
+
+    [ current, current.next_month, current.next_month.next_month ].map { |cursor| [ cursor.month, cursor.year ] }
+  end
+
+  def billing_cycle_dates(credit_card_id, month, year)
+    sql = <<~SQL
+      SELECT opening_date, closing_date
+        FROM credit_card_billing_cycle_dates(:credit_card_id, :month, :year)
+    SQL
+
+    CreditCard::Record.find_by_sql([ sql, { credit_card_id:, month:, year: } ]).first
+  end
+
+  def cast_date(value)
+    value.is_a?(Date) ? value : Date.parse(value.to_s)
   end
 end

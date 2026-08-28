@@ -1,0 +1,21 @@
+---
+pt-BR:
+  activemodel:
+    errors:
+      models:
+        core/monthly_status/ensure_open/input:
+          attributes:
+            base:
+              monthly_status_closed: pertence a um mês fechado
+        core/monthly_status/update/input:
+          attributes:
+            base:
+              monthly_status_update_failed: Falha ao atualizar o status mensal
+            status:
+              inclusion: não é um status válido
+  monthly_status:
+    errors:
+      not_found: Status mensal não encontrado
+    update:
+      failure: Falha ao atualizar o status mensal
+      success: Status mensal atualizado com sucesso

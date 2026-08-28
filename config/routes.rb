@@ -12,6 +12,7 @@ Rails.application.routes.draw do
       resources :institutions, only: %i[index show create update destroy]
       resources :accounts, only: %i[index show create update destroy]
       resources :credit_cards, only: %i[index show create update destroy]
+      resource :monthly_statuses, only: %i[show update]
 
       resources :transactions, only: %i[index show create update destroy] do
         member do

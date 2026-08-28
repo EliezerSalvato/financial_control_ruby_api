@@ -47,6 +47,7 @@ class Core::Transaction::Creation < ApplicationSolidProcess
       Given(attributes)
         .and_then(:validate_payment_method_compatibility)
         .and_then(:validate_recurrence)
+        .and_then(:ensure_month_is_open)
         .and_then(:calculate_installments_count)
         .and_then(:ensure_category_belongs_to_user)
         .and_then(:ensure_tags_belong_to_user)
@@ -76,6 +77,12 @@ class Core::Transaction::Creation < ApplicationSolidProcess
     return Failure(:invalid_input, input:) if input.errors.any?
 
     Continue()
+  end
+
+  def ensure_month_is_open(user:, starts_on:, payment_method:, credit_card_id:, **)
+    with_nested_process(
+      Core::MonthlyStatus::EnsureOpen.call(user:, date: starts_on, payment_method:, credit_card_id:)
+    )
   end
 
   def calculate_installments_count(recurrence_type:, starts_on:, ends_on:, **)

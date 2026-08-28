@@ -1159,7 +1159,6 @@ TransactionRecurrenceRequest:
             If a recurrence already exists in the same year-month, it is updated in place
             (including the day of `starts_on`).
             Otherwise a new recurrence is created for this date.
-            Cannot be in a month before the current month.
             Cannot be after the transaction `ends_on`.
         value:
           type: number
@@ -1411,3 +1410,70 @@ MonthlyStatementTransferCollection:
       type: array
       items:
         $ref: "#/MonthlyStatementTransferResource"
+
+MonthlyStatusAttributes:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    month:
+      type: integer
+      minimum: 1
+      maximum: 12
+    year:
+      type: integer
+      minimum: 1
+      maximum: 9999
+    status:
+      type: string
+      enum: [open, closed]
+
+MonthlyStatusResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: monthly_status
+    attributes:
+      $ref: "#/MonthlyStatusAttributes"
+
+MonthlyStatusUpdateRequest:
+  type: object
+  required: [monthly_status]
+  properties:
+    monthly_status:
+      type: object
+      required: [month, year, status]
+      properties:
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        year:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        status:
+          type: string
+          enum: [open, closed]
+          description: Closes or reopens the month
+
+MonthlyStatusSuccessResponse:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: object
+    message:
+      type: string
+    data:
+      $ref: "#/MonthlyStatusResource"
+

@@ -1,0 +1,76 @@
+get:
+  tags: [Monthly Statuses]
+  summary: Show monthly status
+  description: |
+    Returns the authenticated user's monthly status for the given calendar month.
+    Identity is `(user, month, year)`, not a UUID. `user` is always the current user.
+    If no row exists, the API returns 404 without creating a record.
+  operationId: showMonthlyStatus
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: month
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 12
+      description: Calendar month (1-12)
+    - name: year
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 9999
+      description: Calendar year
+  responses:
+    "200":
+      description: Monthly status found
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/MonthlyStatusSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+
+patch:
+  tags: [Monthly Statuses]
+  summary: Update monthly status
+  description: |
+    Closes or reopens the authenticated user's month. Identity is `(user, month, year)`,
+    not a UUID. `user` is always the current user.
+    If no row exists, one is created and then updated, so a missing month can be closed
+    in a single request. Sending the already persisted `status` is idempotent (200).
+  operationId: updateMonthlyStatus
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/MonthlyStatusUpdateRequest"
+        example:
+          monthly_status:
+            month: 8
+            year: 2026
+            status: closed
+  responses:
+    "200":
+      description: Monthly status updated
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/MonthlyStatusSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

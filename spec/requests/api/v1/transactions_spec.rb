@@ -633,6 +633,52 @@ RSpec.describe "API::V1::Transactions", type: :request do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.parsed_body.dig("details", "ends_on")).to be_present
       end
+
+      it "creates a transaction in an open month" do
+        create(:monthly_status, user:, month: 8, year: 2026)
+
+        expect {
+          create_transaction(create_params)
+        }.to change(Transaction::Record, :count).by(1)
+
+        expect(response).to have_http_status(:created)
+      end
+
+      it "creates a transaction in a month with no row and persists an open monthly status" do
+        expect {
+          create_transaction(create_params)
+        }.to change(Transaction::Record, :count).by(1)
+          .and change(MonthlyStatus::Record, :count).by(1)
+
+        expect(response).to have_http_status(:created)
+        expect(MonthlyStatus::Record.find_by!(user_id: user.id, month: 8, year: 2026).status).to eq("open")
+      end
+
+      it "rejects a transaction in a closed month" do
+        create(:monthly_status, :closed, user:, month: 8, year: 2026)
+
+        create_transaction(create_params)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq([ "belongs to a closed month" ])
+        expect(Transaction::Record.count).to eq(0)
+      end
+
+      it "creates a credit card transaction when starts_on is in a closed civil month whose cycle is open" do
+        card = create(:credit_card, user:, closing_day: 10, due_day: 17)
+        create(:monthly_status, :closed, user:, month: 8, year: 2026)
+
+        create_transaction(
+          create_params(
+            payment_method: "credit_card",
+            starts_on: "2026-08-28",
+            credit_card_id: card.id
+          ).tap { |params| params[:transaction].delete(:account_id) }
+        )
+
+        expect(response).to have_http_status(:created)
+        expect(MonthlyStatus::Record.find_by!(user_id: user.id, month: 9, year: 2026)).to have_attributes(status: "open")
+      end
     end
 
     context "when unauthenticated" do

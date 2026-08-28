@@ -26,7 +26,6 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
         .and_then(:reject_invalid_status)
         .and_then(:reject_one_time)
         .and_then(:reject_upfront_limit_consumption)
-        .and_then(:reject_past_month)
         .and_then(:validate_starts_on_window)
         .and_then(:resolve_existing_recurrence)
         .and_then(:reject_same_value)
@@ -66,16 +65,6 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
 
     input.errors.add(:base, :upfront_limit_consumption)
     Failure(:invalid_input, input:)
-  end
-
-  def reject_past_month(starts_on:, **)
-    if starts_on.beginning_of_month < Date.current.beginning_of_month
-      input.errors.add(:starts_on, :in_the_past)
-
-      return Failure(:invalid_input, input:)
-    end
-
-    Continue()
   end
 
   def validate_starts_on_window(transaction:, starts_on:, **)

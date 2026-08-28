@@ -1,0 +1,21 @@
+---
+en:
+  activemodel:
+    errors:
+      models:
+        core/monthly_status/ensure_open/input:
+          attributes:
+            base:
+              monthly_status_closed: belongs to a closed month
+        core/monthly_status/update/input:
+          attributes:
+            base:
+              monthly_status_update_failed: Monthly status update failed
+            status:
+              inclusion: is not a valid status
+  monthly_status:
+    errors:
+      not_found: Monthly status not found
+    update:
+      failure: Monthly status update failed
+      success: Monthly status updated successfully

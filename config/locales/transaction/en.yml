@@ -11,6 +11,7 @@ en:
         core/transaction/creation/input:
           attributes:
             base:
+              monthly_status_closed: belongs to a closed month
               transaction_creation_failed: Transaction creation failed
             destination_account_id:
               same_as_source: must be different from source account
@@ -38,7 +39,6 @@ en:
               upfront_limit_consumption: Recurrence value cannot be changed when limit consumption is upfront
             starts_on:
               after_ends_on: must be on or before ends_on
-              in_the_past: cannot be before the current month
             value:
               same_as_previous: must be different from the previous recurrence
         core/transaction/update/input:

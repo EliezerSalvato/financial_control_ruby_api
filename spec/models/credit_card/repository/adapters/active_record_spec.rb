@@ -140,4 +140,43 @@ RSpec.describe CreditCard::Repository::Adapters::ActiveRecord do
       expect { repository.destroy(credit_card:) }.to change(CreditCard::Record, :count).by(-1)
     end
   end
+
+  describe "#billing_cycle_month" do
+    it "resolves a purchase after closing to the following invoice month when closing_day is after due_day" do
+      credit_card = create(:credit_card, user:, institution:, default_payment_account: account, closing_day: 25, due_day: 10)
+
+      result = repository.billing_cycle_month(user: user_entity, credit_card_id: credit_card.id, date: Date.new(2026, 8, 28))
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:credit_card_billing_cycle_month_resolved)
+      expect(result.value).to include(month: 10, year: 2026)
+    end
+
+    it "resolves a purchase after closing to the following invoice month when closing_day is before due_day" do
+      credit_card = create(:credit_card, user:, institution:, default_payment_account: account, closing_day: 10, due_day: 17)
+
+      result = repository.billing_cycle_month(user: user_entity, credit_card_id: credit_card.id, date: Date.new(2026, 8, 28))
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.value).to include(month: 9, year: 2026)
+    end
+
+    it "resolves a purchase before closing to the current invoice month when closing_day is before due_day" do
+      credit_card = create(:credit_card, user:, institution:, default_payment_account: account, closing_day: 10, due_day: 17)
+
+      result = repository.billing_cycle_month(user: user_entity, credit_card_id: credit_card.id, date: Date.new(2026, 8, 2))
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.value).to include(month: 8, year: 2026)
+    end
+
+    it "returns Failure when the credit card belongs to another user" do
+      credit_card = create(:credit_card)
+
+      result = repository.billing_cycle_month(user: user_entity, credit_card_id: credit_card.id, date: Date.new(2026, 8, 28))
+
+      expect(result).to be_a(Solid::Failure)
+      expect(result.type).to eq(:credit_card_not_found)
+    end
+  end
 end

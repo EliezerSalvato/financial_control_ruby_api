@@ -8,8 +8,7 @@ post:
     If a recurrence already exists in the same year-month as `starts_on`, it is updated in place
     (including the day of `starts_on`); otherwise a new recurrence is created.
 
-    Allowed only when `status` is `active`. `starts_on` cannot be in a month before the current month
-    and cannot be after the transaction `ends_on`.
+    Allowed only when `status` is `active`. `starts_on` cannot be after the transaction `ends_on`.
     `value` must be different from the amount already applied by the previous recurrence.
     Pending, completed, and canceled transactions are rejected. One-time transactions are rejected.
     Credit card installments with `limit_consumption_type` `upfront` cannot change recurrence values.

@@ -271,12 +271,12 @@ RSpec.describe "API::V1::Transaction::Recurrences", type: :request do
           create(:transaction, :recurring, :active, user:, account:, category:, starts_on: Date.new(2026, 1, 1), value: 100)
         end
 
-        it "rejects the change" do
+        it "accepts the change" do
           create_recurrence(transaction.id, { value: 120, starts_on: "2026-01-01" })
 
-          expect(response).to have_http_status(:unprocessable_content)
-          expect(response.parsed_body.dig("details", "starts_on")).to eq(
-            [ "cannot be before the current month" ]
+          expect(response).to have_http_status(:ok)
+          expect(recurrence_pairs(response.parsed_body)).to eq(
+            [ [ "2026-01-01", "120.0" ], [ "2026-02-01", "100.0" ] ]
           )
         end
       end
