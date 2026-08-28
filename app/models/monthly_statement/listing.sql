@@ -66,6 +66,8 @@ SELECT transactions.id,
               )
        END
    AND (transactions.canceled_on IS NULL OR first_transaction_recurrences.current_recurrence_on <= transactions.canceled_on)
+   AND (:statuses::text[] IS NULL OR transactions.status::text = ANY(:statuses::text[]))
+   AND (:on::date IS NULL OR first_transaction_recurrences.current_recurrence_on <= :on)
 UNION ALL
 SELECT transactions.id,
        transactions.kind,
@@ -132,3 +134,5 @@ SELECT transactions.id,
               )
        END
    AND (transactions.canceled_on IS NULL OR first_transaction_recurrences.current_recurrence_on <= transactions.canceled_on)
+   AND (:statuses::text[] IS NULL OR transactions.status::text = ANY(:statuses::text[]))
+   AND (:on::date IS NULL OR first_transaction_recurrences.current_recurrence_on <= :on)

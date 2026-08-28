@@ -22,11 +22,18 @@ class MonthlyStatement::Record < ApplicationRecord
   attribute :ends_on, :date
   attribute :canceled_on, :date
 
-  def self.for_period(user_id:, month:, year:)
-    find_by_sql([ LISTING_SQL, { user_id:, month:, year: } ])
+  def self.for_period(user_id:, month:, year:, statuses: nil, on: nil)
+    find_by_sql([ LISTING_SQL, { user_id:, month:, year:, statuses: encode_text_array(statuses), on: } ])
   end
 
   def readonly? = true
+
+  def self.encode_text_array(values)
+    return if values.nil?
+
+    PG::TextEncoder::Array.new.encode(values)
+  end
+  private_class_method :encode_text_array
 
   def self.load_schema!
     @columns_hash = {}.freeze
