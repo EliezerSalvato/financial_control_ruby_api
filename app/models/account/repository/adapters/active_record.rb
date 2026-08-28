@@ -54,6 +54,33 @@ module Account::Repository::Adapters::ActiveRecord
     Failure(:account_destruction_failed)
   end
 
+  def adjust_balance(account:, amount:, operation:)
+    ApplicationRecord.transaction do
+      record = Account::Mapper.to_record(account)
+      record.lock!
+      record.reload
+
+      delta = operation == Core::Account::BalanceOperation::SUBTRACT ? -amount : amount
+      new_balance = record.current_balance + delta
+
+      if new_balance.negative? && !record.allow_negative_balance?
+        Failure(
+          :insufficient_account_balance,
+          account: Account::Mapper.to_entity(record),
+          errors: Core::Errors.new(current_balance: [ I18n.t("account.errors.insufficient_account_balance") ])
+        )
+      elsif record.update(current_balance: new_balance)
+        Success(:account_balance_adjusted, account: Account::Mapper.to_entity(record))
+      else
+        Failure(
+          :account_balance_adjustment_failed,
+          account: Account::Mapper.to_entity(record),
+          errors: Account::Mapper.to_errors(record)
+        )
+      end
+    end
+  end
+
   private
 
   def user_accounts(user)

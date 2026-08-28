@@ -141,6 +141,72 @@ RSpec.describe CreditCard::Repository::Adapters::ActiveRecord do
     end
   end
 
+  describe "#adjust_available_limit" do
+    let(:credit_card) do
+      create(:credit_card, user:, institution:, default_payment_account: account, total_limit: 5000, available_limit: 1000)
+    end
+    let(:credit_card_entity) { CreditCard::Mapper.to_entity(credit_card) }
+
+    it "applies consumption within the available limit" do
+      result = repository.adjust_available_limit(
+        credit_card: credit_card_entity,
+        amount: BigDecimal("200"),
+        operation: Core::CreditCard::AvailableLimitOperation::SUBTRACT
+      )
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:credit_card_available_limit_adjusted)
+      expect(result.value[:credit_card].available_limit).to eq(BigDecimal("800"))
+    end
+
+    it "returns Failure when consumption exceeds available without allow_negative_available_limit" do
+      result = repository.adjust_available_limit(
+        credit_card: credit_card_entity,
+        amount: BigDecimal("2000"),
+        operation: Core::CreditCard::AvailableLimitOperation::SUBTRACT
+      )
+
+      expect(result).to be_a(Solid::Failure)
+      expect(result.type).to eq(:insufficient_available_limit)
+      expect(credit_card.reload.available_limit).to eq(BigDecimal("1000"))
+    end
+
+    it "applies consumption that leaves a negative limit when allow_negative_available_limit is true" do
+      credit_card = create(
+        :credit_card,
+        :allow_negative_available_limit,
+        user:,
+        institution:,
+        default_payment_account: account,
+        total_limit: 5000,
+        available_limit: 1000
+      )
+      credit_card_entity = CreditCard::Mapper.to_entity(credit_card)
+
+      result = repository.adjust_available_limit(
+        credit_card: credit_card_entity,
+        amount: BigDecimal("2000"),
+        operation: Core::CreditCard::AvailableLimitOperation::SUBTRACT
+      )
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:credit_card_available_limit_adjusted)
+      expect(result.value[:credit_card].available_limit).to eq(BigDecimal("-1000"))
+    end
+
+    it "returns Failure when a release would exceed total_limit" do
+      result = repository.adjust_available_limit(
+        credit_card: credit_card_entity,
+        amount: BigDecimal("5000"),
+        operation: Core::CreditCard::AvailableLimitOperation::ADD
+      )
+
+      expect(result).to be_a(Solid::Failure)
+      expect(result.type).to eq(:available_limit_exceeds_total_limit)
+      expect(credit_card.reload.available_limit).to eq(BigDecimal("1000"))
+    end
+  end
+
   describe "#billing_cycle_month" do
     it "resolves a purchase after closing to the following invoice month when closing_day is after due_day" do
       credit_card = create(:credit_card, user:, institution:, default_payment_account: account, closing_day: 25, due_day: 10)

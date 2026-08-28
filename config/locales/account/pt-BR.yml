@@ -8,6 +8,7 @@ pt-BR:
       failure: Falha ao excluir a conta
       success: Conta excluída com sucesso
     errors:
+      insufficient_account_balance: Saldo insuficiente
       invalid_filters: Filtro inválido
       not_found: Conta não encontrada
     update:

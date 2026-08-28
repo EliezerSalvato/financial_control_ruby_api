@@ -73,5 +73,19 @@ module Core::Account::Repository::Interface
         )
       end
     end
+
+    def adjust_balance(account:, amount:, operation:)
+      account => Core::Account::Entity
+      amount => Numeric
+      operation => Core::Account::BalanceOperation::ADD | Core::Account::BalanceOperation::SUBTRACT
+
+      super.tap do
+        _1 => (
+          Solid::Success(:account_balance_adjusted, { account: Core::Account::Entity }) |
+          Solid::Failure(:insufficient_account_balance, { account: Core::Account::Entity, errors: Core::Errors }) |
+          Solid::Failure(:account_balance_adjustment_failed, { account: Core::Account::Entity, errors: Core::Errors })
+        )
+      end
+    end
   end
 end

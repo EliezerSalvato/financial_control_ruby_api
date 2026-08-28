@@ -62,6 +62,39 @@ module CreditCard::Repository::Adapters::ActiveRecord
     Failure(:credit_card_destruction_failed)
   end
 
+  def adjust_available_limit(credit_card:, amount:, operation:)
+    ApplicationRecord.transaction do
+      record = CreditCard::Mapper.to_record(credit_card)
+      record.lock!
+      record.reload
+
+      delta = operation == Core::CreditCard::AvailableLimitOperation::SUBTRACT ? -amount : amount
+      new_limit = record.available_limit + delta
+
+      if new_limit.negative? && !record.allow_negative_available_limit?
+        Failure(
+          :insufficient_available_limit,
+          credit_card: CreditCard::Mapper.to_entity(record),
+          errors: Core::Errors.new(available_limit: [ I18n.t("credit_card.errors.insufficient_available_limit") ])
+        )
+      elsif new_limit > record.total_limit
+        Failure(
+          :available_limit_exceeds_total_limit,
+          credit_card: CreditCard::Mapper.to_entity(record),
+          errors: Core::Errors.new(available_limit: [ I18n.t("credit_card.errors.available_limit_exceeds_total_limit") ])
+        )
+      elsif record.update(available_limit: new_limit)
+        Success(:credit_card_available_limit_adjusted, credit_card: CreditCard::Mapper.to_entity(record))
+      else
+        Failure(
+          :credit_card_available_limit_adjustment_failed,
+          credit_card: CreditCard::Mapper.to_entity(record),
+          errors: CreditCard::Mapper.to_errors(record)
+        )
+      end
+    end
+  end
+
   def billing_cycle_month(user:, credit_card_id:, date:)
     return Failure(:credit_card_not_found) unless user_credit_cards(user).exists?(id: credit_card_id)
 

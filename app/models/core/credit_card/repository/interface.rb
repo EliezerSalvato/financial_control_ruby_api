@@ -74,6 +74,21 @@ module Core::CreditCard::Repository::Interface
       end
     end
 
+    def adjust_available_limit(credit_card:, amount:, operation:)
+      credit_card => Core::CreditCard::Entity
+      amount => Numeric
+      operation => Core::CreditCard::AvailableLimitOperation::ADD | Core::CreditCard::AvailableLimitOperation::SUBTRACT
+
+      super.tap do
+        _1 => (
+          Solid::Success(:credit_card_available_limit_adjusted, { credit_card: Core::CreditCard::Entity }) |
+          Solid::Failure(:insufficient_available_limit, { credit_card: Core::CreditCard::Entity, errors: Core::Errors }) |
+          Solid::Failure(:available_limit_exceeds_total_limit, { credit_card: Core::CreditCard::Entity, errors: Core::Errors }) |
+          Solid::Failure(:credit_card_available_limit_adjustment_failed, { credit_card: Core::CreditCard::Entity, errors: Core::Errors })
+        )
+      end
+    end
+
     def billing_cycle_month(user:, credit_card_id:, date:)
       user => Core::User::Entity
       credit_card_id => String

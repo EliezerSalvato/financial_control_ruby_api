@@ -8,6 +8,7 @@ class Transaction::Record < ApplicationRecord
 
   has_many :taggings, class_name: "Transaction::Tagging::Record", foreign_key: :transaction_id, dependent: :destroy, inverse_of: :financial_transaction
   has_many :recurrences, class_name: "Transaction::Recurrence::Record", foreign_key: :transaction_id, dependent: :destroy, inverse_of: :financial_transaction
+  has_many :settlements, class_name: "Transaction::Settlement::Record", foreign_key: :transaction_id, dependent: :destroy, inverse_of: :financial_transaction
   has_one :for_account, class_name: "Transaction::ForAccount::Record", foreign_key: :transaction_id, dependent: :destroy, inverse_of: :financial_transaction
   has_one :for_credit_card, class_name: "Transaction::ForCreditCard::Record", foreign_key: :transaction_id, dependent: :destroy, inverse_of: :financial_transaction
   has_one :for_transfer_between_accounts,

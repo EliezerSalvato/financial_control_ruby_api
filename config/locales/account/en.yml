@@ -8,6 +8,7 @@ en:
       failure: Account deletion failed
       success: Account deleted successfully
     errors:
+      insufficient_account_balance: Insufficient account balance
       invalid_filters: Invalid filter
       not_found: Account not found
     update:

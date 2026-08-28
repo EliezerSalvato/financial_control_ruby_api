@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_28_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_28_150500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -32,48 +32,48 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_120000) do
      RETURNS TABLE(opening_date date, closing_date date, due_date date)
      LANGUAGE plpgsql
     AS $function$
-              DECLARE
-                _due_day INT;
-                _closing_day INT;
-                _closing_month DATE;
-                _previous_closing_date DATE;
-              BEGIN
-                SELECT due_day,
-                       closing_day
-                  INTO _due_day,
-                       _closing_day
-                  FROM credit_cards
-                 WHERE id = _credit_card_id;
-
-                _closing_month := make_date(_year, _month, 1);
-
-                IF _closing_day > _due_day THEN
-                  _closing_month := _closing_month - INTERVAL '1 month';
-                END IF;
-
-                closing_date := make_date_clamped(
-                  EXTRACT(YEAR FROM _closing_month)::INT,
-                  EXTRACT(MONTH FROM _closing_month)::INT,
-                  _closing_day
-                );
-
-                due_date := make_date_clamped(
-                  _year,
-                  _month,
-                  _due_day
-                );
-
-                _previous_closing_date := make_date_clamped(
-                  EXTRACT(YEAR FROM closing_date - INTERVAL '1 month')::INT,
-                  EXTRACT(MONTH FROM closing_date - INTERVAL '1 month')::INT,
-                  _closing_day
-                );
-
-                opening_date := _previous_closing_date + 1;
-
-                RETURN NEXT;
-              END;
-              $function$
+                  DECLARE
+                    _due_day INT;
+                    _closing_day INT;
+                    _closing_month DATE;
+                    _previous_closing_date DATE;
+                  BEGIN
+                    SELECT due_day,
+                           closing_day
+                      INTO _due_day,
+                           _closing_day
+                      FROM credit_cards
+                     WHERE id = _credit_card_id;
+    
+                    _closing_month := make_date(_year, _month, 1);
+    
+                    IF _closing_day > _due_day THEN
+                      _closing_month := _closing_month - INTERVAL '1 month';
+                    END IF;
+    
+                    closing_date := make_date_clamped(
+                      EXTRACT(YEAR FROM _closing_month)::INT,
+                      EXTRACT(MONTH FROM _closing_month)::INT,
+                      _closing_day
+                    );
+    
+                    due_date := make_date_clamped(
+                      _year,
+                      _month,
+                      _due_day
+                    );
+    
+                    _previous_closing_date := make_date_clamped(
+                      EXTRACT(YEAR FROM closing_date - INTERVAL '1 month')::INT,
+                      EXTRACT(MONTH FROM closing_date - INTERVAL '1 month')::INT,
+                      _closing_day
+                    );
+    
+                    opening_date := _previous_closing_date + 1;
+    
+                    RETURN NEXT;
+                  END;
+                  $function$
   SQL
 
   execute <<-'SQL'
@@ -82,20 +82,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_120000) do
      LANGUAGE sql
      IMMUTABLE STRICT
     AS $function$
-                SELECT make_date(
-                  _year,
-                  _month,
-                  LEAST(
-                    _day,
-                    EXTRACT(
-                      DAY FROM (
-                        make_date(_year, _month, 1)
-                        + INTERVAL '1 month - 1 day'
+                    SELECT make_date(
+                      _year,
+                      _month,
+                      LEAST(
+                        _day,
+                        EXTRACT(
+                          DAY FROM (
+                            make_date(_year, _month, 1)
+                            + INTERVAL '1 month - 1 day'
+                          )
+                        )::INT
                       )
-                    )::INT
-                  )
-                );
-              $function$
+                    );
+                  $function$
   SQL
 
   execute <<-'SQL'
@@ -104,28 +104,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_120000) do
      LANGUAGE sql
      IMMUTABLE
     AS $function$
-                SELECT GREATEST(
-                         _first_starts_on,
-                         CASE
-                           WHEN projected < _opening_date THEN
-                             make_date_clamped(
-                               EXTRACT(YEAR FROM (_opening_date + INTERVAL '1 month'))::INT,
-                               EXTRACT(MONTH FROM (_opening_date + INTERVAL '1 month'))::INT,
-                               EXTRACT(DAY FROM _first_starts_on)::INT
-                             )
-                           WHEN projected > _closing_date THEN
-                             _opening_date
-                           ELSE projected
-                         END
-                       )
-                  FROM (
-                         SELECT make_date_clamped(
-                                  EXTRACT(YEAR FROM _opening_date)::INT,
-                                  EXTRACT(MONTH FROM _opening_date)::INT,
-                                  EXTRACT(DAY FROM _first_starts_on)::INT
-                                ) AS projected
-                       ) AS projection
-              $function$
+                    SELECT GREATEST(
+                             _first_starts_on,
+                             CASE
+                               WHEN projected < _opening_date THEN
+                                 make_date_clamped(
+                                   EXTRACT(YEAR FROM (_opening_date + INTERVAL '1 month'))::INT,
+                                   EXTRACT(MONTH FROM (_opening_date + INTERVAL '1 month'))::INT,
+                                   EXTRACT(DAY FROM _first_starts_on)::INT
+                                 )
+                               WHEN projected > _closing_date THEN
+                                 _opening_date
+                               ELSE projected
+                             END
+                           )
+                      FROM (
+                             SELECT make_date_clamped(
+                                      EXTRACT(YEAR FROM _opening_date)::INT,
+                                      EXTRACT(MONTH FROM _opening_date)::INT,
+                                      EXTRACT(DAY FROM _first_starts_on)::INT
+                                    ) AS projected
+                           ) AS projection
+                  $function$
   SQL
 
   create_table "accounts", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
@@ -159,6 +159,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_120000) do
     t.index ["user_id"], name: "index_categories_on_user_id"
   end
 
+  create_table "credit_card_invoice_settlements", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.date "closing_date", null: false
+    t.datetime "created_at", null: false
+    t.uuid "credit_card_id", null: false
+    t.date "due_date", null: false
+    t.date "opening_date", null: false
+    t.uuid "payment_account_id", null: false
+    t.decimal "released_limit", precision: 15, scale: 2, default: "0.0", null: false
+    t.date "settled_on", null: false
+    t.decimal "total_value", precision: 15, scale: 2, null: false
+    t.datetime "updated_at", null: false
+    t.index ["credit_card_id", "due_date"], name: "idx_on_credit_card_id_due_date_6f7f58e4e0", unique: true
+    t.index ["payment_account_id"], name: "index_credit_card_invoice_settlements_on_payment_account_id"
+    t.check_constraint "released_limit >= 0::numeric", name: "credit_card_invoice_settlements_released_limit_non_negative"
+    t.check_constraint "total_value >= 0::numeric", name: "credit_card_invoice_settlements_total_value_non_negative"
+  end
+
   create_table "credit_cards", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
     t.boolean "active", default: true, null: false
     t.boolean "allow_negative_available_limit", default: false, null: false
@@ -178,7 +195,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_120000) do
     t.index ["institution_id"], name: "index_credit_cards_on_institution_id"
     t.index ["user_id", "active"], name: "index_credit_cards_on_user_id_and_active"
     t.index ["user_id"], name: "index_credit_cards_on_user_id"
-    t.check_constraint "available_limit >= 0::numeric AND available_limit <= total_limit", name: "credit_cards_available_limit_within_total"
+    t.check_constraint "(allow_negative_available_limit OR available_limit >= 0::numeric) AND available_limit <= total_limit", name: "credit_cards_available_limit_within_total"
     t.check_constraint "closing_day >= 1 AND closing_day <= 31", name: "credit_cards_closing_day_range"
     t.check_constraint "due_day >= 1 AND due_day <= 31", name: "credit_cards_due_day_range"
     t.check_constraint "total_limit >= 0::numeric", name: "credit_cards_total_limit_non_negative"
@@ -263,6 +280,51 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_120000) do
     t.virtual "year", type: :integer, null: false, as: "(EXTRACT(year FROM starts_on))::integer", stored: true
     t.index ["transaction_id", "month", "year"], name: "idx_on_transaction_id_month_year_9d19fc02b4", unique: true
     t.check_constraint "value >= 0::numeric", name: "transaction_recurrences_value_non_negative"
+  end
+
+  create_table "transaction_settlement_for_accounts", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.uuid "account_id", null: false
+    t.datetime "created_at", null: false
+    t.uuid "transaction_settlement_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_transaction_settlement_for_accounts_on_account_id"
+    t.index ["transaction_settlement_id"], name: "idx_on_transaction_settlement_id_de3e324160", unique: true
+  end
+
+  create_table "transaction_settlement_for_credit_cards", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "credit_card_invoice_settlement_id"
+    t.decimal "limit_consumed", precision: 15, scale: 2, null: false
+    t.uuid "transaction_settlement_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["credit_card_invoice_settlement_id"], name: "idx_on_credit_card_invoice_settlement_id_fa9d3e7af5"
+    t.index ["transaction_settlement_id"], name: "idx_on_transaction_settlement_id_8279bb1a3d", unique: true
+    t.check_constraint "limit_consumed >= 0::numeric", name: "transaction_settlement_for_credit_cards_limit_consumed_non_nega"
+  end
+
+  create_table "transaction_settlement_for_transfer_between_accounts", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.uuid "destination_account_id", null: false
+    t.uuid "source_account_id", null: false
+    t.uuid "transaction_settlement_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["destination_account_id"], name: "idx_on_destination_account_id_eb051c7bb0"
+    t.index ["source_account_id"], name: "idx_on_source_account_id_222c827083"
+    t.index ["transaction_settlement_id"], name: "idx_on_transaction_settlement_id_97ac0c44e9", unique: true
+    t.check_constraint "source_account_id <> destination_account_id", name: "transaction_settlement_for_transfer_between_accounts_distinct_a"
+  end
+
+  create_table "transaction_settlements", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "installment_number"
+    t.date "occurred_on", null: false
+    t.date "settled_on", null: false
+    t.uuid "transaction_id", null: false
+    t.datetime "updated_at", null: false
+    t.decimal "value", precision: 15, scale: 2, null: false
+    t.index ["transaction_id", "occurred_on"], name: "idx_on_transaction_id_occurred_on_4ef5834e25", unique: true
+    t.check_constraint "installment_number IS NULL OR installment_number >= 1", name: "transaction_settlements_installment_number_positive"
+    t.check_constraint "value >= 0::numeric", name: "transaction_settlements_value_non_negative"
   end
 
   create_table "transaction_tags", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
@@ -362,6 +424,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_120000) do
   add_foreign_key "accounts", "institutions"
   add_foreign_key "accounts", "users"
   add_foreign_key "categories", "users"
+  add_foreign_key "credit_card_invoice_settlements", "accounts", column: "payment_account_id"
+  add_foreign_key "credit_card_invoice_settlements", "credit_cards"
   add_foreign_key "credit_cards", "accounts", column: "default_payment_account_id"
   add_foreign_key "credit_cards", "institutions"
   add_foreign_key "credit_cards", "users"
@@ -376,6 +440,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_120000) do
   add_foreign_key "transaction_for_transfer_between_accounts", "accounts", column: "source_account_id"
   add_foreign_key "transaction_for_transfer_between_accounts", "transactions"
   add_foreign_key "transaction_recurrences", "transactions"
+  add_foreign_key "transaction_settlement_for_accounts", "accounts"
+  add_foreign_key "transaction_settlement_for_accounts", "transaction_settlements"
+  add_foreign_key "transaction_settlement_for_credit_cards", "credit_card_invoice_settlements"
+  add_foreign_key "transaction_settlement_for_credit_cards", "transaction_settlements"
+  add_foreign_key "transaction_settlement_for_transfer_between_accounts", "accounts", column: "destination_account_id"
+  add_foreign_key "transaction_settlement_for_transfer_between_accounts", "accounts", column: "source_account_id"
+  add_foreign_key "transaction_settlement_for_transfer_between_accounts", "transaction_settlements"
+  add_foreign_key "transaction_settlements", "transactions"
   add_foreign_key "transaction_tags", "tags"
   add_foreign_key "transaction_tags", "transactions"
   add_foreign_key "transactions", "categories"

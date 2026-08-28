@@ -156,4 +156,60 @@ RSpec.describe Account::Repository::Adapters::ActiveRecord do
       }.to change(Account::Record, :count).by(-1)
     end
   end
+
+  describe "#adjust_balance" do
+    let(:account) { create(:account, user:, current_balance: 100) }
+    let(:account_entity) { Account::Mapper.to_entity(account) }
+
+    it "always succeeds on a credit" do
+      result = repository.adjust_balance(
+        account: account_entity,
+        amount: BigDecimal("50"),
+        operation: Core::Account::BalanceOperation::ADD
+      )
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:account_balance_adjusted)
+      expect(result.value[:account].current_balance).to eq(BigDecimal("150"))
+    end
+
+    it "succeeds when a debit zeroes the balance" do
+      result = repository.adjust_balance(
+        account: account_entity,
+        amount: BigDecimal("100"),
+        operation: Core::Account::BalanceOperation::SUBTRACT
+      )
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:account_balance_adjusted)
+      expect(result.value[:account].current_balance).to eq(BigDecimal("0"))
+    end
+
+    it "returns Failure and leaves the balance unchanged when a debit would go negative without allow_negative_balance" do
+      result = repository.adjust_balance(
+        account: account_entity,
+        amount: BigDecimal("150"),
+        operation: Core::Account::BalanceOperation::SUBTRACT
+      )
+
+      expect(result).to be_a(Solid::Failure)
+      expect(result.type).to eq(:insufficient_account_balance)
+      expect(account.reload.current_balance).to eq(BigDecimal("100"))
+    end
+
+    it "applies a debit that leaves a negative balance when allow_negative_balance is true" do
+      account = create(:account, :allow_negative_balance, user:, current_balance: 100)
+      account_entity = Account::Mapper.to_entity(account)
+
+      result = repository.adjust_balance(
+        account: account_entity,
+        amount: BigDecimal("150"),
+        operation: Core::Account::BalanceOperation::SUBTRACT
+      )
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:account_balance_adjusted)
+      expect(result.value[:account].current_balance).to eq(BigDecimal("-50"))
+    end
+  end
 end

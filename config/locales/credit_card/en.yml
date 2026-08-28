@@ -27,6 +27,8 @@ en:
       failure: Credit card deletion failed
       success: Credit card deleted successfully
     errors:
+      available_limit_exceeds_total_limit: Available limit would exceed total limit
+      insufficient_available_limit: Insufficient available limit
       invalid_filters: Invalid filter
       not_found: Credit card not found
     update:
