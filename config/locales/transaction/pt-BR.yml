@@ -41,6 +41,12 @@ pt-BR:
               after_ends_on: deve ser igual ou anterior a ends_on
             value:
               same_as_previous: deve ser diferente da recorrência anterior
+        core/transaction/settlement/creation/input:
+          attributes:
+            base:
+              insufficient_account_balance: Saldo insuficiente
+              insufficient_available_limit: Limite disponível insuficiente
+              settlement_creation_failed: Falha ao efetivar a transação
         core/transaction/update/input:
           attributes:
             base:

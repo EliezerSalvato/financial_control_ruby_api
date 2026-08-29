@@ -173,4 +173,120 @@ RSpec.describe CreditCard::InvoiceSettlement::Repository::Adapters::ActiveRecord
       )
     end
   end
+
+  describe "#create" do
+    def create_invoice(**overrides)
+      repository.create(
+        credit_card_id: credit_card.id,
+        payment_account_id: account.id,
+        opening_date: Date.new(2026, 7, 11),
+        closing_date: Date.new(2026, 8, 10),
+        due_date: Date.new(2026, 8, 17),
+        total_value: 100,
+        released_limit: 100,
+        settled_on: Date.new(2026, 8, 17),
+        **overrides
+      )
+    end
+
+    it "returns Success(:already_settled) on a duplicate (credit_card_id, due_date)" do
+      first = create_invoice
+      second = nil
+
+      expect { second = create_invoice(total_value: 50, released_limit: 50) }.not_to raise_error
+
+      expect(second).to be_a(Solid::Success)
+      expect(second.type).to eq(:already_settled)
+      expect(second.value[:invoice_settlement]).to have_attributes(
+        id: first.value[:invoice_settlement].id,
+        total_value: 100,
+        due_date: Date.new(2026, 8, 17)
+      )
+      expect(CreditCard::InvoiceSettlement::Record.count).to eq(1)
+    end
+  end
+
+  describe "#link_occurrences" do
+    it "links only still-unlinked rows of that cycle and card" do
+      in_cycle = create(:transaction, :with_credit_card, user:, credit_card:, starts_on: Date.new(2026, 8, 1), value: 100)
+      already_linked = create(:transaction, :with_credit_card, user:, credit_card:, starts_on: Date.new(2026, 8, 2), value: 50)
+      outside_cycle = create(:transaction, :with_credit_card, user:, credit_card:, starts_on: Date.new(2026, 8, 15), value: 80)
+      other_card = create(:credit_card, user:, default_payment_account: account, closing_day: 10, due_day: 17)
+      other_card_transaction = create(:transaction, :with_credit_card, user:, credit_card: other_card, starts_on: Date.new(2026, 8, 1), value: 70)
+
+      previous_invoice = create(
+        :credit_card_invoice_settlement,
+        credit_card:,
+        payment_account: account,
+        opening_date: Date.new(2026, 6, 11),
+        closing_date: Date.new(2026, 7, 10),
+        due_date: Date.new(2026, 7, 17),
+        total_value: 50,
+        settled_on: Date.new(2026, 7, 17)
+      )
+      unlinked_settlement = settle_card_occurrence(in_cycle, occurred_on: Date.new(2026, 8, 1), value: 100)
+      linked_settlement = settle_card_occurrence(already_linked, occurred_on: Date.new(2026, 8, 2), value: 50, invoice: previous_invoice)
+      outside_settlement = settle_card_occurrence(outside_cycle, occurred_on: Date.new(2026, 8, 15), value: 80)
+      other_card_settlement = settle_card_occurrence(other_card_transaction, occurred_on: Date.new(2026, 8, 1), value: 70)
+
+      invoice = create(
+        :credit_card_invoice_settlement,
+        credit_card:,
+        payment_account: account,
+        opening_date: Date.new(2026, 7, 11),
+        closing_date: Date.new(2026, 8, 10),
+        due_date: Date.new(2026, 8, 17),
+        total_value: 100,
+        settled_on: Date.new(2026, 8, 17)
+      )
+
+      result = repository.link_occurrences(invoice_settlement: CreditCard::InvoiceSettlement::Mapper.to_entity(invoice))
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:credit_card_invoice_occurrences_linked)
+      expect(result.value[:linked_count]).to eq(1)
+      expect(unlinked_settlement.for_credit_card.reload.credit_card_invoice_settlement_id).to eq(invoice.id)
+      expect(linked_settlement.for_credit_card.reload.credit_card_invoice_settlement_id).to eq(previous_invoice.id)
+      expect(outside_settlement.for_credit_card.reload.credit_card_invoice_settlement_id).to be_nil
+      expect(other_card_settlement.for_credit_card.reload.credit_card_invoice_settlement_id).to be_nil
+    end
+  end
+
+  describe "#paid_keys" do
+    it "filters by card and due_date" do
+      matching = create(
+        :credit_card_invoice_settlement,
+        credit_card:,
+        payment_account: account,
+        due_date: Date.new(2026, 8, 17)
+      )
+      other_due = create(
+        :credit_card_invoice_settlement,
+        credit_card:,
+        payment_account: account,
+        opening_date: Date.new(2026, 8, 11),
+        closing_date: Date.new(2026, 9, 10),
+        due_date: Date.new(2026, 9, 17)
+      )
+      other_card = create(:credit_card, user:, default_payment_account: account, closing_day: 10, due_day: 17)
+      other_card_invoice = create(
+        :credit_card_invoice_settlement,
+        credit_card: other_card,
+        payment_account: account,
+        due_date: Date.new(2026, 8, 17)
+      )
+
+      result = repository.paid_keys(
+        credit_card_ids: [ credit_card.id ],
+        due_dates: [ Date.new(2026, 8, 17) ]
+      )
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:credit_card_invoice_settlements_listed)
+      expect(result.value[:keys]).to eq([ [ credit_card.id, Date.new(2026, 8, 17) ] ])
+      expect(result.value[:keys]).not_to include([ credit_card.id, other_due.due_date ])
+      expect(result.value[:keys]).not_to include([ other_card.id, other_card_invoice.due_date ])
+      expect(matching).to be_present
+    end
+  end
 end

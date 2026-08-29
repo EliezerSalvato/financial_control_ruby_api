@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_28_150500) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_29_140000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -322,6 +322,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_28_150500) do
     t.uuid "transaction_id", null: false
     t.datetime "updated_at", null: false
     t.decimal "value", precision: 15, scale: 2, null: false
+    t.index ["occurred_on"], name: "index_transaction_settlements_on_occurred_on"
     t.index ["transaction_id", "occurred_on"], name: "idx_on_transaction_id_occurred_on_4ef5834e25", unique: true
     t.check_constraint "installment_number IS NULL OR installment_number >= 1", name: "transaction_settlements_installment_number_positive"
     t.check_constraint "value >= 0::numeric", name: "transaction_settlements_value_non_negative"

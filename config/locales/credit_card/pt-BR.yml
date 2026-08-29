@@ -12,6 +12,12 @@ pt-BR:
             base:
               credit_card_destruction_failed: Falha ao excluir o cartão de crédito
               credit_card_not_found: Cartão de crédito não encontrado
+        core/credit_card/invoice_settlement/creation/input:
+          attributes:
+            base:
+              available_limit_exceeds_total_limit: O limite disponível ultrapassaria o limite total
+              insufficient_account_balance: Saldo insuficiente
+              invoice_settlement_creation_failed: Falha ao efetivar a fatura
         core/credit_card/update/input:
           attributes:
             base:

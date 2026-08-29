@@ -12,6 +12,12 @@ en:
             base:
               credit_card_destruction_failed: Credit card deletion failed
               credit_card_not_found: Credit card not found
+        core/credit_card/invoice_settlement/creation/input:
+          attributes:
+            base:
+              available_limit_exceeds_total_limit: Available limit would exceed total limit
+              insufficient_account_balance: Insufficient account balance
+              invoice_settlement_creation_failed: Invoice settlement failed
         core/credit_card/update/input:
           attributes:
             base:

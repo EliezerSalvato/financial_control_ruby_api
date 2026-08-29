@@ -7,6 +7,7 @@ module Transaction::Adapters
   config.transaction_for_transfer_between_accounts_repository = Transaction::ForTransferBetweenAccounts::Repository::Adapters::ActiveRecord
   config.recurrence_repository = Transaction::Recurrence::Repository::Adapters::ActiveRecord
   config.tagging_repository = Transaction::Tagging::Repository::Adapters::ActiveRecord
+  config.settlement_repository = Transaction::Settlement::Repository::Adapters::ActiveRecord
 
   def self.repository = config.repository
   def self.transaction_for_account_repository = config.transaction_for_account_repository
@@ -14,4 +15,5 @@ module Transaction::Adapters
   def self.transaction_for_transfer_between_accounts_repository = config.transaction_for_transfer_between_accounts_repository
   def self.recurrence_repository = config.recurrence_repository
   def self.tagging_repository = config.tagging_repository
+  def self.settlement_repository = config.settlement_repository
 end

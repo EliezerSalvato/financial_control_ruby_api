@@ -12,5 +12,41 @@ module Core::CreditCard::InvoiceSettlement::Repository::Interface
         _1 => Solid::Success(:credit_card_due_invoices_listed, { due_invoices: Array })
       end
     end
+
+    def create(credit_card_id:, payment_account_id:, opening_date:, closing_date:, due_date:, total_value:, released_limit:, settled_on:)
+      credit_card_id => String
+      payment_account_id => String
+      opening_date => Date
+      closing_date => Date
+      due_date => Date
+      total_value => Numeric
+      released_limit => Numeric
+      settled_on => Date
+
+      super.tap do
+        _1 => (
+          Solid::Success(:credit_card_invoice_settlement_created, { invoice_settlement: Core::CreditCard::InvoiceSettlement::Entity }) |
+          Solid::Success(:already_settled, { invoice_settlement: Core::CreditCard::InvoiceSettlement::Entity }) |
+          Solid::Failure(:credit_card_invoice_settlement_creation_failed, { errors: Core::Errors })
+        )
+      end
+    end
+
+    def link_occurrences(invoice_settlement:)
+      invoice_settlement => Core::CreditCard::InvoiceSettlement::Entity
+
+      super.tap do
+        _1 => Solid::Success(:credit_card_invoice_occurrences_linked, { linked_count: Integer })
+      end
+    end
+
+    def paid_keys(credit_card_ids:, due_dates:)
+      credit_card_ids => Array
+      due_dates => Array
+
+      super.tap do
+        _1 => Solid::Success(:credit_card_invoice_settlements_listed, { keys: Array })
+      end
+    end
   end
 end

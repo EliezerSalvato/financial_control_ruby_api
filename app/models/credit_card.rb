@@ -6,6 +6,7 @@ module CreditCard
     find: Core::CreditCard::Finding,
     create: Core::CreditCard::Creation,
     update: Core::CreditCard::Update,
-    destroy: Core::CreditCard::Deletion
+    destroy: Core::CreditCard::Deletion,
+    settle_invoice: Core::CreditCard::InvoiceSettlement::Creation
   }
 end

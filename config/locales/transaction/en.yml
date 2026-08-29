@@ -41,6 +41,12 @@ en:
               after_ends_on: must be on or before ends_on
             value:
               same_as_previous: must be different from the previous recurrence
+        core/transaction/settlement/creation/input:
+          attributes:
+            base:
+              insufficient_account_balance: Insufficient account balance
+              insufficient_available_limit: Insufficient available limit
+              settlement_creation_failed: Transaction settlement failed
         core/transaction/update/input:
           attributes:
             base:
