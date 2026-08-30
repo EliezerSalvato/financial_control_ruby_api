@@ -63,16 +63,26 @@ RSpec.describe Core::CreditCard::InvoiceSettlement::Creation do
   end
 
   describe "limit ceiling" do
-    it "returns Failure(:available_limit_exceeds_total_limit) with rollback when the release would exceed total_limit" do
+    it "pays the invoice and skips the release when available_limit is already at total_limit" do
       credit_card.update!(available_limit: 5000)
 
       result = settle_invoice(total_value: 100)
 
-      expect(result).to be_a(Solid::Failure)
-      expect(result.type).to eq(:available_limit_exceeds_total_limit)
-      expect(account.reload.current_balance).to eq(BigDecimal("1000"))
+      expect(result).to be_a(Solid::Success)
+      expect(account.reload.current_balance).to eq(BigDecimal("900"))
       expect(credit_card.reload.available_limit).to eq(BigDecimal("5000"))
-      expect(CreditCard::InvoiceSettlement::Record.count).to eq(0)
+      expect(CreditCard::InvoiceSettlement::Record.sole.released_limit).to eq(0)
+    end
+
+    it "releases only the remaining room when the full total would exceed total_limit" do
+      credit_card.update!(available_limit: 4950)
+
+      result = settle_invoice(total_value: 100)
+
+      expect(result).to be_a(Solid::Success)
+      expect(account.reload.current_balance).to eq(BigDecimal("900"))
+      expect(credit_card.reload.available_limit).to eq(BigDecimal("5000"))
+      expect(CreditCard::InvoiceSettlement::Record.sole.released_limit).to eq(50)
     end
   end
 
