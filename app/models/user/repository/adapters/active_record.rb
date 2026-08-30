@@ -47,6 +47,14 @@ module User::Repository::Adapters::ActiveRecord
     Failure(:user_not_found)
   end
 
+  def find_by_id(id:)
+    user = User::Record.find_by(id:)
+
+    return Success(:user_found, user: User::Mapper.to_entity(user)) if user.present?
+
+    Failure(:user_not_found)
+  end
+
   def find_by_reset_password_token(token:, token_adapter: User::Adapters.token, **)
     user = token_adapter.find_by(purpose: :reset_password, token:)
 

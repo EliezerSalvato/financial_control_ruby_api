@@ -76,6 +76,17 @@ module Core::User::Repository::Interface
       end
     end
 
+    def find_by_id(id:)
+      id => String
+
+      super.tap do
+        _1 => (
+          Solid::Failure(:user_not_found, {}) |
+          Solid::Success(:user_found, { user: Core::User::Entity })
+        )
+      end
+    end
+
     def find_by_reset_password_token(token:, token_adapter: User::Adapters.token, **)
       token => String
       token_adapter => Core::User::Token::Interface

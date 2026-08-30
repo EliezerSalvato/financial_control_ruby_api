@@ -1,0 +1,18 @@
+---
+en:
+  activemodel:
+    errors:
+      models:
+        core/settlement/processing/input:
+          attributes:
+            base:
+              monthly_status_update_failed: Monthly status update failed
+              previous_month_open: The previous month must be closed before processing this month
+              later_month_closed: A later month is already closed
+            month:
+              in_the_future: cannot be in the future
+            reference_date:
+              must_be_today_or_yesterday: must be today or yesterday
+  settlement:
+    processing:
+      enqueued: Settlement processing has been queued

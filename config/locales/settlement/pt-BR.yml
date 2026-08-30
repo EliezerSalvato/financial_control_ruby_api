@@ -1,0 +1,18 @@
+---
+pt-BR:
+  activemodel:
+    errors:
+      models:
+        core/settlement/processing/input:
+          attributes:
+            base:
+              monthly_status_update_failed: Falha ao atualizar o status mensal
+              previous_month_open: O mês anterior precisa estar fechado antes de processar este mês
+              later_month_closed: Um mês posterior já está fechado
+            month:
+              in_the_future: não pode ser um mês futuro
+            reference_date:
+              must_be_today_or_yesterday: deve ser hoje ou ontem
+  settlement:
+    processing:
+      enqueued: Efetivações enfileiradas para processamento

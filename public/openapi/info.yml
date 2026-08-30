@@ -1,5 +1,5 @@
 title: Financial Control Ruby API
-version: "1.0.10"
+version: "1.0.11"
 description: |
   ## Authentication
 
@@ -33,7 +33,46 @@ description: |
   | Access | Endpoints |
   |--------|-----------|
   | Public | registrations, authentications, email confirmations, password resets, session refreshes |
-  | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, monthly statuses, transactions, profiles, account deletion, email changes, password changes, session revokes |
+  | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, monthly statuses, settlements, transactions, profiles, account deletion, email changes, password changes, session revokes |
+  | Session token (query or `Authorization`) | Action Cable at `/cable` (`MonthlyStatusChannel`) |
+
+  ---
+
+  ## WebSockets
+
+  Action Cable is mounted at `/cable`. Use the same session token as the REST API:
+
+  ```
+  ws://localhost:3000/cable?token=<token>
+  ```
+
+  Native clients may send `Authorization: Bearer <token>` on the WebSocket handshake instead of the query param.
+
+  Subscribe to a calendar month owned by the current user:
+
+  ```json
+  { "channel": "MonthlyStatusChannel", "month": 8, "year": 2026 }
+  ```
+
+  The monthly status row must already exist (same identity as `GET /api/v1/monthly_statuses`). Otherwise the subscription is rejected.
+
+  On subscribe, and whenever the `processing` column changes, the server sends:
+
+  ```json
+  { "processing": true, "last_processed_at": null }
+  ```
+
+  `last_processed_at` is an ISO 8601 timestamp, or `null` when the month has never finished a processing run.
+
+  ---
+
+  ## Locale
+
+  API messages follow this order:
+
+  1. `locale` cookie (`en` or `pt-BR`)
+  2. `Accept-Language` header (`pt-BR`, `pt`, `en`, …)
+  3. Default: English (`en`)
 
   ---
 

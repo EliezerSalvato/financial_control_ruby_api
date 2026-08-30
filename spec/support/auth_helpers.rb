@@ -29,4 +29,5 @@ end
 
 RSpec.configure do |config|
   config.include AuthHelpers, type: :request
+  config.include AuthHelpers, type: :channel
 end

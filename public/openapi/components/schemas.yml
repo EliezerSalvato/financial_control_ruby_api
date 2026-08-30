@@ -1428,6 +1428,12 @@ MonthlyStatusAttributes:
     status:
       type: string
       enum: [open, closed]
+    processing:
+      type: boolean
+    last_processed_at:
+      type: string
+      format: date-time
+      nullable: true
 
 MonthlyStatusResource:
   type: object
@@ -1476,4 +1482,27 @@ MonthlyStatusSuccessResponse:
       type: string
     data:
       $ref: "#/MonthlyStatusResource"
+
+SettlementProcessingRequest:
+  type: object
+  required: [settlement]
+  properties:
+    settlement:
+      type: object
+      required: [month, year, reference_date]
+      properties:
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        year:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        reference_date:
+          type: string
+          format: date
+          description: |
+            Inclusive cutoff date. Required for the current month, where it must be today or yesterday.
+            Ignored for past months (the last day of the given month is used instead).
 

@@ -1,6 +1,6 @@
 class Rack::Attack
   throttle("requests/ip", limit: 300, period: 5.minutes) do |req|
-    req.ip unless req.path == "/up"
+    req.ip unless req.path == "/up" || req.path == "/cable"
   end
 
   throttle("login/ip", limit: 10, period: 1.minute) do |req|

@@ -24,8 +24,21 @@ RSpec.describe "API::V1::MonthlyStatuses", type: :request do
           "id" => monthly_status.id,
           "month" => 8,
           "year" => 2026,
-          "status" => "closed"
+          "status" => "closed",
+          "processing" => false,
+          "last_processed_at" => nil
         )
+      end
+
+      it "returns processing and last_processed_at" do
+        processed_at = Time.utc(2026, 8, 30, 14, 0, 0)
+        create(:monthly_status, :processing, user:, month: 8, year: 2026, last_processed_at: processed_at)
+
+        show_monthly_status(month: 8, year: 2026)
+
+        expect(response).to have_http_status(:ok)
+        expect(monthly_status_attributes["processing"]).to eq(true)
+        expect(monthly_status_attributes["last_processed_at"]).to eq("2026-08-30T14:00:00.000Z")
       end
 
       it "returns 404 when the month is missing" do

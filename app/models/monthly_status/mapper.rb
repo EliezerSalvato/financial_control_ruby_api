@@ -9,7 +9,9 @@ module MonthlyStatus::Mapper
       user_id: record.user_id,
       month: record.month,
       year: record.year,
-      status: record.status
+      status: record.status,
+      processing: record.processing,
+      last_processed_at: record.last_processed_at
     )
   end
 

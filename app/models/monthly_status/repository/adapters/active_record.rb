@@ -23,10 +23,26 @@ module MonthlyStatus::Repository::Adapters::ActiveRecord
 
   def update(monthly_status:, attributes:)
     record = MonthlyStatus::Mapper.to_record(monthly_status)
-    updated = record.update(status: attributes.fetch(:status))
+    updated = record.update(attributes)
 
     return Success(:monthly_status_updated, monthly_status: MonthlyStatus::Mapper.to_entity(record)) if updated
 
     Failure(:monthly_status_update_failed, errors: MonthlyStatus::Mapper.to_errors(record))
+  end
+
+  def list_open(up_to_month:, up_to_year:)
+    records = MonthlyStatus::Record
+      .where(status: Core::MonthlyStatus::Status::OPEN)
+      .where("(year, month) <= (?, ?)", up_to_year, up_to_month)
+      .order(:user_id, :year, :month)
+
+    Success(:monthly_statuses_listed, monthly_statuses: MonthlyStatus::Mapper.to_entities(records))
+  end
+
+  def exists_closed_after?(user_id:, month:, year:)
+    MonthlyStatus::Record
+      .where(user_id:, status: Core::MonthlyStatus::Status::CLOSED)
+      .where("(year, month) > (?, ?)", year, month)
+      .exists?
   end
 end

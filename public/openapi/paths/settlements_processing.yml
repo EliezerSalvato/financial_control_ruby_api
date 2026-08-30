@@ -1,0 +1,46 @@
+post:
+  tags: [Settlements]
+  summary: Enqueue settlement processing
+  description: |
+    Enqueues a background job that processes due occurrences, transfers, and credit-card invoices
+    for the authenticated user in the given calendar month.
+
+    For the current month, `reference_date` must be today or yesterday. For a past month, `reference_date`
+    is ignored and the last day of that month is used. Future months are rejected by the job.
+
+    The job also rejects a month when the previous calendar month still has an open `monthly_status`.
+    If that previous month has no open row (missing or already closed), processing may start.
+
+    A month that precedes a closed `monthly_status` is also rejected. Later open or missing months
+    do not block processing.
+
+    Domain failures (insufficient balance or limit) are logged by the job and do not appear on this
+    response.
+  operationId: processSettlements
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/SettlementProcessingRequest"
+        example:
+          settlement:
+            month: 8
+            year: 2026
+            reference_date: "2026-08-28"
+  responses:
+    "202":
+      description: Settlement processing enqueued
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/MessageSuccessResponse"
+          example:
+            status: success
+            message: Settlement processing has been queued
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"

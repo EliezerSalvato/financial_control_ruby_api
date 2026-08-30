@@ -39,5 +39,24 @@ module Core::MonthlyStatus::Repository::Interface
         )
       end
     end
+
+    def list_open(up_to_month:, up_to_year:)
+      up_to_month => Integer
+      up_to_year => Integer
+
+      super.tap do
+        _1 => Solid::Success(:monthly_statuses_listed, { monthly_statuses: Array })
+      end
+    end
+
+    def exists_closed_after?(user_id:, month:, year:)
+      user_id => String
+      month => Integer
+      year => Integer
+
+      super.tap do
+        _1 => (true | false)
+      end
+    end
   end
 end

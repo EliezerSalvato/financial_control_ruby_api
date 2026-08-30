@@ -17,4 +17,6 @@
 - name: Monthly Statements
   description: Monthly statement items for accounts, credit cards, and transfers between accounts
 - name: Monthly Statuses
-  description: Open or closed status of a calendar month for the authenticated user
+  description: Open or closed status of a calendar month for the authenticated user, including processing updates over Action Cable
+- name: Settlements
+  description: Enqueue processing of due transaction occurrences, transfers, and credit-card invoices

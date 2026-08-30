@@ -5,6 +5,9 @@ get:
     Returns the authenticated user's monthly status for the given calendar month.
     Identity is `(user, month, year)`, not a UUID. `user` is always the current user.
     If no row exists, the API returns 404 without creating a record.
+
+    Processing updates (`processing` and `last_processed_at`) are also pushed over Action Cable
+    on `MonthlyStatusChannel`. See the WebSockets section in the API description.
   operationId: showMonthlyStatus
   security:
     - bearerAuth: []
