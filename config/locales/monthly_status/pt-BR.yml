@@ -6,7 +6,7 @@ pt-BR:
         core/monthly_status/ensure_open/input:
           attributes:
             base:
-              monthly_status_closed: pertence a um mês fechado
+              monthly_status_closed: Não é possível realizar esta operação, pois o mês já está fechado
         core/monthly_status/update/input:
           attributes:
             base:

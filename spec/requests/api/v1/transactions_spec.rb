@@ -660,8 +660,21 @@ RSpec.describe "API::V1::Transactions", type: :request do
         create_transaction(create_params)
 
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.parsed_body.dig("details", "base")).to eq([ "belongs to a closed month" ])
+        expect(response.parsed_body.dig("details", "base")).to eq([
+          "Transactions cannot be created for this date because the month is already closed"
+        ])
         expect(Transaction::Record.count).to eq(0)
+      end
+
+      it "rejects a closed-month transaction in Portuguese when Accept-Language is pt-BR" do
+        create(:monthly_status, :closed, user:, month: 8, year: 2026)
+
+        create_transaction(create_params, headers.merge("Accept-Language" => "pt-BR"))
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq([
+          "Não é possível criar transações nesta data, pois o mês já está fechado"
+        ])
       end
 
       it "creates a credit card transaction when starts_on is in a closed civil month whose cycle is open" do

@@ -11,7 +11,7 @@ en:
         core/transaction/creation/input:
           attributes:
             base:
-              monthly_status_closed: belongs to a closed month
+              monthly_status_closed: Transactions cannot be created for this date because the month is already closed
               transaction_creation_failed: Transaction creation failed
             destination_account_id:
               same_as_source: must be different from source account

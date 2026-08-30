@@ -11,7 +11,7 @@ pt-BR:
         core/transaction/creation/input:
           attributes:
             base:
-              monthly_status_closed: pertence a um mês fechado
+              monthly_status_closed: Não é possível criar transações nesta data, pois o mês já está fechado
               transaction_creation_failed: Falha ao criar a transação
             destination_account_id:
               same_as_source: deve ser diferente da conta de origem

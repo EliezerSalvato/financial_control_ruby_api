@@ -6,7 +6,7 @@ en:
         core/monthly_status/ensure_open/input:
           attributes:
             base:
-              monthly_status_closed: belongs to a closed month
+              monthly_status_closed: This operation cannot be performed because the month is already closed
         core/monthly_status/update/input:
           attributes:
             base:
