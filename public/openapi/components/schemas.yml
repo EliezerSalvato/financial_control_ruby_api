@@ -48,12 +48,18 @@ RefreshSessionRequest:
 
 ProfileUpdateRequest:
   type: object
-  required: [first_name, last_name]
+  minProperties: 1
   properties:
     first_name:
       type: string
     last_name:
       type: string
+    configs:
+      type: object
+      additionalProperties: true
+      description: |
+        Merged into the stored configs. Sent keys overwrite existing ones; keys that are not sent are kept.
+        Can be sent alone, without `first_name` or `last_name`.
 
 AccountDeletionRequest:
   type: object
@@ -164,6 +170,10 @@ UserAttributes:
     email:
       type: string
       format: email
+    configs:
+      type: object
+      additionalProperties: true
+      description: User preferences stored as JSON. Defaults to an empty object.
 
 UserResource:
   type: object

@@ -47,10 +47,11 @@ RSpec.describe "API::V1::Settlements", type: :request do
         expect(Settlement::ProcessJob).not_to have_been_enqueued
       end
 
-      it "returns the queued message in Portuguese when Accept-Language is pt-BR" do
+      it "returns the queued message in Portuguese when the user locale is pt-BR" do
+        user.update!(configs: { "locale" => "pt-BR" })
+
         process_settlements(
-          { settlement: { month: 8, year: 2026, reference_date: "2026-08-28" } },
-          headers.merge("Accept-Language" => "pt-BR")
+          { settlement: { month: 8, year: 2026, reference_date: "2026-08-28" } }
         )
 
         expect(response).to have_http_status(:accepted)

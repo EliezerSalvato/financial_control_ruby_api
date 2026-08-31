@@ -16,11 +16,11 @@ class API::V1::User::AuthenticationsController < API::V1::BaseController
 
   private
 
-  def params_with_metadata
-    params.merge(request_metadata)
+  def params_with_metadata_and_locale
+    params.merge(**request_metadata, locale: locale_from_cookie)
   end
 
   def permitted_params
-    params_with_metadata.permit(:email, :password, :remember_me, :user_agent, :ip_address)
+    params_with_metadata_and_locale.permit(:email, :password, :remember_me, :user_agent, :ip_address, :locale)
   end
 end

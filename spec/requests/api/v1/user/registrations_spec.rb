@@ -38,9 +38,10 @@ RSpec.describe "API::V1::User::Registrations", type: :request do
         expect(attributes).to include(
           "first_name" => "John",
           "last_name" => "Doe",
-          "email" => "john.doe@example.com"
+          "email" => "john.doe@example.com",
+          "configs" => {}
         )
-        expect(attributes.keys).to contain_exactly("id", "first_name", "last_name", "email")
+        expect(attributes.keys).to contain_exactly("id", "first_name", "last_name", "email", "configs")
         expect(User::Email::Confirmation::Record.last.new_email).to eq("john.doe@example.com")
       end
     end

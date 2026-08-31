@@ -1,5 +1,5 @@
 title: Financial Control Ruby API
-version: "1.0.11"
+version: "1.0.13"
 description: |
   ## Authentication
 
@@ -68,11 +68,21 @@ description: |
 
   ## Locale
 
-  API messages follow this order:
+  When the request is authenticated, API messages follow this order:
+
+  1. `configs.locale` from the current user (`en` or `pt-BR`)
+  2. Default: English (`en`)
+
+  Cookie and `Accept-Language` are ignored while the user is authenticated.
+
+  When the request is not authenticated, API messages follow this order:
 
   1. `locale` cookie (`en` or `pt-BR`)
   2. `Accept-Language` header (`pt-BR`, `pt`, `en`, …)
   3. Default: English (`en`)
+
+  On sign in (`POST /api/v1/user/authentications`), if a valid `locale` cookie is present
+  and differs from the user's `configs.locale`, the stored locale is updated to match the cookie.
 
   ---
 

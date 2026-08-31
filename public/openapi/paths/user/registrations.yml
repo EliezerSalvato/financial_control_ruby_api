@@ -37,5 +37,6 @@ post:
                     first_name: John
                     last_name: Doe
                     email: john.doe@example.com
+                    configs: {}
     "422":
       $ref: "../../components/responses.yml#/UnprocessableContent"

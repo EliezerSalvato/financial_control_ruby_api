@@ -14,7 +14,8 @@ RSpec.describe User::Repository::Adapters::ActiveRecord do
       expect(result.value[:user]).to have_attributes(
         id: user.id,
         email: user.email,
-        verified: true
+        verified: true,
+        configs: {}
       )
       expect(result.value[:user]).to be_a(Core::User::Entity)
     end

@@ -6,9 +6,9 @@ pt-BR:
         core/settlement/processing/input:
           attributes:
             base:
+              later_month_closed: Um mês posterior já está fechado
               monthly_status_update_failed: Falha ao atualizar o status mensal
               previous_month_open: O mês anterior precisa estar fechado antes de processar este mês
-              later_month_closed: Um mês posterior já está fechado
             month:
               in_the_future: não pode ser um mês futuro
             reference_date:

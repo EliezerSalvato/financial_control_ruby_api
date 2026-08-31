@@ -4,7 +4,8 @@ Core::User::Entity = Data.define(
   :last_name,
   :email,
   :verified,
-  :active
+  :active,
+  :configs
 ) do
   def verified? = verified
 

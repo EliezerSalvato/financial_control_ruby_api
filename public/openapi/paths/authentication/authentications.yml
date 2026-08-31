@@ -7,6 +7,8 @@ post:
     Returns a short-lived session `token` in the JSON body and sets an encrypted
     httpOnly `refresh_token` cookie (`SameSite=Lax`). The refresh token is never
     returned in the JSON body. Optional `remember_me` controls cookie and refresh lifetime.
+    When a valid `locale` cookie is present and differs from `configs.locale`, the user's
+    locale is updated to match the cookie. Other config keys are kept.
   operationId: createAuthentication
   requestBody:
     required: true
@@ -54,5 +56,6 @@ post:
                     first_name: John
                     last_name: Doe
                     email: john.doe@example.com
+                    configs: {}
     "422":
       $ref: "../../components/responses.yml#/UnprocessableContent"

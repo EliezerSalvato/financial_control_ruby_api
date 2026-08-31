@@ -56,6 +56,10 @@ en:
               user_is_not_active: User is not active
             email:
               not_found: not found
+        core/user/profile/update/input:
+          attributes:
+            base:
+              at_least_one_attribute: Must include at least one of first_name, last_name, or configs
         core/user/session/refresh/input:
           attributes:
             base:

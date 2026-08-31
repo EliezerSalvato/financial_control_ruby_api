@@ -147,10 +147,11 @@ module Core::User::Repository::Interface
       end
     end
 
-    def update_profile(user:, first_name:, last_name:)
+    def update_profile(user:, first_name: nil, last_name: nil, configs: nil)
       user => Core::User::Entity
-      first_name => String
-      last_name => String
+      first_name => String | nil
+      last_name => String | nil
+      configs => Hash | nil
 
       super.tap do
         _1 => (

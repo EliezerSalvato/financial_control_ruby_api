@@ -15,6 +15,7 @@ class Core::User::Authentication < ApplicationSolidProcess
     attribute :remember_me, :boolean, default: false
     attribute :ip_address, :string
     attribute :user_agent, :string
+    attribute :locale, :string
 
     normalizes :email, with: ->(value) { value.strip.downcase }
 
@@ -27,6 +28,7 @@ class Core::User::Authentication < ApplicationSolidProcess
         .and_then(:authenticate_user)
         .and_then(:check_if_user_email_is_verified)
         .and_then(:check_if_user_is_active)
+        .and_then(:sync_user_locale)
         .and_then(:revoke_previous_sessions)
         .and_then(:create_refresh_token)
         .and_then(:create_session)
@@ -61,6 +63,21 @@ class Core::User::Authentication < ApplicationSolidProcess
     input.errors.add(:base, :user_is_not_active)
 
     Failure(:user_is_not_active, input:)
+  end
+
+  def sync_user_locale(user:, locale: nil, **)
+    return Continue() if locale.blank?
+
+    configs = user.configs.to_h.stringify_keys
+    return Continue() if configs["locale"] == locale
+
+    case deps.user_repository.update_profile(user:, configs: configs.merge("locale" => locale))
+    in Solid::Success(user:) then Continue(user:)
+    in Solid::Failure(errors:)
+      add_errors_to_input(errors)
+
+      Failure(:locale_sync_failed, input:)
+    end
   end
 
   def revoke_previous_sessions(user:, **)

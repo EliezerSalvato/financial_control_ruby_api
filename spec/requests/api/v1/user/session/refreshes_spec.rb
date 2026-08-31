@@ -25,6 +25,7 @@ RSpec.describe "API::V1::User::Session::Refreshes", type: :request do
         expect(json["status"]).to eq("success")
         expect(json.dig("data", "token")).to be_present
         expect(json.dig("data", "user")).to be_present
+        expect(json.dig("data", "user", "data", "attributes", "configs")).to eq({})
         expect(json.dig("data", "refresh_token")).to be_nil
         expect(cookies[:refresh_token]).to be_present
       end

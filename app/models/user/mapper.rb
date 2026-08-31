@@ -10,7 +10,8 @@ module User::Mapper
       last_name: record.last_name,
       email: record.email,
       verified: record.verified,
-      active: record.active
+      active: record.active,
+      configs: record.configs.to_h
     )
   end
 

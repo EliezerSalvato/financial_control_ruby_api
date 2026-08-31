@@ -1,7 +1,9 @@
 patch:
   tags: [User]
   summary: Update profile
-  description: Updates `first_name` and `last_name` of the authenticated user. Both fields are required.
+  description: |
+    Partially updates the authenticated user's profile. Send any combination of `first_name`, `last_name`, and `configs`.
+    `configs` is merged into the stored JSON: sent keys overwrite existing ones, and other keys are kept.
   operationId: updateProfile
   security:
     - bearerAuth: []
@@ -11,9 +13,17 @@ patch:
       application/json:
         schema:
           $ref: "../../components/schemas.yml#/ProfileUpdateRequest"
-        example:
-          first_name: Jane
-          last_name: Smith
+        examples:
+          names:
+            summary: Update names
+            value:
+              first_name: Jane
+              last_name: Smith
+          configs:
+            summary: Merge configs without changing names
+            value:
+              configs:
+                locale: pt-BR
   responses:
     "200":
       description: Profile updated

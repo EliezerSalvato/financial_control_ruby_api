@@ -22,6 +22,7 @@ RSpec.describe "API::V1::User::Authentications", type: :request do
         expect(json["status"]).to eq("success")
         expect(json.dig("data", "token")).to be_present
         expect(json.dig("data", "user")).to be_present
+        expect(json.dig("data", "user", "data", "attributes", "configs")).to eq({})
         expect(json.dig("data", "refresh_token")).to be_nil
         expect(cookies[:refresh_token]).to be_present
       end
@@ -62,6 +63,72 @@ RSpec.describe "API::V1::User::Authentications", type: :request do
             .to be_within(1.second).of(Core::User::Token::SHORT_REFRESH_TOKEN_EXPIRES_IN.from_now)
           expect(persistent_refresh_token_cookie?).to be(false)
         end
+      end
+
+      it "updates the user locale when the locale cookie differs" do
+        user.update!(configs: { "locale" => "en", "theme" => "dark" })
+        cookies[:locale] = "pt-BR"
+
+        post_authentication(valid_params)
+
+        expect(response).to have_http_status(:ok)
+        expect(user.reload.configs).to eq("locale" => "pt-BR", "theme" => "dark")
+        expect(response.parsed_body.dig("data", "user", "data", "attributes", "configs"))
+          .to eq("locale" => "pt-BR", "theme" => "dark")
+      end
+
+      it "sets the user locale from the cookie when the user has no locale" do
+        cookies[:locale] = "pt-BR"
+
+        post_authentication(valid_params)
+
+        expect(response).to have_http_status(:ok)
+        expect(user.reload.configs).to eq("locale" => "pt-BR")
+        expect(response.parsed_body.dig("data", "user", "data", "attributes", "configs"))
+          .to eq("locale" => "pt-BR")
+      end
+
+      it "does not change the user locale when the cookie matches" do
+        user.update!(configs: { "locale" => "pt-BR", "theme" => "dark" })
+        cookies[:locale] = "pt-BR"
+
+        post_authentication(valid_params)
+
+        expect(response).to have_http_status(:ok)
+        expect(user.reload.configs).to eq("locale" => "pt-BR", "theme" => "dark")
+      end
+
+      it "does not change the user locale when the cookie is missing" do
+        user.update!(configs: { "locale" => "en" })
+
+        post_authentication(valid_params)
+
+        expect(response).to have_http_status(:ok)
+        expect(user.reload.configs).to eq("locale" => "en")
+        expect(response.parsed_body.dig("data", "user", "data", "attributes", "configs"))
+          .to eq("locale" => "en")
+      end
+
+      it "does not change the user locale when the cookie is not available" do
+        user.update!(configs: { "locale" => "en" })
+        cookies[:locale] = "fr"
+
+        post_authentication(valid_params)
+
+        expect(response).to have_http_status(:ok)
+        expect(user.reload.configs).to eq("locale" => "en")
+      end
+
+      it "does not change the user locale from Accept-Language" do
+        user.update!(configs: { "locale" => "en" })
+
+        post "/api/v1/user/authentications",
+             params: valid_params,
+             headers: { "Accept-Language" => "pt-BR" },
+             as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(user.reload.configs).to eq("locale" => "en")
       end
     end
 
@@ -126,6 +193,16 @@ RSpec.describe "API::V1::User::Authentications", type: :request do
         expect(response.parsed_body.dig("details", "base")).to be_present
       end
 
+      it "does not update the user locale when authentication fails" do
+        user.update!(configs: { "locale" => "en" })
+        cookies[:locale] = "pt-BR"
+
+        post_authentication(valid_params.merge(password: "wrong-password"))
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(user.reload.configs).to eq("locale" => "en")
+      end
+
       it "rejects an unknown email" do
         post_authentication(valid_params.merge(email: "unknown@example.com"))
 
@@ -142,6 +219,15 @@ RSpec.describe "API::V1::User::Authentications", type: :request do
 
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.parsed_body.dig("details", "base")).to be_present
+      end
+
+      it "does not update the user locale" do
+        cookies[:locale] = "pt-BR"
+
+        post_authentication(valid_params)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(user.reload.configs).to eq({})
       end
     end
 

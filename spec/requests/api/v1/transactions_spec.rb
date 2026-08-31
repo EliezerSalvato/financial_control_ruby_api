@@ -666,10 +666,11 @@ RSpec.describe "API::V1::Transactions", type: :request do
         expect(Transaction::Record.count).to eq(0)
       end
 
-      it "rejects a closed-month transaction in Portuguese when Accept-Language is pt-BR" do
+      it "rejects a closed-month transaction in Portuguese when the user locale is pt-BR" do
+        user.update!(configs: { "locale" => "pt-BR" })
         create(:monthly_status, :closed, user:, month: 8, year: 2026)
 
-        create_transaction(create_params, headers.merge("Accept-Language" => "pt-BR"))
+        create_transaction(create_params)
 
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.parsed_body.dig("details", "base")).to eq([

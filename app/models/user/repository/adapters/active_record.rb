@@ -98,9 +98,10 @@ module User::Repository::Adapters::ActiveRecord
     Failure(:password_update_failed, user: User::Mapper.to_entity(record), errors: User::Mapper.to_errors(record))
   end
 
-  def update_profile(user:, first_name:, last_name:)
+  def update_profile(user:, first_name: nil, last_name: nil, configs: nil)
     record = User::Mapper.to_record(user)
-    updated = record.update(first_name:, last_name:)
+    attributes = { first_name:, last_name:, configs: }.compact
+    updated = record.update(attributes)
 
     return Success(:profile_updated, user: User::Mapper.to_entity(record)) if updated
 

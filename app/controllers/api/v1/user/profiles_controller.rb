@@ -13,6 +13,11 @@ class API::V1::User::ProfilesController < API::V1::BaseController
   private
 
   def permitted_params
-    params.permit(:first_name, :last_name)
+    permitted = params.permit(:first_name, :last_name, configs: {})
+    configs = params[:configs]
+
+    return permitted if configs.nil? || permitted.key?(:configs)
+
+    permitted.merge(configs:)
   end
 end

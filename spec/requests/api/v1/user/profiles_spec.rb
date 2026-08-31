@@ -23,6 +23,63 @@ RSpec.describe "API::V1::User::Profiles", type: :request do
           expect(user.reload).to have_attributes(first_name: "Jane", last_name: "Smith")
         end
 
+        it "updates only the first name when last_name is omitted" do
+          update_profile({ first_name: "Jane" }, headers)
+
+          expect(response).to have_http_status(:ok)
+          expect(user.reload).to have_attributes(first_name: "Jane", last_name: "Doe")
+        end
+
+        it "updates configs without requiring names" do
+          update_profile({ configs: { "locale" => "pt-BR", "theme" => "dark" } }, headers)
+
+          expect(response).to have_http_status(:ok)
+          expect(user.reload).to have_attributes(
+            first_name: "John",
+            last_name: "Doe",
+            configs: { "locale" => "pt-BR", "theme" => "dark" }
+          )
+        end
+
+        it "persists configs when Rails wraps the payload under profile" do
+          update_profile({ configs: { "locale" => "pt-BR" }, profile: { configs: { "locale" => "pt-BR" } } }, headers)
+
+          expect(response).to have_http_status(:ok)
+          expect(user.reload.configs).to eq("locale" => "pt-BR")
+        end
+
+        it "keeps the stored configs when they are omitted" do
+          user.update!(configs: { "locale" => "en" })
+
+          update_profile(valid_params, headers)
+
+          expect(user.reload.configs).to eq("locale" => "en")
+        end
+
+        it "merges the sent configs keys and keeps the others" do
+          user.update!(configs: { "locale" => "en", "theme" => "light" })
+
+          update_profile({ configs: { "locale" => "pt-BR" } }, headers)
+
+          expect(response).to have_http_status(:ok)
+          expect(user.reload).to have_attributes(
+            first_name: "John",
+            last_name: "Doe",
+            configs: { "locale" => "pt-BR", "theme" => "light" }
+          )
+        end
+
+        it "persists nested configs without dropping other keys" do
+          user.update!(configs: { "locale" => "en" })
+
+          update_profile({ configs: { "dashboard" => { "widgets" => [ "balance" ] } } }, headers)
+
+          expect(user.reload.configs).to eq(
+            "locale" => "en",
+            "dashboard" => { "widgets" => [ "balance" ] }
+          )
+        end
+
         it "strips surrounding spaces from the names" do
           update_profile({ first_name: "  Jane  ", last_name: "  Smith  " }, headers)
 
@@ -43,6 +100,20 @@ RSpec.describe "API::V1::User::Profiles", type: :request do
 
           expect(response).to have_http_status(:unprocessable_content)
           expect(response.parsed_body.dig("details", "last_name")).to be_present
+        end
+
+        it "rejects configs that are not an object" do
+          update_profile({ configs: [ "locale" ] }, headers)
+
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(response.parsed_body.dig("details", "configs")).to be_present
+        end
+
+        it "rejects an empty payload" do
+          update_profile({}, headers)
+
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(response.parsed_body.dig("details", "base")).to be_present
         end
       end
     end
