@@ -18,3 +18,8 @@ production:
     class: Settlement::DailyDispatchJob
     queue: default
     schedule: at 3am every day
+
+  close_monthly_statuses:
+    class: MonthlyStatus::MonthlyDispatchJob
+    queue: default
+    schedule: at 5am every 1st of the month

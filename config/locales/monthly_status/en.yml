@@ -3,6 +3,11 @@ en:
   activemodel:
     errors:
       models:
+        core/monthly_status/closing/input:
+          attributes:
+            base:
+              monthly_status_closing_failed: Monthly status closing failed
+              monthly_status_not_closeable: Only past months can be closed
         core/monthly_status/ensure_open/input:
           attributes:
             base:

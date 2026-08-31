@@ -147,6 +147,38 @@ RSpec.describe MonthlyStatus::Repository::Adapters::ActiveRecord do
     end
   end
 
+  describe "#close" do
+    it "changes the status and returns the updated entity" do
+      monthly_status = MonthlyStatus::Mapper.to_entity(create(:monthly_status, user:, month: 8, year: 2026))
+
+      result = repository.close(monthly_status:)
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:monthly_status_closed)
+      expect(result.value[:monthly_status]).to have_attributes(
+        id: monthly_status.id,
+        status: Core::MonthlyStatus::Status::CLOSED
+      )
+      expect(MonthlyStatus::Record.find(monthly_status.id).status).to eq("closed")
+    end
+
+    it "returns Failure when persistence fails" do
+      monthly_status = MonthlyStatus::Mapper.to_entity(create(:monthly_status, user:))
+      record = MonthlyStatus::Record.find(monthly_status.id)
+      errors = ActiveModel::Errors.new(record)
+      errors.add(:status, :invalid)
+
+      allow(MonthlyStatus::Mapper).to receive(:to_record).and_return(record)
+      allow(record).to receive_messages(update: false, errors:)
+
+      result = repository.close(monthly_status:)
+
+      expect(result).to be_a(Solid::Failure)
+      expect(result.type).to eq(:monthly_status_closing_failed)
+      expect(result.value[:errors]).to be_a(Core::Errors)
+    end
+  end
+
   describe "#list_open" do
     it "returns the current and previous months, ignores closed and future months, and is ordered" do
       other_user = create(:user, :verified)
@@ -168,6 +200,47 @@ RSpec.describe MonthlyStatus::Repository::Adapters::ActiveRecord do
         ].sort_by { |user_id, year, month| [ user_id, year, month ] }
       )
       expect(result.value[:monthly_statuses].map(&:id)).to contain_exactly(previous.id, current.id, other_current.id)
+    end
+  end
+
+  describe "#list_open_for" do
+    it "filters by user, ignores closed and months after the bound, and is ordered" do
+      other_user = create(:user, :verified)
+      june = create(:monthly_status, user:, month: 6, year: 2026)
+      july = create(:monthly_status, user:, month: 7, year: 2026)
+      create(:monthly_status, user:, month: 8, year: 2026)
+      create(:monthly_status, :closed, user:, month: 5, year: 2026)
+      create(:monthly_status, user:, month: 9, year: 2026)
+      create(:monthly_status, user: other_user, month: 7, year: 2026)
+      previous_year = create(:monthly_status, user:, month: 12, year: 2025)
+
+      result = repository.list_open_for(user_id: user.id, up_to_month: 7, up_to_year: 2026)
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:monthly_statuses_listed)
+      expect(result.value[:monthly_statuses].map { |monthly_status| [ monthly_status.year, monthly_status.month ] }).to eq(
+        [ [ 2025, 12 ], [ 2026, 6 ], [ 2026, 7 ] ]
+      )
+      expect(result.value[:monthly_statuses].map(&:id)).to eq([ previous_year.id, june.id, july.id ])
+    end
+  end
+
+  describe "#user_ids_with_open_months" do
+    it "returns distinct ids and ignores users who only have the current month open" do
+      other_user = create(:user, :verified)
+      current_only = create(:user, :verified)
+      closed_only = create(:user, :verified)
+      create(:monthly_status, user:, month: 7, year: 2026)
+      create(:monthly_status, user:, month: 6, year: 2026)
+      create(:monthly_status, user: other_user, month: 8, year: 2026)
+      create(:monthly_status, user: current_only, month: 9, year: 2026)
+      create(:monthly_status, :closed, user: closed_only, month: 7, year: 2026)
+
+      result = repository.user_ids_with_open_months(up_to_month: 8, up_to_year: 2026)
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:user_ids_listed)
+      expect(result.value[:user_ids]).to contain_exactly(user.id, other_user.id)
     end
   end
 
