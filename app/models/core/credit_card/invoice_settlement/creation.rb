@@ -53,7 +53,7 @@ class Core::CreditCard::InvoiceSettlement::Creation < ApplicationSolidProcess
       closing_date:,
       due_date:,
       total_value:,
-      released_limit: released_limit_for(credit_card, total_value),
+      released_limit: total_value,
       settled_on:
     )
 
@@ -88,12 +88,12 @@ class Core::CreditCard::InvoiceSettlement::Creation < ApplicationSolidProcess
     end
   end
 
-  def release_available_limit(already_settled:, credit_card:, invoice_settlement:, **)
-    return Continue() if already_settled || invoice_settlement.released_limit <= 0
+  def release_available_limit(already_settled:, credit_card:, total_value:, **)
+    return Continue() if already_settled || total_value <= 0
 
     result = deps.credit_card_repository.adjust_available_limit(
       credit_card:,
-      amount: invoice_settlement.released_limit,
+      amount: total_value,
       operation: Core::CreditCard::AvailableLimitOperation::ADD
     )
 
@@ -101,11 +101,6 @@ class Core::CreditCard::InvoiceSettlement::Creation < ApplicationSolidProcess
     in Solid::Success then Continue()
     in Solid::Failure(errors:) then propagate_adjustment_failure(result.type, errors)
     end
-  end
-
-  def released_limit_for(credit_card, total_value)
-    room = [ credit_card.total_limit - credit_card.available_limit, 0 ].max
-    [ total_value, room ].min
   end
 
   def link_occurrences(already_settled:, invoice_settlement:, **)

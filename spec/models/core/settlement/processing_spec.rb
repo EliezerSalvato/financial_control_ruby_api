@@ -362,7 +362,7 @@ RSpec.describe Core::Settlement::Processing do
       expect(credit_card.reload.available_limit).to eq(BigDecimal("5000"))
     end
 
-    it "pays past-month invoices for later upfront installments without exceeding total_limit" do
+    it "skips past-month invoices for later upfront installments when the release would exceed total_limit" do
       account = create(:account, :bank_account, user:, current_balance: 5000)
       first_card = create(
         :credit_card,
@@ -411,12 +411,24 @@ RSpec.describe Core::Settlement::Processing do
       result = process(month: 7, year: 2026, reference_date: Date.new(2026, 7, 10))
 
       expect(result).to be_a(Solid::Success)
-      expect(result.value[:failures]).to eq([])
       expect(result.value[:settled_count]).to eq(2)
-      expect(result.value[:invoices_count]).to eq(2)
-      expect(account.reload.current_balance).to eq(BigDecimal("4500"))
+      expect(result.value[:invoices_count]).to eq(0)
+      expect(account.reload.current_balance).to eq(BigDecimal("5000"))
       expect(first_card.reload.available_limit).to eq(BigDecimal("5000"))
       expect(second_card.reload.available_limit).to eq(BigDecimal("5000"))
+      expect(CreditCard::InvoiceSettlement::Record.count).to eq(0)
+      expect(result.value[:failures]).to contain_exactly(
+        a_hash_including(
+          kind: :invoice,
+          credit_card_id: first_card.id,
+          type: :available_limit_exceeds_total_limit
+        ),
+        a_hash_including(
+          kind: :invoice,
+          credit_card_id: second_card.id,
+          type: :available_limit_exceeds_total_limit
+        )
+      )
     end
 
     it "rejects a future month" do
