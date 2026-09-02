@@ -1,0 +1,46 @@
+get:
+  tags: [Notifications]
+  summary: List notifications
+  description: |
+    Returns the authenticated user's notifications in infinite-scroll order (`id` descending, UUID v7).
+    Pagination is keyset-based: pass `meta.next_cursor` from the previous response as `after`.
+    Unread count is exposed in `meta.unread_count`. Pass `unread=true` to return only unread notifications.
+    There is no `sort` parameter.
+  operationId: listNotifications
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: after
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Opaque cursor from `meta.next_cursor`. Omit to fetch the newest page.
+    - name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+    - name: unread
+      in: query
+      required: false
+      schema:
+        type: boolean
+        default: false
+      description: When true, returns only unread notifications. `meta.unread_count` remains the total unread count.
+  responses:
+    "200":
+      description: Notifications listed
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/NotificationCollection"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

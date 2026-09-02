@@ -1,0 +1,40 @@
+---
+en:
+  activemodel:
+    errors:
+      models:
+        core/notification/batch_creation/input:
+          attributes:
+            base:
+              notifications_creation_failed: Notifications creation failed
+        core/notification/creation/input:
+          attributes:
+            base:
+              notification_creation_failed: Notification creation failed
+            notifiable_id:
+              blank: must be present when notifiable type is given
+            notifiable_type:
+              blank: must be present when notifiable id is given
+        core/notification/listing/input:
+          attributes:
+            after:
+              invalid: is not a valid cursor
+        core/notification/mark_all_as_read/input:
+          attributes:
+            base:
+              notifications_mark_as_read_failed: Marking notifications as read failed
+        core/notification/mark_as_read/input:
+          attributes:
+            base:
+              notification_mark_as_read_failed: Marking notification as read failed
+              notification_not_found: Notification not found
+  notification:
+    errors:
+      invalid_cursor: Invalid cursor
+      not_found: Notification not found
+    read:
+      failure: Marking notification as read failed
+      success: Notification marked as read
+    read_all:
+      failure: Marking notifications as read failed
+      success: Notifications marked as read

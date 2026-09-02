@@ -1,0 +1,24 @@
+post:
+  tags: [Notifications]
+  summary: Mark notification as read
+  description: |
+    Marks a notification owned by the authenticated user as read.
+    Already-read notifications succeed without changing the original `read_at`.
+  operationId: readNotification
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Notification marked as read
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/NotificationSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

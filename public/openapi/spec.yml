@@ -39,6 +39,14 @@ paths:
     $ref: "./paths/monthly_statuses.yml"
   /api/v1/settlements/processing:
     $ref: "./paths/settlements_processing.yml"
+  /api/v1/notifications:
+    $ref: "./paths/notifications.yml"
+  /api/v1/notifications/{id}:
+    $ref: "./paths/notification.yml"
+  /api/v1/notifications/{id}/read:
+    $ref: "./paths/notification_read.yml"
+  /api/v1/notifications/read_all:
+    $ref: "./paths/notifications_read_all.yml"
   /api/v1/transactions:
     $ref: "./paths/transactions.yml"
   /api/v1/transactions/{id}:

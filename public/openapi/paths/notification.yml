@@ -1,0 +1,20 @@
+get:
+  tags: [Notifications]
+  summary: Show notification
+  description: Returns a single notification owned by the authenticated user.
+  operationId: showNotification
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Notification found
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/NotificationSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"

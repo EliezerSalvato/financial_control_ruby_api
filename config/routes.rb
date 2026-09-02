@@ -31,6 +31,16 @@ Rails.application.routes.draw do
         end
       end
 
+      resources :notifications, only: %i[index show] do
+        member do
+          post :read
+        end
+
+        collection do
+          post :read_all
+        end
+      end
+
       namespace :user do
         resource :registrations, only: %i[create]
         resource :authentications, only: %i[create]

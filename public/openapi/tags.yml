@@ -20,3 +20,5 @@
   description: Open or closed status of a calendar month for the authenticated user, including processing updates over Action Cable
 - name: Settlements
   description: Enqueue processing of due transaction occurrences, transfers, and credit-card invoices
+- name: Notifications
+  description: User notifications with cursor pagination, unread count, and real-time delivery over Action Cable

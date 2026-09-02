@@ -1,5 +1,5 @@
 title: Financial Control Ruby API
-version: "1.0.13"
+version: "1.0.14"
 description: |
   ## Authentication
 
@@ -33,8 +33,8 @@ description: |
   | Access | Endpoints |
   |--------|-----------|
   | Public | registrations, authentications, email confirmations, password resets, session refreshes |
-  | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, monthly statuses, settlements, transactions, profiles, account deletion, email changes, password changes, session revokes |
-  | Session token (query or `Authorization`) | Action Cable at `/cable` (`MonthlyStatusChannel`) |
+  | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, monthly statuses, settlements, transactions, notifications, profiles, account deletion, email changes, password changes, session revokes |
+  | Session token (query or `Authorization`) | Action Cable at `/cable` (`MonthlyStatusChannel`, `NotificationChannel`) |
 
   ---
 
@@ -63,6 +63,36 @@ description: |
   ```
 
   `last_processed_at` is an ISO 8601 timestamp, or `null` when the month has never finished a processing run.
+
+  Subscribe to the current user's notification stream (no params):
+
+  ```json
+  { "channel": "NotificationChannel" }
+  ```
+
+  There is no initial payload on subscribe. The client loads unread count and the first page via `GET /api/v1/notifications`.
+
+  When a single notification is created, the server sends the notification kind, the JSON:API resource, and the current unread count:
+
+  ```json
+  {
+    "kind": "credit_card_invoice_due",
+    "notification": {
+      "id": "0199...",
+      "type": "notification",
+      "attributes": { "id": "0199...", "kind": "credit_card_invoice_due", "title": "...", "read": false }
+    },
+    "unread_count": 7
+  }
+  ```
+
+  When a job creates several notifications for the same user, the server sends a group event without the resource:
+
+  ```json
+  { "kind": "daily_summary", "unread_count": 7 }
+  ```
+
+  Distinguish the two by the presence of `notification`. If it is present, the item can be inserted at the top of the list. If it is absent, update the badge from `unread_count` and refetch `GET /api/v1/notifications`.
 
   ---
 
