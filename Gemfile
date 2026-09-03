@@ -31,7 +31,7 @@ gem "solid-adapters", "~> 1.1"
 
 # Jobs
 gem "solid_queue", "~> 1.6"
-gem "mission_control-jobs", "~> 1.1"
+gem "mission_control-jobs", "~> 1.2"
 
 group :development do
   gem "rubocop-rails-omakase", "~> 1.1", require: false
