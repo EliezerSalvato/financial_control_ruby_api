@@ -1,4 +1,5 @@
 SELECT credit_cards.id AS credit_card_id,
+       credit_cards.name AS credit_card_name,
        credit_cards.default_payment_account_id AS payment_account_id,
        cycle.opening_date,
        cycle.closing_date,
@@ -27,5 +28,5 @@ SELECT credit_cards.id AS credit_card_id,
           WHERE credit_card_id = credit_cards.id
             AND due_date = cycle.due_date
        )
- GROUP BY credit_cards.id, credit_cards.default_payment_account_id, cycle.opening_date, cycle.closing_date, cycle.due_date
+ GROUP BY credit_cards.id, credit_cards.name, credit_cards.default_payment_account_id, cycle.opening_date, cycle.closing_date, cycle.due_date
 HAVING COALESCE(SUM(settlements.value), 0) > 0

@@ -18,6 +18,10 @@ pt-BR:
               available_limit_exceeds_total_limit: O limite disponível ultrapassaria o limite total
               insufficient_account_balance: Saldo insuficiente
               invoice_settlement_creation_failed: Falha ao efetivar a fatura
+        core/credit_card/invoice_settlement/ensure_unpaid/input:
+          attributes:
+            base:
+              invoice_already_paid: Não é possível lançar despesas neste cartão, pois a fatura deste período já foi paga
         core/credit_card/update/input:
           attributes:
             base:

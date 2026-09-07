@@ -46,6 +46,7 @@ RSpec.describe CreditCard::InvoiceSettlement::Repository::Adapters::ActiveRecord
       expect(result.value[:due_invoices]).to contain_exactly(
         have_attributes(
           credit_card_id: credit_card.id,
+          credit_card_name: credit_card.name,
           payment_account_id: account.id,
           opening_date: Date.new(2026, 7, 11),
           closing_date: Date.new(2026, 8, 10),
@@ -158,6 +159,7 @@ RSpec.describe CreditCard::InvoiceSettlement::Repository::Adapters::ActiveRecord
       expect(due_invoices).to contain_exactly(
         have_attributes(
           credit_card_id: same_month_card.id,
+          credit_card_name: same_month_card.name,
           opening_date: Date.new(2026, 7, 11),
           closing_date: Date.new(2026, 8, 10),
           due_date: Date.new(2026, 8, 17),
@@ -165,6 +167,7 @@ RSpec.describe CreditCard::InvoiceSettlement::Repository::Adapters::ActiveRecord
         ),
         have_attributes(
           credit_card_id: previous_month_card.id,
+          credit_card_name: previous_month_card.name,
           opening_date: Date.new(2026, 6, 26),
           closing_date: Date.new(2026, 7, 25),
           due_date: Date.new(2026, 8, 10),
@@ -287,6 +290,57 @@ RSpec.describe CreditCard::InvoiceSettlement::Repository::Adapters::ActiveRecord
       expect(result.value[:keys]).not_to include([ credit_card.id, other_due.due_date ])
       expect(result.value[:keys]).not_to include([ other_card.id, other_card_invoice.due_date ])
       expect(matching).to be_present
+    end
+  end
+
+  describe "#paid_covering?" do
+    let!(:invoice) do
+      create(
+        :credit_card_invoice_settlement,
+        credit_card:,
+        payment_account: account,
+        opening_date: Date.new(2026, 7, 11),
+        closing_date: Date.new(2026, 8, 10),
+        due_date: Date.new(2026, 8, 17)
+      )
+    end
+
+    it "is true when from/to sit inside the paid cycle" do
+      expect(repository.paid_covering?(credit_card_id: credit_card.id, from: Date.new(2026, 8, 1), to: Date.new(2026, 8, 1))).to be(true)
+    end
+
+    it "is true on the opening and closing dates" do
+      expect(repository.paid_covering?(credit_card_id: credit_card.id, from: Date.new(2026, 7, 11), to: Date.new(2026, 7, 11))).to be(true)
+      expect(repository.paid_covering?(credit_card_id: credit_card.id, from: Date.new(2026, 8, 10), to: Date.new(2026, 8, 10))).to be(true)
+    end
+
+    it "is true when the range overlaps the paid cycle even if from is outside" do
+      expect(
+        repository.paid_covering?(
+          credit_card_id: credit_card.id,
+          from: Date.new(2026, 7, 5),
+          to: Date.new(2026, 9, 5)
+        )
+      ).to be(true)
+    end
+
+    it "is true for an open-ended range that starts before the paid closing date" do
+      expect(repository.paid_covering?(credit_card_id: credit_card.id, from: Date.new(2026, 7, 5), to: nil)).to be(true)
+    end
+
+    it "is false when the period is after the paid cycle" do
+      expect(repository.paid_covering?(credit_card_id: credit_card.id, from: Date.new(2026, 8, 11), to: Date.new(2026, 8, 11))).to be(false)
+    end
+
+    it "is false when the period is before the paid cycle" do
+      expect(repository.paid_covering?(credit_card_id: credit_card.id, from: Date.new(2026, 7, 10), to: Date.new(2026, 7, 10))).to be(false)
+    end
+
+    it "is false for another card" do
+      other_card = create(:credit_card, user:, default_payment_account: account, closing_day: 10, due_day: 17)
+
+      expect(repository.paid_covering?(credit_card_id: other_card.id, from: Date.new(2026, 8, 1), to: Date.new(2026, 8, 1))).to be(false)
+      expect(invoice).to be_present
     end
   end
 end

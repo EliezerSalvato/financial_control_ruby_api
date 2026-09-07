@@ -11,6 +11,8 @@ pt-BR:
         core/transaction/creation/input:
           attributes:
             base:
+              invoice_already_paid: Não é possível lançar despesas neste cartão, pois a fatura deste período já foi paga
+              later_month_closed: Não é possível criar transações nesta data, pois um mês posterior já está fechado
               monthly_status_closed: Não é possível criar transações nesta data, pois o mês já está fechado
               transaction_creation_failed: Falha ao criar a transação
             destination_account_id:
@@ -50,6 +52,7 @@ pt-BR:
         core/transaction/update/input:
           attributes:
             base:
+              invoice_already_paid: Não é possível lançar despesas neste cartão, pois a fatura deste período já foi paga
               transaction_update_failed: Falha ao atualizar a transação
             destination_account_id:
               same_as_source: deve ser diferente da conta de origem

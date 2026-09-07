@@ -28,6 +28,7 @@ patch:
     When pending, `starts_on` and `value` update the existing recurrence in place.
     `starts_on` is write-only on the request; the response exposes it on each item in `recurrences`.
     `status` cannot be changed.
+    Moving a credit card expense onto a paid invoice (via `starts_on`, `ends_on`, `credit_card_id`, `payment_method`, or `recurrence_type`) is rejected with 422 (`invoice_already_paid` on `base`).
   operationId: updateTransaction
   security:
     - bearerAuth: []

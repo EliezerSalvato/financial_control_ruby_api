@@ -666,6 +666,21 @@ RSpec.describe "API::V1::Transactions", type: :request do
         expect(Transaction::Record.count).to eq(0)
       end
 
+      it "rejects a transaction in a missing month that precedes a closed month" do
+        create(:monthly_status, :closed, user:, month: 9, year: 2026)
+
+        expect {
+          create_transaction(create_params)
+        }.not_to change(MonthlyStatus::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq([
+          "Transactions cannot be created for this date because a later month is already closed"
+        ])
+        expect(Transaction::Record.count).to eq(0)
+        expect(MonthlyStatus::Record.find_by(user_id: user.id, month: 8, year: 2026)).to be_nil
+      end
+
       it "rejects a closed-month transaction in Portuguese when the user locale is pt-BR" do
         user.update!(configs: { "locale" => "pt-BR" })
         create(:monthly_status, :closed, user:, month: 8, year: 2026)
@@ -692,6 +707,108 @@ RSpec.describe "API::V1::Transactions", type: :request do
 
         expect(response).to have_http_status(:created)
         expect(MonthlyStatus::Record.find_by!(user_id: user.id, month: 9, year: 2026)).to have_attributes(status: "open")
+      end
+
+      it "rejects a credit card expense whose starts_on falls in a paid invoice" do
+        card = create(:credit_card, user:, closing_day: 10, due_day: 17)
+        create(
+          :credit_card_invoice_settlement,
+          credit_card: card,
+          payment_account: card.default_payment_account,
+          opening_date: Date.new(2026, 7, 11),
+          closing_date: Date.new(2026, 8, 10),
+          due_date: Date.new(2026, 8, 17)
+        )
+
+        create_transaction(
+          create_params(
+            payment_method: "credit_card",
+            starts_on: "2026-08-01",
+            credit_card_id: card.id
+          ).tap { |params| params[:transaction].delete(:account_id) }
+        )
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq([
+          "Expenses cannot be posted to this card because the invoice for this period has already been paid"
+        ])
+        expect(Transaction::Record.count).to eq(0)
+      end
+
+      it "rejects a paid-invoice credit card expense in Portuguese when the user locale is pt-BR" do
+        user.update!(configs: { "locale" => "pt-BR" })
+        card = create(:credit_card, user:, closing_day: 10, due_day: 17)
+        create(
+          :credit_card_invoice_settlement,
+          credit_card: card,
+          payment_account: card.default_payment_account,
+          opening_date: Date.new(2026, 7, 11),
+          closing_date: Date.new(2026, 8, 10),
+          due_date: Date.new(2026, 8, 17)
+        )
+
+        create_transaction(
+          create_params(
+            payment_method: "credit_card",
+            starts_on: "2026-08-01",
+            credit_card_id: card.id
+          ).tap { |params| params[:transaction].delete(:account_id) }
+        )
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq([
+          "Não é possível lançar despesas neste cartão, pois a fatura deste período já foi paga"
+        ])
+      end
+
+      it "creates a credit card expense when starts_on is after the paid invoice cycle" do
+        card = create(:credit_card, user:, closing_day: 10, due_day: 17)
+        create(
+          :credit_card_invoice_settlement,
+          credit_card: card,
+          payment_account: card.default_payment_account,
+          opening_date: Date.new(2026, 7, 11),
+          closing_date: Date.new(2026, 8, 10),
+          due_date: Date.new(2026, 8, 17)
+        )
+
+        create_transaction(
+          create_params(
+            payment_method: "credit_card",
+            starts_on: "2026-08-11",
+            credit_card_id: card.id
+          ).tap { |params| params[:transaction].delete(:account_id) }
+        )
+
+        expect(response).to have_http_status(:created)
+      end
+
+      it "rejects an installment whose period overlaps a paid invoice" do
+        card = create(:credit_card, user:, closing_day: 10, due_day: 17)
+        create(
+          :credit_card_invoice_settlement,
+          credit_card: card,
+          payment_account: card.default_payment_account,
+          opening_date: Date.new(2026, 7, 11),
+          closing_date: Date.new(2026, 8, 10),
+          due_date: Date.new(2026, 8, 17)
+        )
+
+        create_transaction(
+          create_params(
+            payment_method: "credit_card",
+            recurrence_type: "installment",
+            starts_on: "2026-07-05",
+            ends_on: "2026-09-05",
+            credit_card_id: card.id
+          ).tap { |params| params[:transaction].delete(:account_id) }
+        )
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq([
+          "Expenses cannot be posted to this card because the invoice for this period has already been paid"
+        ])
+        expect(Transaction::Record.count).to eq(0)
       end
     end
 
@@ -1018,6 +1135,56 @@ RSpec.describe "API::V1::Transactions", type: :request do
         expect(response.parsed_body.dig("details", "credit_card_id")).to eq([ "is inactive" ])
       end
 
+      it "rejects moving a pending credit card expense onto a paid invoice" do
+        card = create(:credit_card, user:, closing_day: 10, due_day: 17)
+        card_transaction = create(
+          :transaction,
+          :with_credit_card,
+          user:,
+          credit_card: card,
+          category:,
+          starts_on: Date.new(2026, 8, 11)
+        )
+        create(
+          :credit_card_invoice_settlement,
+          credit_card: card,
+          payment_account: card.default_payment_account,
+          opening_date: Date.new(2026, 7, 11),
+          closing_date: Date.new(2026, 8, 10),
+          due_date: Date.new(2026, 8, 17)
+        )
+
+        update_transaction(card_transaction.id, transaction: { starts_on: "2026-08-01" })
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq([
+          "Expenses cannot be posted to this card because the invoice for this period has already been paid"
+        ])
+      end
+
+      it "rejects changing a pending expense to a credit card whose invoice is already paid" do
+        card = create(:credit_card, user:, closing_day: 10, due_day: 17)
+        create(
+          :credit_card_invoice_settlement,
+          credit_card: card,
+          payment_account: card.default_payment_account,
+          opening_date: Date.new(2026, 7, 11),
+          closing_date: Date.new(2026, 8, 10),
+          due_date: Date.new(2026, 8, 17)
+        )
+        expense = create(:transaction, user:, account:, category:, starts_on: Date.new(2026, 8, 1))
+
+        update_transaction(
+          expense.id,
+          transaction: { payment_method: "credit_card", credit_card_id: card.id }
+        )
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq([
+          "Expenses cannot be posted to this card because the invoice for this period has already been paid"
+        ])
+      end
+
       it "keeps an already linked inactive tag" do
         tagged = create(:transaction, user:, account:, category:, tags: [ tag ])
         tag.update!(active: false)
@@ -1080,6 +1247,34 @@ RSpec.describe "API::V1::Transactions", type: :request do
 
           expect(response).to have_http_status(:ok)
           expect(transaction_attributes(response.parsed_body)["credit_card_id"]).to eq(other_card.id)
+        end
+
+        it "rejects changing the credit card when the target card invoice covering starts_on is paid" do
+          card_transaction = create(
+            :transaction,
+            :with_credit_card,
+            :active,
+            user:,
+            credit_card:,
+            category:,
+            starts_on: Date.new(2026, 8, 1)
+          )
+          other_card = create(:credit_card, user:, name: "Other Card", closing_day: 10, due_day: 17)
+          create(
+            :credit_card_invoice_settlement,
+            credit_card: other_card,
+            payment_account: other_card.default_payment_account,
+            opening_date: Date.new(2026, 7, 11),
+            closing_date: Date.new(2026, 8, 10),
+            due_date: Date.new(2026, 8, 17)
+          )
+
+          update_transaction(card_transaction.id, transaction: { credit_card_id: other_card.id })
+
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(response.parsed_body.dig("details", "base")).to eq([
+            "Expenses cannot be posted to this card because the invoice for this period has already been paid"
+          ])
         end
 
         it "allows changing source and destination accounts" do

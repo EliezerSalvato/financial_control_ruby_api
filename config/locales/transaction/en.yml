@@ -11,6 +11,8 @@ en:
         core/transaction/creation/input:
           attributes:
             base:
+              invoice_already_paid: Expenses cannot be posted to this card because the invoice for this period has already been paid
+              later_month_closed: Transactions cannot be created for this date because a later month is already closed
               monthly_status_closed: Transactions cannot be created for this date because the month is already closed
               transaction_creation_failed: Transaction creation failed
             destination_account_id:
@@ -50,6 +52,7 @@ en:
         core/transaction/update/input:
           attributes:
             base:
+              invoice_already_paid: Expenses cannot be posted to this card because the invoice for this period has already been paid
               transaction_update_failed: Transaction update failed
             destination_account_id:
               same_as_source: must be different from source account

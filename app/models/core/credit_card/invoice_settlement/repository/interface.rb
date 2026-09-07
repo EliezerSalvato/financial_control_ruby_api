@@ -48,5 +48,15 @@ module Core::CreditCard::InvoiceSettlement::Repository::Interface
         _1 => Solid::Success(:credit_card_invoice_settlements_listed, { keys: Array })
       end
     end
+
+    def paid_covering?(credit_card_id:, from:, to:)
+      credit_card_id => String
+      from => Date
+      to => Date | NilClass
+
+      super.tap do
+        _1 => true | false
+      end
+    end
   end
 end

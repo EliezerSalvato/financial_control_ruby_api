@@ -6,6 +6,7 @@ module CreditCard::InvoiceSettlement::Due::Mapper
 
     Core::CreditCard::InvoiceSettlement::Due.new(
       credit_card_id: record.credit_card_id,
+      credit_card_name: record.credit_card_name,
       payment_account_id: record.payment_account_id,
       opening_date: record.opening_date,
       closing_date: record.closing_date,

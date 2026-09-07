@@ -5,6 +5,7 @@ class CreditCard::InvoiceSettlement::Due::Record < ApplicationRecord
   LISTING_SQL = File.read(File.expand_path("../due_invoices.sql", __dir__))
 
   attribute :credit_card_id, :string
+  attribute :credit_card_name, :string
   attribute :payment_account_id, :string
   attribute :opening_date, :date
   attribute :closing_date, :date

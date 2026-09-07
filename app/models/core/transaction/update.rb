@@ -60,6 +60,7 @@ class Core::Transaction::Update < ApplicationSolidProcess
         .and_then(:resolve_effective_attributes)
         .and_then(:calculate_installments_count)
         .and_then(:validate_payment_method_compatibility)
+        .and_then(:ensure_invoice_unpaid)
         .and_then(:ensure_category_belongs_to_user)
         .and_then(:ensure_tags_belong_to_user)
         .and_then(:update_for_account)
@@ -135,6 +136,61 @@ class Core::Transaction::Update < ApplicationSolidProcess
     return Failure(:invalid_input, input:) if input.errors.any?
 
     Continue()
+  end
+
+  def ensure_invoice_unpaid(
+    transaction:,
+    starts_on:,
+    ends_on:,
+    payment_method:,
+    credit_card_id:,
+    recurrence_type:,
+    effective_payment_method:,
+    effective_recurrence_type:,
+    effective_ends_on:,
+    **
+  )
+    return Continue() unless invoice_unpaid_check_needed?(
+      transaction:,
+      starts_on:,
+      ends_on:,
+      payment_method:,
+      credit_card_id:,
+      recurrence_type:,
+      effective_payment_method:
+    )
+
+    date_from = starts_on || transaction.recurrences.min_by(&:starts_on)&.starts_on
+
+    with_nested_process(
+      Core::CreditCard::InvoiceSettlement::EnsureUnpaid.call(
+        from: date_from,
+        to: invoice_coverage_to(recurrence_type: effective_recurrence_type, starts_on: date_from, ends_on: effective_ends_on),
+        payment_method: effective_payment_method,
+        credit_card_id: credit_card_id.nil? ? transaction.credit_card_id : credit_card_id
+      )
+    )
+  end
+
+  def invoice_unpaid_check_needed?(
+    transaction:,
+    starts_on:,
+    ends_on:,
+    payment_method:,
+    credit_card_id:,
+    recurrence_type:,
+    effective_payment_method:
+  )
+    return false unless effective_payment_method == Core::Transaction::PaymentMethod::CREDIT_CARD
+    return true if starts_on.present? || ends_on.present? || recurrence_type.present?
+    return true if payment_method.present? && !transaction.credit_card_payment?
+    return true if credit_card_id.present? && !UUID.same?(credit_card_id, transaction.credit_card_id)
+
+    false
+  end
+
+  def invoice_coverage_to(recurrence_type:, starts_on:, ends_on:)
+    recurrence_type == Core::Transaction::RecurrenceType::ONE_TIME ? starts_on : ends_on
   end
 
   def ensure_category_belongs_to_user(user:, transaction:, category_id:, **)

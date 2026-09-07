@@ -137,7 +137,9 @@ post:
     `starts_on` is write-only on the request; the response exposes it on each item in `recurrences`.
     Category, tags, account, and credit card must belong to the authenticated user and be active.
     A date that belongs to a closed month is rejected with 422 (`monthly_status_closed` on `base`).
+    A date in a missing month that precedes an already closed month is rejected with 422 (`later_month_closed` on `base`).
     Credit card transactions use the card billing cycle month, not the civil month of `starts_on`.
+    A credit card expense whose dates overlap a paid invoice is rejected with 422 (`invoice_already_paid` on `base`).
   operationId: createTransaction
   security:
     - bearerAuth: []

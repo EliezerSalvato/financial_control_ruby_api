@@ -48,6 +48,7 @@ class Core::Transaction::Creation < ApplicationSolidProcess
         .and_then(:validate_payment_method_compatibility)
         .and_then(:validate_recurrence)
         .and_then(:ensure_month_is_open)
+        .and_then(:ensure_invoice_unpaid)
         .and_then(:calculate_installments_count)
         .and_then(:ensure_category_belongs_to_user)
         .and_then(:ensure_tags_belong_to_user)
@@ -83,6 +84,21 @@ class Core::Transaction::Creation < ApplicationSolidProcess
     with_nested_process(
       Core::MonthlyStatus::EnsureOpen.call(user:, date: starts_on, payment_method:, credit_card_id:)
     )
+  end
+
+  def ensure_invoice_unpaid(starts_on:, ends_on:, payment_method:, credit_card_id:, recurrence_type:, **)
+    with_nested_process(
+      Core::CreditCard::InvoiceSettlement::EnsureUnpaid.call(
+        from: starts_on,
+        to: invoice_coverage_to(recurrence_type:, starts_on:, ends_on:),
+        payment_method:,
+        credit_card_id:
+      )
+    )
+  end
+
+  def invoice_coverage_to(recurrence_type:, starts_on:, ends_on:)
+    recurrence_type == Core::Transaction::RecurrenceType::ONE_TIME ? starts_on : ends_on
   end
 
   def calculate_installments_count(recurrence_type:, starts_on:, ends_on:, **)

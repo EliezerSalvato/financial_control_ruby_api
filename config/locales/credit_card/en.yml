@@ -18,6 +18,10 @@ en:
               available_limit_exceeds_total_limit: Available limit would exceed total limit
               insufficient_account_balance: Insufficient account balance
               invoice_settlement_creation_failed: Invoice settlement failed
+        core/credit_card/invoice_settlement/ensure_unpaid/input:
+          attributes:
+            base:
+              invoice_already_paid: Expenses cannot be posted to this card because the invoice for this period has already been paid
         core/credit_card/update/input:
           attributes:
             base:

@@ -57,4 +57,11 @@ module CreditCard::InvoiceSettlement::Repository::Adapters::ActiveRecord
 
     Success(:credit_card_invoice_settlements_listed, keys:)
   end
+
+  def paid_covering?(credit_card_id:, from:, to:)
+    scope = CreditCard::InvoiceSettlement::Record.where(credit_card_id:).where(closing_date: from..)
+    scope = scope.where(opening_date: ..to) if to
+
+    scope.exists?
+  end
 end
