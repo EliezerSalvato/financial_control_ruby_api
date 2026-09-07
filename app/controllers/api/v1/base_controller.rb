@@ -83,6 +83,6 @@ class API::V1::BaseController < ApplicationController
   def resolve_locale
     return super unless current_user
 
-    available_locale(current_user.configs.to_h["locale"]) || I18n.default_locale
+    Core::User::Locale.resolve(current_user.configs.to_h["locale"])
   end
 end

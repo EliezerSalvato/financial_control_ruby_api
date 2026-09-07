@@ -12,7 +12,7 @@ class ApplicationController < ActionController::API
   end
 
   def resolve_locale
-    locale_from_cookie || locale_from_accept_language || I18n.default_locale
+    locale_from_cookie || locale_from_accept_language || Core::User::Locale.default
   end
 
   def locale_from_cookie
@@ -32,13 +32,6 @@ class ApplicationController < ActionController::API
   end
 
   def available_locale(value)
-    return if value.blank?
-
-    tag = value.to_s.strip
-    available = I18n.available_locales.map(&:to_s)
-    return tag if available.include?(tag)
-
-    language = tag.split("-", 2).first
-    available.find { |locale| locale.split("-", 2).first == language }
+    Core::User::Locale.available(value)
   end
 end
