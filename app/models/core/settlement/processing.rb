@@ -1,6 +1,8 @@
 class Core::Settlement::Processing < ApplicationSolidProcess
   DUE_STATUSES = [ Core::Transaction::Status::PENDING, Core::Transaction::Status::ACTIVE ].freeze
 
+  rescue_from StandardError, with: :notify_unexpected_and_reraise
+
   deps do
     attribute :user_repository, default: -> { User::Adapters.repository }
     attribute :monthly_status_repository, default: -> { MonthlyStatus::Adapters.repository }
@@ -31,22 +33,39 @@ class Core::Settlement::Processing < ApplicationSolidProcess
       .and_then(:resolve_reference_date)
       .and_then(:reject_if_previous_month_is_open)
       .and_then(:reject_if_later_month_is_closed)
-      .and_then(:find_monthly_status)
-      .and_then(:start_processing)
+      .and_then(:find_or_create_monthly_status)
       .and_then(:find_user)
+      .and_then(:start_processing)
       .and_then(:settle_due_occurrences)
       .and_then(:settle_due_transfers)
       .and_then(:settle_due_credit_card_invoices)
       .and_then(:finish_processing)
+      .and_then(:notify_item_failures)
       .and_expose(:settlements_completed, %i[settled_count invoices_count failures])
   end
 
   private
 
-  def find_monthly_status(user_id:, month:, year:, **)
+  def find_or_create_monthly_status(user_id:, month:, year:, **)
     case deps.monthly_status_repository.find(user_id:, month:, year:)
     in Solid::Success(monthly_status:) then Continue(monthly_status:)
-    in Solid::Failure(type: :monthly_status_not_found) then Failure(:monthly_status_not_found)
+    in Solid::Failure(type: :monthly_status_not_found)
+      create_monthly_status(user_id:, month:, year:)
+    end
+  end
+
+  def create_monthly_status(user_id:, month:, year:)
+    if deps.monthly_status_repository.exists_closed_after?(user_id:, month:, year:)
+      input.errors.add(:base, :later_month_closed)
+      return fail_notifying(:later_month_closed, input:)
+    end
+
+    case deps.monthly_status_repository.create(user_id:, month:, year:)
+    in Solid::Success(monthly_status:) then Continue(monthly_status:)
+    in Solid::Failure(errors:)
+      add_errors_to_input(errors)
+      input.errors.add(:base, :monthly_status_creation_failed)
+      Failure(:monthly_status_creation_failed, input:)
     end
   end
 
@@ -56,7 +75,7 @@ class Core::Settlement::Processing < ApplicationSolidProcess
     case deps.monthly_status_repository.find(user_id:, month: previous.month, year: previous.year)
     in Solid::Success(monthly_status:) if monthly_status.open?
       input.errors.add(:base, :previous_month_open)
-      Failure(:previous_month_open, input:)
+      fail_notifying(:previous_month_open, input:)
     else
       Continue()
     end
@@ -66,7 +85,7 @@ class Core::Settlement::Processing < ApplicationSolidProcess
     return Continue() unless deps.monthly_status_repository.exists_closed_after?(user_id:, month:, year:)
 
     input.errors.add(:base, :later_month_closed)
-    Failure(:later_month_closed, input:)
+    fail_notifying(:later_month_closed, input:)
   end
 
   def start_processing(monthly_status:, **)
@@ -80,7 +99,7 @@ class Core::Settlement::Processing < ApplicationSolidProcess
 
     if period_start > current_month_start
       input.errors.add(:month, :in_the_future)
-      return Failure(:invalid_input, input:)
+      return fail_notifying(:invalid_input, input:)
     end
 
     if period_start < current_month_start
@@ -90,7 +109,7 @@ class Core::Settlement::Processing < ApplicationSolidProcess
     return Continue() if [ today, today.yesterday ].include?(reference_date)
 
     input.errors.add(:reference_date, :must_be_today_or_yesterday)
-    Failure(:invalid_input, input:)
+    fail_notifying(:invalid_input, input:)
   end
 
   def find_user(user_id:, **)
@@ -115,8 +134,74 @@ class Core::Settlement::Processing < ApplicationSolidProcess
     in Solid::Failure(errors:)
       add_errors_to_input(errors)
       input.errors.add(:base, :monthly_status_update_failed)
+      clear_processing_flag
       Failure(:monthly_status_update_failed, input:)
     end
+  end
+
+  def notify_item_failures(user_id:, month:, year:, failures:, **)
+    return Continue() if failures.empty?
+
+    case Core::Settlement::Processing::FailureNotifying.call(user_id:, month:, year:, failures:)
+    in Solid::Success then Continue()
+    else raise StandardError, "notifications_creation_failed"
+    end
+  end
+
+  def fail_notifying(type, **value)
+    clear_processing_flag
+    notify_process_error(type:, messages: value[:input]&.errors&.full_messages || [])
+
+    Failure(type, **value)
+  end
+
+  def notify_process_error(type:, messages:)
+    case Core::Settlement::Processing::ValidationErrorNotifying.call(
+      user_id: input.user_id,
+      month: input.month,
+      year: input.year,
+      type:,
+      messages:
+    )
+    in Solid::Success then nil
+    else raise StandardError, "notification_creation_failed"
+    end
+  end
+
+  def notify_unexpected_and_reraise(exception)
+    clear_processing_flag
+    notify_unexpected_error(exception)
+    raise exception
+  end
+
+  def notify_unexpected_error(exception)
+    return if input.user_id.blank? || input.month.blank? || input.year.blank?
+
+    Core::Settlement::Processing::UnexpectedErrorNotifying.call(
+      user_id: input.user_id,
+      month: input.month,
+      year: input.year,
+      type: :unexpected,
+      error: exception.class.name
+    )
+  rescue StandardError
+    nil
+  end
+
+  def clear_processing_flag
+    user_id = input.user_id
+    month = input.month
+    year = input.year
+    return if user_id.blank? || month.blank? || year.blank?
+
+    case deps.monthly_status_repository.find(user_id:, month:, year:)
+    in Solid::Success(monthly_status:) if monthly_status.processing
+      deps.monthly_status_repository.update(monthly_status:, attributes: { processing: false })
+    else
+      nil
+    end
+  rescue StandardError
+    nil
   end
 
   def settle_due_occurrences(user:, month:, year:, reference_date:, settled_count:, failures:, **)
@@ -168,6 +253,7 @@ class Core::Settlement::Processing < ApplicationSolidProcess
           result,
           kind: :invoice,
           credit_card_id: due_invoice.credit_card_id,
+          credit_card_name: due_invoice.credit_card_name,
           due_date: due_invoice.due_date,
           failures:
         )
@@ -230,6 +316,7 @@ class Core::Settlement::Processing < ApplicationSolidProcess
         result,
         kind:,
         transaction_id: entity.id,
+        description: entity.description,
         occurred_on: entity.current_recurrence_on,
         failures:
       )
@@ -244,7 +331,7 @@ class Core::Settlement::Processing < ApplicationSolidProcess
   def apply_item_result(result, kind:, failures:, **identity)
     case result
     in Solid::Success then :settled
-    in Solid::Failure(type:, input:)
+    in Solid::Failure(type:, value: { input: })
       failures << { kind:, type:, messages: input.errors.full_messages, **identity }
       :failed
     in Solid::Failure(type:)

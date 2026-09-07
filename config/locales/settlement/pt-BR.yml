@@ -3,16 +3,57 @@ pt-BR:
   activemodel:
     errors:
       models:
+        core/settlement/processing/failure_notifying/input:
+          attributes:
+            base:
+              notifications_creation_failed: Falha ao criar as notificações
         core/settlement/processing/input:
           attributes:
             base:
               later_month_closed: Um mês posterior já está fechado
+              monthly_status_creation_failed: Falha ao criar o status mensal
               monthly_status_update_failed: Falha ao atualizar o status mensal
               previous_month_open: O mês anterior precisa estar fechado antes de processar este mês
             month:
               in_the_future: não pode ser um mês futuro
             reference_date:
               must_be_today_or_yesterday: deve ser hoje ou ontem
+        core/settlement/processing/unexpected_error_notifying/input:
+          attributes:
+            base:
+              notification_creation_failed: Falha ao criar a notificação
+        core/settlement/processing/validation_error_notifying/input:
+          attributes:
+            base:
+              notification_creation_failed: Falha ao criar a notificação
   settlement:
+    notifications:
+      credit_card_invoice_failure:
+        title: Erro ao efetivar a fatura do cartão %{credit_card_name} em %{period}
+        title_without_name: Erro ao efetivar uma fatura de cartão em %{period}
+      failure_types:
+        account_balance_adjustment_failed: Falha ao ajustar o saldo da conta
+        available_limit_exceeds_total_limit: O limite disponível ultrapassaria o limite total
+        credit_card_available_limit_adjustment_failed: Falha ao ajustar o limite disponível do cartão de crédito
+        credit_card_invoice_settlement_creation_failed: Falha ao efetivar a fatura do cartão de crédito
+        credit_card_not_found: Cartão de crédito não encontrado
+        insufficient_account_balance: Saldo insuficiente
+        insufficient_available_limit: Limite disponível insuficiente
+        invalid_input: Dados inválidos
+        later_month_closed: Um mês posterior já está fechado
+        monthly_status_creation_failed: Falha ao criar o status mensal
+        monthly_status_not_found: Status mensal não encontrado
+        monthly_status_update_failed: Falha ao atualizar o status mensal
+        previous_month_open: O mês anterior precisa estar fechado antes de processar este mês
+        transaction_not_found: Transação não encontrada
+        transaction_settlement_creation_failed: Falha ao efetivar a transação
+        unexpected: Ocorreu um erro inesperado
+        user_not_found: Usuário não encontrado
+      general_error:
+        body: Ocorreu um erro inesperado
+        title: Erro ao efetivar transações em %{period}
+      transaction_failure:
+        title: Erro ao efetivar a transação %{description} em %{period}
+        title_without_description: Erro ao efetivar uma transação em %{period}
     processing:
       enqueued: Efetivações enfileiradas para processamento

@@ -195,17 +195,19 @@ RSpec.describe Core::Settlement::Processing do
         a_hash_including(
           kind: :occurrence,
           transaction_id: broke.id,
+          description: broke.description,
           occurred_on: Date.new(2026, 8, 11),
           type: :insufficient_account_balance
         ),
         a_hash_including(
           kind: :occurrence,
           transaction_id: card.id,
+          description: card.description,
           occurred_on: Date.new(2026, 8, 1),
           type: :insufficient_available_limit
         )
       )
-      expect(result.value[:failures]).to all(include(:messages))
+      expect(result.value[:failures]).to all(include(messages: a_collection_including(a_string_matching(/insufficient/i))))
     end
 
     it "records an invoice payment failure without blocking other items" do
@@ -236,6 +238,7 @@ RSpec.describe Core::Settlement::Processing do
         a_hash_including(
           kind: :invoice,
           credit_card_id: credit_card.id,
+          credit_card_name: credit_card.name,
           due_date: Date.new(2026, 8, 17),
           type: :insufficient_account_balance
         )
@@ -421,11 +424,13 @@ RSpec.describe Core::Settlement::Processing do
         a_hash_including(
           kind: :invoice,
           credit_card_id: first_card.id,
+          credit_card_name: first_card.name,
           type: :available_limit_exceeds_total_limit
         ),
         a_hash_including(
           kind: :invoice,
           credit_card_id: second_card.id,
+          credit_card_name: second_card.name,
           type: :available_limit_exceeds_total_limit
         )
       )
@@ -465,20 +470,52 @@ RSpec.describe Core::Settlement::Processing do
       expect(monthly_status.last_processed_at).to eq(Time.current)
     end
 
-    it "returns Failure when the monthly status is missing" do
-      monthly_status.destroy!
+    it "returns Failure without notifying when the user is missing" do
+      allow(User::Repository::Adapters::ActiveRecord).to receive(:find_by_id)
+        .and_return(Solid::Failure(:user_not_found))
+      allow(Core::Settlement::Processing::ValidationErrorNotifying).to receive(:call)
 
       result = process
 
       expect(result).to be_a(Solid::Failure)
-      expect(result.type).to eq(:monthly_status_not_found)
-      expect(Transaction::Settlement::Record.count).to eq(0)
+      expect(result.type).to eq(:user_not_found)
+      expect(Core::Settlement::Processing::ValidationErrorNotifying).not_to have_received(:call)
+    end
+
+    it "creates an open monthly status when missing and continues processing" do
+      monthly_status.destroy!
+
+      result = nil
+      expect { result = process }.to change(MonthlyStatus::Record, :count).by(1)
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:settlements_completed)
+      created = MonthlyStatus::Record.find_by!(user_id: user.id, month:, year:)
+      expect(created.status).to eq("open")
+      expect(created.processing).to eq(false)
+      expect(created.last_processed_at).to eq(Time.current)
+    end
+
+    it "returns Failure when the monthly status creation fails" do
+      monthly_status.destroy!
+      allow(MonthlyStatus::Repository::Adapters::ActiveRecord).to receive(:create).and_return(
+        Solid::Failure(:monthly_status_creation_failed, errors: Core::Errors.new(month: [ "invalid" ]))
+      )
+      allow(Core::Settlement::Processing::ValidationErrorNotifying).to receive(:call)
+
+      result = process
+
+      expect(result).to be_a(Solid::Failure)
+      expect(result.type).to eq(:monthly_status_creation_failed)
+      expect(result.value[:input].errors[:base]).to include("Monthly status creation failed")
+      expect(Core::Settlement::Processing::ValidationErrorNotifying).not_to have_received(:call)
     end
 
     it "returns Failure when the monthly status update fails" do
       allow(MonthlyStatus::Repository::Adapters::ActiveRecord).to receive(:update).and_return(
         Solid::Failure(:monthly_status_update_failed, errors: Core::Errors.new(status: [ "invalid" ]))
       )
+      allow(Core::Settlement::Processing::ValidationErrorNotifying).to receive(:call)
 
       result = process
 
@@ -486,6 +523,7 @@ RSpec.describe Core::Settlement::Processing do
       expect(result.type).to eq(:monthly_status_update_failed)
       expect(result.value[:input].errors[:base]).to include("Monthly status update failed")
       expect(monthly_status.reload.processing).to eq(false)
+      expect(Core::Settlement::Processing::ValidationErrorNotifying).not_to have_received(:call)
     end
   end
 
@@ -552,6 +590,18 @@ RSpec.describe Core::Settlement::Processing do
       expect(Transaction::Settlement::Record.count).to eq(0)
     end
 
+    it "does not create a monthly status when a later month is closed" do
+      monthly_status.destroy!
+      create(:monthly_status, :closed, user:, month: 9, year: 2026)
+
+      result = nil
+      expect { result = process }.not_to change(MonthlyStatus::Record, :count)
+
+      expect(result).to be_a(Solid::Failure)
+      expect(result.type).to eq(:later_month_closed)
+      expect(MonthlyStatus::Record.find_by(user_id: user.id, month:, year:)).to be_nil
+    end
+
     it "rejects processing when a later month in the next year is closed" do
       create(:monthly_status, user:, month: 12, year: 2025)
       create(:monthly_status, :closed, user:, month: 1, year: 2026)
@@ -577,6 +627,118 @@ RSpec.describe Core::Settlement::Processing do
       result = process
 
       expect(result).to be_a(Solid::Success)
+    end
+  end
+
+  describe "notifications" do
+    it "does not notify when failures is empty" do
+      allow(Core::Settlement::Processing::FailureNotifying).to receive(:call)
+      allow(Core::Settlement::Processing::ValidationErrorNotifying).to receive(:call)
+      allow(Core::Settlement::Processing::UnexpectedErrorNotifying).to receive(:call)
+
+      process
+
+      expect(Core::Settlement::Processing::FailureNotifying).not_to have_received(:call)
+      expect(Core::Settlement::Processing::ValidationErrorNotifying).not_to have_received(:call)
+      expect(Core::Settlement::Processing::UnexpectedErrorNotifying).not_to have_received(:call)
+    end
+
+    it "notifies item failures when present" do
+      healthy_account = create(:account, :bank_account, user:, name: "Healthy", current_balance: 1000)
+      broke_account = create(:account, :bank_account, user:, name: "Broke", current_balance: 10)
+      create(:transaction, user:, account: healthy_account, value: 100, starts_on: Date.new(2026, 8, 11))
+      create(:transaction, user:, account: broke_account, value: 500, starts_on: Date.new(2026, 8, 11))
+      allow(Core::Settlement::Processing::FailureNotifying).to receive(:call).and_return(Solid::Success(:notifications_created))
+
+      result = process
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:settlements_completed)
+      expect(Core::Settlement::Processing::FailureNotifying).to have_received(:call).with(
+        user_id: user.id,
+        month:,
+        year:,
+        failures: result.value[:failures]
+      )
+    end
+
+    it "raises when notifying item failures fails" do
+      broke_account = create(:account, :bank_account, user:, name: "Broke", current_balance: 10)
+      create(:transaction, user:, account: broke_account, value: 500, starts_on: Date.new(2026, 8, 11))
+      allow(Core::Settlement::Processing::FailureNotifying).to receive(:call)
+        .and_return(Solid::Failure(:notifications_creation_failed))
+
+      expect { process }.to raise_error(StandardError, "notifications_creation_failed")
+    end
+
+    it "raises when notifying item failures raises" do
+      broke_account = create(:account, :bank_account, user:, name: "Broke", current_balance: 10)
+      create(:transaction, user:, account: broke_account, value: 500, starts_on: Date.new(2026, 8, 11))
+      original = StandardError.new("notify failed")
+      allow(Core::Settlement::Processing::FailureNotifying).to receive(:call).and_raise(original)
+
+      expect { process }.to raise_error { |error| expect(error).to equal(original) }
+    end
+
+    it "raises when notifying a validation failure fails" do
+      create(:monthly_status, user:, month: 7, year: 2026)
+      allow(Core::Settlement::Processing::ValidationErrorNotifying).to receive(:call)
+        .and_return(Solid::Failure(:notification_creation_failed))
+
+      expect { process }.to raise_error(StandardError, "notification_creation_failed")
+    end
+
+    it "notifies a process failure with input messages" do
+      create(:monthly_status, user:, month: 7, year: 2026)
+      allow(Core::Settlement::Processing::ValidationErrorNotifying).to receive(:call).and_return(Solid::Success(:error_notified))
+
+      result = process
+
+      expect(result).to be_a(Solid::Failure)
+      expect(result.type).to eq(:previous_month_open)
+      expect(Core::Settlement::Processing::ValidationErrorNotifying).to have_received(:call).with(
+        user_id: user.id,
+        month:,
+        year:,
+        type: :previous_month_open,
+        messages: [ "The previous month must be closed before processing this month" ]
+      )
+    end
+
+    it "notifies an unexpected error and re-raises" do
+      original = StandardError.new("boom")
+      allow(MonthlyStatus::Repository::Adapters::ActiveRecord).to receive(:find).and_raise(original)
+      allow(Core::Settlement::Processing::ValidationErrorNotifying).to receive(:call)
+      allow(Core::Settlement::Processing::UnexpectedErrorNotifying).to receive(:call)
+        .and_return(Solid::Success(:error_notified))
+
+      expect { process }.to raise_error { |error| expect(error).to equal(original) }
+      expect(Core::Settlement::Processing::ValidationErrorNotifying).not_to have_received(:call)
+      expect(Core::Settlement::Processing::UnexpectedErrorNotifying).to have_received(:call).with(
+        user_id: user.id,
+        month:,
+        year:,
+        type: :unexpected,
+        error: "StandardError"
+      )
+    end
+
+    it "clears the processing flag when a generic error is re-raised" do
+      allow(MonthlyStatement::Repository::Adapters::ActiveRecord).to receive(:list).and_raise(StandardError, "boom")
+      allow(Core::Settlement::Processing::UnexpectedErrorNotifying).to receive(:call)
+        .and_return(Solid::Success(:error_notified))
+
+      expect { process }.to raise_error(StandardError, "boom")
+      expect(monthly_status.reload.processing).to eq(false)
+    end
+
+    it "re-raises the original error when unexpected notifying fails" do
+      original = StandardError.new("boom")
+      allow(MonthlyStatement::Repository::Adapters::ActiveRecord).to receive(:list).and_raise(original)
+      allow(Core::Settlement::Processing::UnexpectedErrorNotifying).to receive(:call)
+        .and_raise(StandardError, "notify failed")
+
+      expect { process }.to raise_error { |error| expect(error).to equal(original) }
     end
   end
 
