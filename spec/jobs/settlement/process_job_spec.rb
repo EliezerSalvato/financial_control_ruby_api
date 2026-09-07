@@ -1,6 +1,8 @@
 require "rails_helper"
 
 RSpec.describe Settlement::ProcessJob, type: :job do
+  include ActiveJob::TestHelper
+
   let(:user_id) { SecureRandom.uuid }
   let(:month) { 8 }
   let(:year) { 2026 }
@@ -22,33 +24,29 @@ RSpec.describe Settlement::ProcessJob, type: :job do
     expect(Settlement).to have_received(:process).with(user_id:, month:, year:, reference_date:)
   end
 
-  it "does not log when failures is empty" do
-    allow(Settlement).to receive(:process).and_return(success)
-    allow(Rails.logger).to receive(:warn)
-    allow(Rails.logger).to receive(:error)
-
-    perform
-
-    expect(Rails.logger).not_to have_received(:warn)
-    expect(Rails.logger).not_to have_received(:error)
-  end
-
-  it "logs a warning once when failures are present and does not enqueue anything" do
-    failures = [ { kind: :occurrence, transaction_id: SecureRandom.uuid, type: :insufficient_account_balance } ]
-    allow(Settlement).to receive(:process).and_return(success(failures:))
-    allow(Rails.logger).to receive(:warn)
+  it "does not retry when item validation failures were already collected" do
+    allow(Settlement).to receive(:process).and_return(
+      success(failures: [ { kind: :occurrence, type: :insufficient_account_balance } ])
+    )
 
     expect { perform }.not_to have_enqueued_job
-
-    expect(Rails.logger).to have_received(:warn).once
   end
 
-  it "logs an error when the process fails and does not enqueue anything" do
+  it "does not retry a validation failure" do
     allow(Settlement).to receive(:process).and_return(Solid::Failure(:previous_month_open))
-    allow(Rails.logger).to receive(:error)
 
     expect { perform }.not_to have_enqueued_job
+  end
 
-    expect(Rails.logger).to have_received(:error).once
+  it "retries a generic process failure" do
+    allow(Settlement).to receive(:process).and_return(Solid::Failure(:user_not_found))
+
+    expect { perform }.to have_enqueued_job(described_class)
+  end
+
+  it "retries when the process raises" do
+    allow(Settlement).to receive(:process).and_raise(StandardError, "boom")
+
+    expect { perform }.to have_enqueued_job(described_class)
   end
 end

@@ -1,14 +1,10 @@
 class MonthlyStatus::MonthlyDispatchJob < ApplicationJob
-  include RetryableWithLogging
+  queue_as :monthly_status
 
-  queue_as :default
-
-  def perform(today: Date.current)
-    previous = today.prev_month
-
-    case MonthlyStatus::Adapters.repository.user_ids_with_open_months(up_to_month: previous.month, up_to_year: previous.year)
-    in Solid::Success(user_ids:)
-      user_ids.each { |user_id| MonthlyStatus::MonthlyClosingJob.perform_later(user_id:) }
+  def perform(date: Date.current)
+    case MonthlyStatus.dispatch(date:)
+    in Solid::Success then nil
+    in Solid::Failure(type:) then raise RetryableError, type.to_s
     end
   end
 end
