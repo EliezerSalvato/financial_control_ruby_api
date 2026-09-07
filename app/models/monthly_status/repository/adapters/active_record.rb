@@ -11,12 +11,10 @@ module MonthlyStatus::Repository::Adapters::ActiveRecord
     Failure(:monthly_status_not_found)
   end
 
-  def find_or_create(user_id:, month:, year:)
-    record = MonthlyStatus::Record.create_or_find_by(user_id:, month:, year:) do |monthly_status|
-      monthly_status.status = Core::MonthlyStatus::Status::OPEN
-    end
+  def create(user_id:, month:, year:)
+    record = MonthlyStatus::Record.create(user_id:, month:, year:, status: Core::MonthlyStatus::Status::OPEN)
 
-    return Success(:monthly_status_found, monthly_status: MonthlyStatus::Mapper.to_entity(record)) if record.persisted?
+    return Success(:monthly_status_created, monthly_status: MonthlyStatus::Mapper.to_entity(record)) if record.persisted?
 
     Failure(:monthly_status_creation_failed, errors: MonthlyStatus::Mapper.to_errors(record))
   end

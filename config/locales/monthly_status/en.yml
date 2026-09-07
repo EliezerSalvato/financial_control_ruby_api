@@ -6,21 +6,51 @@ en:
         core/monthly_status/closing/input:
           attributes:
             base:
+              later_month_closed: A later month is already closed
               monthly_status_closing_failed: Monthly status closing failed
+              monthly_status_creation_failed: Monthly status creation failed
               monthly_status_not_closeable: Only past months can be closed
+        core/monthly_status/closing/unexpected_error_notifying/input:
+          attributes:
+            base:
+              notification_creation_failed: Notification creation failed
+        core/monthly_status/closing/validation_error_notifying/input:
+          attributes:
+            base:
+              notifications_creation_failed: Notifications creation failed
+            pending:
+              invalid_item: must include month and year on every item
         core/monthly_status/ensure_open/input:
           attributes:
             base:
+              later_month_closed: A later month is already closed
               monthly_status_closed: This operation cannot be performed because the month is already closed
         core/monthly_status/update/input:
           attributes:
             base:
+              later_month_closed: A later month is already closed
               monthly_status_update_failed: Monthly status update failed
             status:
               inclusion: is not a valid status
   monthly_status:
     errors:
       not_found: Monthly status not found
+    notifications:
+      closing_failure:
+        body_failure: "%{message}"
+        body_pending: 'Pending transactions: %{occurrences}. Pending invoices: %{invoices_count}.'
+        title: Error closing month %{period}
+      failure_types:
+        later_month_closed: A later month is already closed
+        monthly_status_closing_failed: Monthly status closing failed
+        monthly_status_creation_failed: Monthly status creation failed
+        monthly_status_not_closeable: Only past months can be closed
+        monthly_status_not_found: Monthly status not found
+        unexpected: An unexpected error occurred
+      general_error:
+        body: An unexpected error occurred
+        title: Error during monthly closing
+        title_with_period: Error during monthly closing of %{period}
     update:
       failure: Monthly status update failed
       success: Monthly status updated successfully

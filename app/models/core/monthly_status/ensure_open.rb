@@ -46,7 +46,24 @@ class Core::MonthlyStatus::EnsureOpen < ApplicationSolidProcess
   end
 
   def find_or_create_monthly_status(user:, reference_month:, **)
-    case deps.monthly_status_repository.find_or_create(user_id: user.id, month: reference_month.month, year: reference_month.year)
+    user_id = user.id
+    month = reference_month.month
+    year = reference_month.year
+
+    case deps.monthly_status_repository.find(user_id:, month:, year:)
+    in Solid::Success(monthly_status:) then Continue(monthly_status:)
+    in Solid::Failure(type: :monthly_status_not_found)
+      create_monthly_status(user_id:, month:, year:)
+    end
+  end
+
+  def create_monthly_status(user_id:, month:, year:)
+    if deps.monthly_status_repository.exists_closed_after?(user_id:, month:, year:)
+      input.errors.add(:base, :later_month_closed)
+      return Failure(:later_month_closed, input:)
+    end
+
+    case deps.monthly_status_repository.create(user_id:, month:, year:)
     in Solid::Success(monthly_status:) then Continue(monthly_status:)
     in Solid::Failure(errors:)
       add_errors_to_input(errors)

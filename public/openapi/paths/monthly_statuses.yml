@@ -49,7 +49,9 @@ patch:
     Closes or reopens the authenticated user's month. Identity is `(user, month, year)`,
     not a UUID. `user` is always the current user.
     If no row exists, one is created and then updated, so a missing month can be closed
-    in a single request. Sending the already persisted `status` is idempotent (200).
+    in a single request. A missing month that precedes an already closed month is rejected
+    with 422 (`later_month_closed` on `base`) and is not created.
+    Sending the already persisted `status` is idempotent (200).
   operationId: updateMonthlyStatus
   security:
     - bearerAuth: []

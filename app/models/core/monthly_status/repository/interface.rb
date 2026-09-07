@@ -15,7 +15,7 @@ module Core::MonthlyStatus::Repository::Interface
       end
     end
 
-    def find_or_create(user_id:, month:, year:)
+    def create(user_id:, month:, year:)
       user_id => String
       month => Integer
       year => Integer
@@ -23,7 +23,7 @@ module Core::MonthlyStatus::Repository::Interface
       super.tap do
         _1 => (
           Solid::Failure(:monthly_status_creation_failed, { errors: Core::Errors }) |
-          Solid::Success(:monthly_status_found, { monthly_status: Core::MonthlyStatus::Entity })
+          Solid::Success(:monthly_status_created, { monthly_status: Core::MonthlyStatus::Entity })
         )
       end
     end

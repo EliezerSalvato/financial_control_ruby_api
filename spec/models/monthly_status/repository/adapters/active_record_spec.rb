@@ -43,13 +43,13 @@ RSpec.describe MonthlyStatus::Repository::Adapters::ActiveRecord do
     end
   end
 
-  describe "#find_or_create" do
-    it "creates an open monthly status when the row is missing" do
+  describe "#create" do
+    it "creates an open monthly status" do
       expect {
-        result = repository.find_or_create(user_id: user.id, month: 8, year: 2026)
+        result = repository.create(user_id: user.id, month: 8, year: 2026)
 
         expect(result).to be_a(Solid::Success)
-        expect(result.type).to eq(:monthly_status_found)
+        expect(result.type).to eq(:monthly_status_created)
         expect(result.value[:monthly_status]).to have_attributes(
           user_id: user.id,
           month: 8,
@@ -59,25 +59,11 @@ RSpec.describe MonthlyStatus::Repository::Adapters::ActiveRecord do
       }.to change(MonthlyStatus::Record, :count).by(1)
     end
 
-    it "returns the existing row on a second call" do
-      existing = create(:monthly_status, :closed, user:, month: 8, year: 2026)
-
-      expect {
-        result = repository.find_or_create(user_id: user.id, month: 8, year: 2026)
-
-        expect(result).to be_a(Solid::Success)
-        expect(result.value[:monthly_status]).to have_attributes(
-          id: existing.id,
-          status: Core::MonthlyStatus::Status::CLOSED
-        )
-      }.not_to change(MonthlyStatus::Record, :count)
-    end
-
     it "is isolated by user_id" do
       other_user = create(:user, :verified)
       create(:monthly_status, :closed, user: other_user, month: 8, year: 2026)
 
-      result = repository.find_or_create(user_id: user.id, month: 8, year: 2026)
+      result = repository.create(user_id: user.id, month: 8, year: 2026)
 
       expect(result.value[:monthly_status]).to have_attributes(
         user_id: user.id,

@@ -219,14 +219,51 @@ RSpec.describe Core::MonthlyStatus::Closing do
       expect(result).to be_a(Solid::Failure)
       expect(result.type).to eq(:monthly_status_not_closeable)
     end
+
+    it "does not create a row for the current month when missing" do
+      expect {
+        result = close(month: 9)
+
+        expect(result).to be_a(Solid::Failure)
+        expect(result.type).to eq(:monthly_status_not_closeable)
+      }.not_to change(MonthlyStatus::Record, :count)
+    end
   end
 
   describe "missing monthly_statuses row" do
-    it "returns monthly_status_not_found" do
-      result = close
+    it "creates the row and closes when there are no pending items" do
+      result = nil
+
+      expect { result = close }.to change(MonthlyStatus::Record, :count).by(1)
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:monthly_status_closed)
+      expect(MonthlyStatus::Record.find_by!(user_id: user.id, month:, year:)).to have_attributes(
+        status: "closed"
+      )
+    end
+
+    it "creates the row and keeps it open when there are pending items" do
+      account = create(:account, :bank_account, user:)
+      create(:transaction, user:, account:, value: 100, starts_on: Date.new(2026, 8, 11))
+
+      result = nil
+      expect { result = close }.to change(MonthlyStatus::Record, :count).by(1)
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:monthly_status_kept_open)
+      expect(MonthlyStatus::Record.find_by!(user_id: user.id, month:, year:).status).to eq("open")
+    end
+
+    it "does not create a row when a later month is closed" do
+      create(:monthly_status, :closed, user:, month: 9, year: 2026)
+
+      result = nil
+      expect { result = close }.not_to change(MonthlyStatus::Record, :count)
 
       expect(result).to be_a(Solid::Failure)
-      expect(result.type).to eq(:monthly_status_not_found)
+      expect(result.type).to eq(:later_month_closed)
+      expect(MonthlyStatus::Record.find_by(user_id: user.id, month:, year:)).to be_nil
     end
   end
 

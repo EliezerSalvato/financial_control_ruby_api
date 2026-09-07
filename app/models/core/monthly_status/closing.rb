@@ -25,8 +25,8 @@ class Core::MonthlyStatus::Closing < ApplicationSolidProcess
 
   def call(attributes)
     Given(attributes)
-      .and_then(:load_monthly_status)
       .and_then(:reject_current_or_future_month)
+      .and_then(:find_or_create_monthly_status)
       .and_then(:list_statement)
       .and_then(:list_transfers)
       .and_then(:check_account_and_transfer_settlements)
@@ -36,10 +36,25 @@ class Core::MonthlyStatus::Closing < ApplicationSolidProcess
 
   private
 
-  def load_monthly_status(user_id:, month:, year:, **)
+  def find_or_create_monthly_status(user_id:, month:, year:, **)
     case deps.monthly_status_repository.find(user_id:, month:, year:)
     in Solid::Success(monthly_status:) then Continue(monthly_status:)
-    in Solid::Failure(type: :monthly_status_not_found) then Failure(:monthly_status_not_found)
+    in Solid::Failure(type: :monthly_status_not_found)
+      create_monthly_status(user_id:, month:, year:)
+    end
+  end
+
+  def create_monthly_status(user_id:, month:, year:)
+    if deps.monthly_status_repository.exists_closed_after?(user_id:, month:, year:)
+      input.errors.add(:base, :later_month_closed)
+      return Failure(:later_month_closed, input:)
+    end
+
+    case deps.monthly_status_repository.create(user_id:, month:, year:)
+    in Solid::Success(monthly_status:) then Continue(monthly_status:)
+    in Solid::Failure(errors:)
+      add_errors_to_input(errors)
+      Failure(:monthly_status_creation_failed, input:)
     end
   end
 

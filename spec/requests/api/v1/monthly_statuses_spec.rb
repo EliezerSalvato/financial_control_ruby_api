@@ -141,6 +141,18 @@ RSpec.describe "API::V1::MonthlyStatuses", type: :request do
         expect(MonthlyStatus::Record.find_by!(user_id: user.id, month: 8, year: 2026).status).to eq("closed")
       end
 
+      it "does not create a month that precedes a closed month" do
+        create(:monthly_status, :closed, user:, month: 9, year: 2026)
+
+        expect {
+          update_monthly_status(monthly_status: { month: 8, year: 2026, status: "closed" })
+        }.not_to change(MonthlyStatus::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq([ "A later month is already closed" ])
+        expect(MonthlyStatus::Record.find_by(user_id: user.id, month: 8, year: 2026)).to be_nil
+      end
+
       it "returns 422 for an invalid status" do
         update_monthly_status(monthly_status: { month: 8, year: 2026, status: "archived" })
 

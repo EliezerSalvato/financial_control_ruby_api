@@ -6,21 +6,51 @@ pt-BR:
         core/monthly_status/closing/input:
           attributes:
             base:
+              later_month_closed: Um mês posterior já está fechado
               monthly_status_closing_failed: Falha ao fechar o status mensal
+              monthly_status_creation_failed: Falha ao criar o status mensal
               monthly_status_not_closeable: Somente meses anteriores ao corrente podem ser fechados
+        core/monthly_status/closing/unexpected_error_notifying/input:
+          attributes:
+            base:
+              notification_creation_failed: Falha ao criar a notificação
+        core/monthly_status/closing/validation_error_notifying/input:
+          attributes:
+            base:
+              notifications_creation_failed: Falha ao criar as notificações
+            pending:
+              invalid_item: deve incluir mês e ano em cada item
         core/monthly_status/ensure_open/input:
           attributes:
             base:
+              later_month_closed: Um mês posterior já está fechado
               monthly_status_closed: Não é possível realizar esta operação, pois o mês já está fechado
         core/monthly_status/update/input:
           attributes:
             base:
+              later_month_closed: Um mês posterior já está fechado
               monthly_status_update_failed: Falha ao atualizar o status mensal
             status:
               inclusion: não é um status válido
   monthly_status:
     errors:
       not_found: Status mensal não encontrado
+    notifications:
+      closing_failure:
+        body_failure: "%{message}"
+        body_pending: 'Transações pendentes: %{occurrences}. Faturas pendentes: %{invoices_count}.'
+        title: Erro ao fechar o mês %{period}
+      failure_types:
+        later_month_closed: Um mês posterior já está fechado
+        monthly_status_closing_failed: Falha ao fechar o status mensal
+        monthly_status_creation_failed: Falha ao criar o status mensal
+        monthly_status_not_closeable: Somente meses anteriores ao corrente podem ser fechados
+        monthly_status_not_found: Status mensal não encontrado
+        unexpected: Ocorreu um erro inesperado
+      general_error:
+        body: Ocorreu um erro inesperado
+        title: Erro no fechamento mensal
+        title_with_period: Erro no fechamento mensal de %{period}
     update:
       failure: Falha ao atualizar o status mensal
       success: Status mensal atualizado com sucesso

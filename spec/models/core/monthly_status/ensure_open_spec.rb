@@ -84,6 +84,16 @@ RSpec.describe Core::MonthlyStatus::EnsureOpen do
         status: Core::MonthlyStatus::Status::OPEN
       )
     end
+
+    it "does not create a month that precedes a closed month" do
+      create(:monthly_status, :closed, user:, month: 9, year: 2026)
+
+      expect { result }.not_to change(MonthlyStatus::Record, :count)
+
+      expect(result).to be_a(Solid::Failure)
+      expect(result.type).to eq(:later_month_closed)
+      expect(result.value[:input].errors.details[:base]).to include(error: :later_month_closed)
+    end
   end
 
   describe "closed month" do
