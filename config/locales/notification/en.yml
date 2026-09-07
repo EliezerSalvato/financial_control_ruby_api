@@ -11,6 +11,8 @@ en:
           attributes:
             base:
               notification_creation_failed: Notification creation failed
+            dedup_keys:
+              not_in_data: 'must all exist in data (missing: %{keys})'
             notifiable_id:
               blank: must be present when notifiable type is given
             notifiable_type:

@@ -35,6 +35,48 @@ RSpec.describe Notification::Record, type: :model do
     end
   end
 
+  describe "unread dedup uniqueness" do
+    it "rejects a second unread notification with the same identity and dedup_key" do
+      notification = create(
+        :notification,
+        :silent,
+        user:,
+        kind: "settlement.errors",
+        dedup_key: { "month" => 8, "year" => 2026, "type" => "unexpected" }
+      )
+
+      duplicate = Notification::Record.new(
+        user:,
+        kind: notification.kind,
+        title: "Duplicate",
+        dedup_key: notification.dedup_key
+      )
+
+      expect { duplicate.save(validate: false) }.to raise_error(ActiveRecord::RecordNotUnique)
+    end
+
+    it "allows the same identity after the previous notification is read" do
+      notification = create(
+        :notification,
+        :silent,
+        user:,
+        kind: "settlement.errors",
+        dedup_key: { "month" => 8, "year" => 2026, "type" => "unexpected" }
+      )
+      notification.update!(read: true, read_at: Time.current)
+
+      expect {
+        create(
+          :notification,
+          :silent,
+          user:,
+          kind: "settlement.errors",
+          dedup_key: { "month" => 8, "year" => 2026, "type" => "unexpected" }
+        )
+      }.not_to raise_error
+    end
+  end
+
   describe "boolean attributes" do
     it "exposes read and broadcast without conflicting with Active Record methods" do
       record = create(:notification, :silent, user:, read: false)

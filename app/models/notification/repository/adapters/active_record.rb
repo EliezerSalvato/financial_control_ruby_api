@@ -22,11 +22,17 @@ module Notification::Repository::Adapters::ActiveRecord
   end
 
   def create(attributes:)
-    notification = Notification::Record.create(attributes)
+    ApplicationRecord.transaction(requires_new: true) do
+      notification = Notification::Record.create(attributes)
 
-    return Success(:notification_created, notification: Notification::Mapper.to_entity(notification)) if notification.persisted?
-
-    Failure(:notification_creation_failed, errors: Notification::Mapper.to_errors(notification))
+      if notification.persisted?
+        Success(:notification_created, notification: Notification::Mapper.to_entity(notification))
+      else
+        Failure(:notification_creation_failed, errors: Notification::Mapper.to_errors(notification))
+      end
+    end
+  rescue ActiveRecord::RecordNotUnique
+    Success(:notification_skipped)
   end
 
   def mark_as_read(notification:, read_at:)
@@ -48,6 +54,14 @@ module Notification::Repository::Adapters::ActiveRecord
 
   def unread_count(user_id:)
     user_notifications(user_id).where(read: false).count
+  end
+
+  def exists_unread?(user_id:, kind:, notifiable_type: nil, notifiable_id: nil, data: {})
+    scope = user_notifications(user_id).where(kind:, notifiable_type:, notifiable_id:, read: false)
+    return scope.exists? if data.blank?
+
+    json = data.stringify_keys.to_json
+    scope.where("dedup_key = ?::jsonb OR (dedup_key IS NULL AND data @> ?::jsonb)", json, json).exists?
   end
 
   private

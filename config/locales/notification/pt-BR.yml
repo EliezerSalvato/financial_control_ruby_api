@@ -11,6 +11,8 @@ pt-BR:
           attributes:
             base:
               notification_creation_failed: Falha ao criar a notificação
+            dedup_keys:
+              not_in_data: 'devem existir em data (ausentes: %{keys})'
             notifiable_id:
               blank: deve estar presente quando o tipo do alvo é informado
             notifiable_type:

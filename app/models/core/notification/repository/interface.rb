@@ -34,10 +34,12 @@ module Core::Notification::Repository::Interface
       super.tap do
         _1 => (
           Solid::Failure(:notification_creation_failed, { errors: Core::Errors }) |
-          Solid::Success(:notification_created, { notification: Core::Notification::Entity })
+          Solid::Success(:notification_created, { notification: Core::Notification::Entity }) |
+          Solid::Success(:notification_skipped, {})
         )
       end
     end
+
 
     def mark_as_read(notification:, read_at:)
       notification => Core::Notification::Entity
@@ -63,6 +65,18 @@ module Core::Notification::Repository::Interface
 
       super.tap do
         _1 => Integer
+      end
+    end
+
+    def exists_unread?(user_id:, kind:, notifiable_type: nil, notifiable_id: nil, data: {})
+      user_id => String
+      kind => String
+      notifiable_type => String | NilClass
+      notifiable_id => String | NilClass
+      data => Hash
+
+      super.tap do
+        _1 => (true | false)
       end
     end
   end

@@ -30,8 +30,8 @@ class Core::Notification::BatchCreation < ApplicationSolidProcess
       result = deps.notification_creation.call(**item.to_h.symbolize_keys, user_id:, broadcast: false)
 
       case result
-      in Solid::Success(notification:)
-        created << notification
+      in Solid::Success(type: :notification_skipped) then next
+      in Solid::Success(notification:) then created << notification
       else
         return with_nested_process(result, persist_failure: :notifications_creation_failed)
       end

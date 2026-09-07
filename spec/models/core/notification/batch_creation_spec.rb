@@ -79,4 +79,37 @@ RSpec.describe Core::Notification::BatchCreation do
 
     expect(result).to be_a(Solid::Failure)
   end
+
+  it "skips duplicate unread items and still creates the others" do
+    create(
+      :notification,
+      :silent,
+      user:,
+      kind: "transaction.validation.errors",
+      notifiable_type: "Transaction::Record",
+      notifiable_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      data: { "month" => 8, "year" => 2026 }
+    )
+    result = nil
+
+    expect {
+      result = create_all(
+        notifications: [
+          {
+            kind: "transaction.validation.errors",
+            title: "Duplicate",
+            notifiable_type: "Transaction::Record",
+            notifiable_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            data: { month: 8, year: 2026 },
+            dedup_keys: %w[month year]
+          },
+          { kind: "system", title: "New" }
+        ]
+      )
+    }.to change(Notification::Record, :count).by(1)
+
+    expect(result).to be_a(Solid::Success)
+    expect(result.value[:notifications].size).to eq(1)
+    expect(result.value[:notifications].sole.title).to eq("New")
+  end
 end
