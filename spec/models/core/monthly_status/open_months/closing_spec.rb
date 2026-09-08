@@ -110,7 +110,7 @@ RSpec.describe Core::MonthlyStatus::OpenMonths::Closing do
     }.to raise_error(StandardError, "notifications_creation_failed")
   end
 
-  it "notifies pending items and schedules a retry for day 11 at 05:00 UTC when a month remains open on day 10" do
+  it "notifies pending items and schedules a retry for day 11 at 05:00 in the app time zone when a month remains open on day 10" do
     monthly_status = create(:monthly_status, user:, month: 8, year: 2026)
     pending_occurrences = [ { transaction_id: SecureRandom.uuid, occurred_on: Date.new(2026, 8, 11), description: "Rent" } ]
     pending_invoices = [ { credit_card_id: SecureRandom.uuid, due_date: Date.new(2026, 8, 17) } ]
@@ -118,10 +118,10 @@ RSpec.describe Core::MonthlyStatus::OpenMonths::Closing do
     allow(Core::MonthlyStatus::Closing::ValidationErrorNotifying).to receive(:call).and_return(Solid::Success(:notifications_created))
 
     expect {
-      travel_to(Time.utc(2026, 9, 10, 12, 0, 0)) { close_open_months }
+      travel_to(Time.zone.local(2026, 9, 10, 12, 0, 0)) { close_open_months }
     }.to have_enqueued_job(MonthlyStatus::MonthlyClosingJob)
       .with(user_id: user.id, date: Date.new(2026, 9, 10))
-      .at(Time.utc(2026, 9, 11, 5, 0, 0))
+      .at(Time.zone.local(2026, 9, 11, 5, 0, 0))
 
     expect(Core::MonthlyStatus::Closing::ValidationErrorNotifying).to have_received(:call).with(
       user_id: user.id,
@@ -148,12 +148,12 @@ RSpec.describe Core::MonthlyStatus::OpenMonths::Closing do
     cutoff_date = Date.new(2026, 3, 1)
 
     expect {
-      travel_to(Time.utc(2026, 9, 10, 12, 0, 0)) do
+      travel_to(Time.zone.local(2026, 9, 10, 12, 0, 0)) do
         described_class.call(user_id: user.id, date: cutoff_date)
       end
     }.to have_enqueued_job(MonthlyStatus::MonthlyClosingJob)
       .with(user_id: user.id, date: cutoff_date)
-      .at(Time.utc(2026, 9, 11, 5, 0, 0))
+      .at(Time.zone.local(2026, 9, 11, 5, 0, 0))
   end
 
   it "notifies but does not schedule when an open month remains on the last day of the month" do
@@ -163,7 +163,7 @@ RSpec.describe Core::MonthlyStatus::OpenMonths::Closing do
     allow(Core::MonthlyStatus::Closing::ValidationErrorNotifying).to receive(:call).and_return(Solid::Success(:notifications_created))
 
     expect {
-      travel_to(Time.utc(2026, 9, 30, 12, 0, 0)) { close_open_months }
+      travel_to(Time.zone.local(2026, 9, 30, 12, 0, 0)) { close_open_months }
     }.not_to have_enqueued_job(MonthlyStatus::MonthlyClosingJob)
 
     expect(Core::MonthlyStatus::Closing::ValidationErrorNotifying).to have_received(:call).with(
