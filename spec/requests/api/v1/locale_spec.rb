@@ -81,5 +81,12 @@ RSpec.describe "API locale", type: :request do
       expect(response).to have_http_status(:unauthorized)
       expect(response.parsed_body["message"]).to eq("Não autorizado")
     end
+
+    it "defaults to English when Accept-Language has no available locale" do
+      authenticate("Accept-Language" => "fr, de;q=0.8")
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("details", "base")).to eq([ "Email or password is invalid" ])
+    end
   end
 end

@@ -4,12 +4,12 @@ class ApplicationSolidProcess < Solid::Process
   def with_nested_process(result, persist_failure: nil)
     case result
     in Solid::Success then Continue()
-    in Solid::Failure(type: :invalid_input, input:)
+    in Solid::Failure(type: :invalid_input, value: { input: })
       merge_nested_input_errors(input)
       Failure(:invalid_input, input: self.input)
     in Solid::Failure(errors:)
       add_errors_to_input(errors)
-      input.errors.add(:base, persist_failure) if persist_failure
+      self.input.errors.add(:base, persist_failure) if persist_failure
       Failure(persist_failure || :invalid_input, input: self.input)
     in Solid::Failure(input:)
       merge_nested_input_errors(input)
