@@ -12,6 +12,7 @@ en:
             base:
               category_destruction_failed: Category deletion failed
               category_not_found: Category not found
+              used_by_transactions: This category cannot be deleted because it is already used by transactions. To stop using it, inactivate the category.
         core/category/update/input:
           attributes:
             base:

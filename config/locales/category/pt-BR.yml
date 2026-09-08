@@ -12,6 +12,7 @@ pt-BR:
             base:
               category_destruction_failed: Falha ao excluir a categoria
               category_not_found: Categoria não encontrada
+              used_by_transactions: Esta categoria não pode ser excluída porque já está em uso em transações. Para deixar de utilizá-la, inative a categoria.
         core/category/update/input:
           attributes:
             base:

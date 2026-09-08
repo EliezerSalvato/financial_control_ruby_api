@@ -281,6 +281,20 @@ RSpec.describe "API::V1::Categories", type: :request do
         expect(response.parsed_body["message"]).to eq("Category deleted successfully")
       end
 
+      it "does not delete a category used by transactions" do
+        create(:transaction, user:, category:)
+
+        expect { destroy_category(category.id) }.not_to change(Category::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body["message"]).to eq(
+          "This category cannot be deleted because it is already used by transactions. To stop using it, inactivate the category."
+        )
+        expect(response.parsed_body.dig("details", "base")).to eq(
+          [ "This category cannot be deleted because it is already used by transactions. To stop using it, inactivate the category." ]
+        )
+      end
+
       it "returns 404 for another user's category" do
         destroy_category(create(:category).id)
 

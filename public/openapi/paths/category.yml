@@ -58,7 +58,9 @@ patch:
 delete:
   tags: [Categories]
   summary: Delete category
-  description: Deletes a category owned by the authenticated user.
+  description: |
+    Deletes a category owned by the authenticated user.
+    Categories already used by transactions cannot be deleted; inactivate them instead.
   operationId: deleteCategory
   security:
     - bearerAuth: []
