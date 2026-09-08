@@ -5,6 +5,8 @@ class Tag::Record < ApplicationRecord
 
   belongs_to :user, class_name: "User::Record"
 
+  has_many :transaction_taggings, class_name: "Transaction::Tagging::Record", foreign_key: :tag_id, dependent: :destroy, inverse_of: :tag
+
   def self.ransackable_attributes(_auth_object = nil)
     %w[name active]
   end
