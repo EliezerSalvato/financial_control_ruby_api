@@ -255,6 +255,90 @@ RSpec.describe CreditCard::InvoiceSettlement::Repository::Adapters::ActiveRecord
     end
   end
 
+  describe "#list_for_month" do
+    let(:user_entity) { User::Mapper.to_entity(user) }
+
+    def list_for_month(month: 8, year: 2026)
+      repository.list_for_month(user: user_entity, month:, year:)
+    end
+
+    it "returns only the current user's invoices whose due_date is in the month" do
+      in_month = create(
+        :credit_card_invoice_settlement,
+        credit_card:,
+        payment_account: account,
+        due_date: Date.new(2026, 8, 17)
+      )
+      create(
+        :credit_card_invoice_settlement,
+        credit_card:,
+        payment_account: account,
+        opening_date: Date.new(2026, 8, 11),
+        closing_date: Date.new(2026, 9, 10),
+        due_date: Date.new(2026, 9, 17),
+        settled_on: Date.new(2026, 9, 17)
+      )
+      other_user_card = create(:credit_card, default_payment_account: create(:account, :bank_account), closing_day: 10, due_day: 17)
+      create(
+        :credit_card_invoice_settlement,
+        credit_card: other_user_card,
+        due_date: Date.new(2026, 8, 17)
+      )
+
+      result = list_for_month
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:invoice_settlements_listed)
+      expect(result.value[:invoice_settlements]).to contain_exactly(
+        have_attributes(
+          id: in_month.id,
+          credit_card_id: credit_card.id,
+          payment_account_id: account.id,
+          opening_date: Date.new(2026, 7, 11),
+          closing_date: Date.new(2026, 8, 10),
+          due_date: Date.new(2026, 8, 17),
+          total_value: 100,
+          released_limit: 0,
+          settled_on: Date.new(2026, 8, 17)
+        )
+      )
+    end
+
+    it "orders by due_date, then credit_card_id" do
+      later_card = create(:credit_card, user:, default_payment_account: account, closing_day: 10, due_day: 20)
+      earlier = create(
+        :credit_card_invoice_settlement,
+        credit_card:,
+        payment_account: account,
+        due_date: Date.new(2026, 8, 10),
+        settled_on: Date.new(2026, 8, 10)
+      )
+      later = create(
+        :credit_card_invoice_settlement,
+        credit_card: later_card,
+        payment_account: account,
+        opening_date: Date.new(2026, 7, 14),
+        closing_date: Date.new(2026, 8, 13),
+        due_date: Date.new(2026, 8, 20),
+        settled_on: Date.new(2026, 8, 20)
+      )
+      same_day_other = create(
+        :credit_card_invoice_settlement,
+        credit_card: later_card,
+        payment_account: account,
+        opening_date: Date.new(2026, 6, 14),
+        closing_date: Date.new(2026, 7, 13),
+        due_date: Date.new(2026, 8, 10),
+        settled_on: Date.new(2026, 8, 10)
+      )
+
+      result = list_for_month
+      expected_ids = [ earlier, same_day_other, later ].sort_by { |invoice| [ invoice.due_date, invoice.credit_card_id, invoice.id ] }.map(&:id)
+
+      expect(result.value[:invoice_settlements].map(&:id)).to eq(expected_ids)
+    end
+  end
+
   describe "#paid_keys" do
     it "filters by card and due_date" do
       matching = create(

@@ -29,6 +29,8 @@ paths:
     $ref: "./paths/account.yml"
   /api/v1/credit_cards:
     $ref: "./paths/credit_cards.yml"
+  /api/v1/credit_cards/invoice_settlements:
+    $ref: "./paths/credit_cards_invoice_settlements.yml"
   /api/v1/credit_cards/{id}:
     $ref: "./paths/credit_card.yml"
   /api/v1/monthly_statements:

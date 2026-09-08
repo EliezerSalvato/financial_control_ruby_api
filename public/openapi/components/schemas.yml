@@ -848,6 +848,76 @@ CreditCardCollection:
     meta:
       $ref: "#/PaginationMeta"
 
+CreditCardInvoiceSettlementAttributes:
+  type: object
+  description: |
+    One paid credit-card invoice whose `due_date` falls in the requested calendar month.
+    `id` is the invoice settlement id. `total_value` is the amount debited from the payment account.
+    `released_limit` is the amount added back to the card's available limit.
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: Invoice settlement id
+    credit_card_id:
+      type: string
+      format: uuid
+    payment_account_id:
+      type: string
+      format: uuid
+      description: Account that paid the invoice
+    opening_date:
+      type: string
+      format: date
+      description: First day of the invoice cycle
+    closing_date:
+      type: string
+      format: date
+      description: Last day of the invoice cycle
+    due_date:
+      type: string
+      format: date
+      description: Invoice due date. Used to select the calendar month.
+    total_value:
+      type: string
+      description: Decimal amount as string (precision 15, scale 2)
+      example: "100.0"
+    released_limit:
+      type: string
+      description: Decimal amount as string (precision 15, scale 2)
+      example: "100.0"
+    settled_on:
+      type: string
+      format: date
+      description: Date the invoice was processed
+
+CreditCardInvoiceSettlementResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: credit_card_invoice_settlement
+    attributes:
+      $ref: "#/CreditCardInvoiceSettlementAttributes"
+
+CreditCardInvoiceSettlementCollection:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: collection
+    data:
+      type: array
+      items:
+        $ref: "#/CreditCardInvoiceSettlementResource"
+
 TransactionRecurrenceAttributes:
   type: object
   properties:

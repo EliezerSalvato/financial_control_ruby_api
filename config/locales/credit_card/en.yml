@@ -40,6 +40,7 @@ en:
       available_limit_exceeds_total_limit: Available limit would exceed total limit
       insufficient_available_limit: Insufficient available limit
       invalid_filters: Invalid filter
+      invalid_period: Invalid period
       not_found: Credit card not found
     update:
       failure: Credit card update failed

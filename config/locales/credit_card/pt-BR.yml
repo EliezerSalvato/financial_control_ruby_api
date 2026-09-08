@@ -40,6 +40,7 @@ pt-BR:
       available_limit_exceeds_total_limit: O limite disponível ultrapassaria o limite total
       insufficient_available_limit: Limite disponível insuficiente
       invalid_filters: Filtro inválido
+      invalid_period: Período inválido
       not_found: Cartão de crédito não encontrado
     update:
       failure: Falha ao atualizar o cartão de crédito

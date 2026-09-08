@@ -17,6 +17,10 @@ module CreditCard::InvoiceSettlement::Mapper
     )
   end
 
+  def to_entities(records)
+    records.map { |record| to_entity(record) }
+  end
+
   def to_errors(record)
     Core::Errors.new(record.errors.messages)
   end

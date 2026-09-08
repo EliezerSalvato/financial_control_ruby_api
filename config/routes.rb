@@ -11,7 +11,11 @@ Rails.application.routes.draw do
       resources :categories, only: %i[index show create update destroy]
       resources :institutions, only: %i[index show create update destroy]
       resources :accounts, only: %i[index show create update destroy]
-      resources :credit_cards, only: %i[index show create update destroy]
+      resources :credit_cards, only: %i[index show create update destroy] do
+        collection do
+          get :invoice_settlements
+        end
+      end
       resource :monthly_statuses, only: %i[show update]
       resource :settlements, only: [] do
         post :processing

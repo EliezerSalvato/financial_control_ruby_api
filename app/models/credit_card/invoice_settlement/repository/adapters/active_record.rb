@@ -50,6 +50,17 @@ module CreditCard::InvoiceSettlement::Repository::Adapters::ActiveRecord
     Success(:credit_card_invoice_occurrences_linked, linked_count:)
   end
 
+  def list_for_month(user:, month:, year:)
+    period = Date.new(year, month, 1)..Date.new(year, month, 1).end_of_month
+
+    records = CreditCard::InvoiceSettlement::Record
+      .joins(:credit_card)
+      .where(credit_cards: { user_id: user.id }, due_date: period)
+      .order(:due_date, :credit_card_id, :id)
+
+    Success(:invoice_settlements_listed, invoice_settlements: CreditCard::InvoiceSettlement::Mapper.to_entities(records))
+  end
+
   def paid_keys(credit_card_ids:, due_dates:)
     keys = CreditCard::InvoiceSettlement::Record
       .where(credit_card_id: credit_card_ids, due_date: due_dates)

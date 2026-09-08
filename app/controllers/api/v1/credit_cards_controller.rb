@@ -14,6 +14,19 @@ class API::V1::CreditCardsController < API::V1::BaseController
     end
   end
 
+  def invoice_settlements
+    case CreditCard.list_invoice_settlements(invoice_settlement_params.merge(user: current_user))
+    in Solid::Success(invoice_settlements:)
+      data = CreditCard::InvoiceSettlement::Serializer.new(invoice_settlements)
+
+      render_json_with_success(status: :ok, **data)
+    in Solid::Failure(input:)
+      render_json_with_model_errors(input)
+    else
+      render_json_with_error(status: :bad_request, message: I18n.t("credit_card.errors.invalid_period"))
+    end
+  end
+
   def show
     case CreditCard.find(id: params[:id], user: current_user)
     in Solid::Success(credit_card:)
@@ -69,6 +82,13 @@ class API::V1::CreditCardsController < API::V1::BaseController
   end
 
   private
+
+  def invoice_settlement_params
+    {
+      month: params[:month],
+      year: params[:year]
+    }
+  end
 
   def list_params
     {

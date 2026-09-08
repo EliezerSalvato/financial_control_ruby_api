@@ -8,6 +8,7 @@ module CreditCard
     update: Core::CreditCard::Update,
     destroy: Core::CreditCard::Deletion,
     settle_invoice: Core::CreditCard::InvoiceSettlement::Creation,
-    ensure_invoice_unpaid: Core::CreditCard::InvoiceSettlement::EnsureUnpaid
+    ensure_invoice_unpaid: Core::CreditCard::InvoiceSettlement::EnsureUnpaid,
+    list_invoice_settlements: Core::CreditCard::InvoiceSettlement::Listing
   }
 end

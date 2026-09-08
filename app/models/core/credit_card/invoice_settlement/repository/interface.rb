@@ -40,6 +40,16 @@ module Core::CreditCard::InvoiceSettlement::Repository::Interface
       end
     end
 
+    def list_for_month(user:, month:, year:)
+      user => Core::User::Entity
+      month => Integer
+      year => Integer
+
+      super.tap do
+        _1 => Solid::Success(:invoice_settlements_listed, { invoice_settlements: Array })
+      end
+    end
+
     def paid_keys(credit_card_ids:, due_dates:)
       credit_card_ids => Array
       due_dates => Array

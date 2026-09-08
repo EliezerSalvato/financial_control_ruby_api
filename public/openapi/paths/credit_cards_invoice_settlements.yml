@@ -1,0 +1,41 @@
+get:
+  tags: [Credit Cards]
+  summary: List credit card invoice settlements
+  description: |
+    Returns the authenticated user's paid credit-card invoices whose `due_date` falls in the given calendar month.
+    Each item exposes the invoice cycle (`opening_date`, `closing_date`, `due_date`), the payment account,
+    the settled amount (`total_value`), the released limit, and `settled_on`.
+    Invoices from the previous or next month are not included.
+  operationId: listCreditCardInvoiceSettlements
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: month
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 12
+      description: Calendar month of the invoice due date (1-12)
+    - name: year
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 9999
+      description: Calendar year of the invoice due date
+  responses:
+    "200":
+      description: Credit card invoice settlements listed
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/CreditCardInvoiceSettlementCollection"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
