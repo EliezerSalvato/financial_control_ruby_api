@@ -40,6 +40,17 @@ RSpec.describe "API::V1::Settlements", type: :request do
         expect(Settlement::ProcessJob).not_to have_been_enqueued.with(hash_including(user_id: other_user.id))
       end
 
+      it "does not enqueue a job when the month is already processing" do
+        create(:monthly_status, :processing, user:, month: 8, year: 2026)
+
+        expect {
+          process_settlements(settlement: { month: 8, year: 2026, reference_date: "2026-08-28" })
+        }.not_to have_enqueued_job(Settlement::ProcessJob)
+
+        expect(response).to have_http_status(:accepted)
+        expect(response.parsed_body["message"]).to eq("Settlement processing has been queued")
+      end
+
       it "returns 400 when the settlement param is missing" do
         process_settlements({})
 
