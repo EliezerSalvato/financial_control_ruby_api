@@ -3,7 +3,7 @@ module Core::MonthlyStatus::Repository::Interface
 
   module Methods
     def find(user_id:, month:, year:)
-      user_id => String
+      UUID.valid?(user_id) => true
       month => Integer
       year => Integer
 
@@ -16,7 +16,7 @@ module Core::MonthlyStatus::Repository::Interface
     end
 
     def create(user_id:, month:, year:)
-      user_id => String
+      UUID.valid?(user_id) => true
       month => Integer
       year => Integer
 
@@ -61,7 +61,7 @@ module Core::MonthlyStatus::Repository::Interface
     end
 
     def list_open_for(user_id:, up_to_month:, up_to_year:)
-      user_id => String
+      UUID.valid?(user_id) => true
       up_to_month => Integer
       up_to_year => Integer
 
@@ -80,7 +80,7 @@ module Core::MonthlyStatus::Repository::Interface
     end
 
     def exists_closed_after?(user_id:, month:, year:)
-      user_id => String
+      UUID.valid?(user_id) => true
       month => Integer
       year => Integer
 

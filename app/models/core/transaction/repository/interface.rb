@@ -19,7 +19,7 @@ module Core::Transaction::Repository::Interface
 
     def find_by_id(user:, id:)
       user => Core::User::Entity
-      id => String
+      UUID.valid?(id) => true
 
       super.tap do
         _1 => (
@@ -31,7 +31,7 @@ module Core::Transaction::Repository::Interface
 
     def exists_by_category_id?(user:, category_id:)
       user => Core::User::Entity
-      category_id => String
+      UUID.valid?(category_id) => true
 
       super.tap do
         _1 => (true | false)
@@ -40,7 +40,7 @@ module Core::Transaction::Repository::Interface
 
     def exists_by_institution_id?(user:, institution_id:)
       user => Core::User::Entity
-      institution_id => String
+      UUID.valid?(institution_id) => true
 
       super.tap do
         _1 => (true | false)
@@ -49,7 +49,7 @@ module Core::Transaction::Repository::Interface
 
     def exists_by_account_id?(user:, account_id:)
       user => Core::User::Entity
-      account_id => String
+      UUID.valid?(account_id) => true
 
       super.tap do
         _1 => (true | false)
@@ -58,7 +58,7 @@ module Core::Transaction::Repository::Interface
 
     def exists_by_credit_card_id?(user:, credit_card_id:)
       user => Core::User::Entity
-      credit_card_id => String
+      UUID.valid?(credit_card_id) => true
 
       super.tap do
         _1 => (true | false)

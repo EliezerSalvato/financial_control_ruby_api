@@ -4,7 +4,7 @@ RSpec.describe Notification::Repository::Adapters::ActiveRecord do
   subject(:repository) { described_class }
 
   let(:user) { create(:user, :verified) }
-  let(:transaction_id) { SecureRandom.uuid }
+  let(:transaction_id) { UUID.generate }
 
   def exists_unread?(**overrides)
     repository.exists_unread?(
@@ -78,7 +78,7 @@ RSpec.describe Notification::Repository::Adapters::ActiveRecord do
         user:,
         kind: "transaction.validation.errors",
         notifiable_type: "Transaction::Record",
-        notifiable_id: SecureRandom.uuid,
+        notifiable_id: UUID.generate,
         data: { "month" => 8, "year" => 2026 }
       )
 

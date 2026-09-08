@@ -5,6 +5,7 @@ module Core::Transaction::Tagging::Repository::Interface
     def sync(transaction:, tag_ids:)
       transaction => Core::Transaction::Entity
       tag_ids => Array
+      tag_ids.all? { |id| UUID.valid?(id) } => true
 
       super.tap do
         _1 => (

@@ -86,7 +86,7 @@ RSpec.describe Tag::Repository::Adapters::ActiveRecord do
     it "returns Failure when any tag is missing" do
       tag = create(:tag, user:, name: "Vacation")
 
-      result = repository.find_by_ids(user: user_entity, ids: [ tag.id, SecureRandom.uuid ])
+      result = repository.find_by_ids(user: user_entity, ids: [ tag.id, UUID.generate ])
 
       expect(result).to be_a(Solid::Failure)
       expect(result.type).to eq(:tags_not_found)

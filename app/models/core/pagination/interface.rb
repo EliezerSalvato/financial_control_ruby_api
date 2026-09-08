@@ -10,6 +10,7 @@ module Core::Pagination::Interface
     end
 
     def paginate_by_cursor(collection, after:, limit:)
+      after => String | NilClass
       limit => Integer
 
       super.tap { _1 => [ Object, Core::Pagination::Cursor::Entity ] }

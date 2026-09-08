@@ -3,7 +3,7 @@ module Core::Notification::Repository::Interface
 
   module Methods
     def list(user_id:, after:, limit:, unread: false)
-      user_id => String
+      UUID.valid?(user_id) => true
       after => String | NilClass
       limit => Integer
       unread => TrueClass | FalseClass
@@ -17,8 +17,8 @@ module Core::Notification::Repository::Interface
     end
 
     def find_by_id(user_id:, id:)
-      user_id => String
-      id => String
+      UUID.valid?(user_id) => true
+      UUID.valid?(id) => true
 
       super.tap do
         _1 => (
@@ -40,9 +40,9 @@ module Core::Notification::Repository::Interface
       end
     end
 
-
     def mark_as_read(notification:, read_at:)
       notification => Core::Notification::Entity
+      read_at => ActiveSupport::TimeWithZone | Time
 
       super.tap do
         _1 => (
@@ -53,7 +53,8 @@ module Core::Notification::Repository::Interface
     end
 
     def mark_all_as_read(user_id:, read_at:)
-      user_id => String
+      UUID.valid?(user_id) => true
+      read_at => ActiveSupport::TimeWithZone | Time
 
       super.tap do
         _1 => Solid::Success(:notifications_marked_as_read, { count: Integer })
@@ -61,7 +62,7 @@ module Core::Notification::Repository::Interface
     end
 
     def unread_count(user_id:)
-      user_id => String
+      UUID.valid?(user_id) => true
 
       super.tap do
         _1 => Integer
@@ -69,10 +70,10 @@ module Core::Notification::Repository::Interface
     end
 
     def exists_unread?(user_id:, kind:, notifiable_type: nil, notifiable_id: nil, data: {})
-      user_id => String
+      UUID.valid?(user_id) => true
       kind => String
       notifiable_type => String | NilClass
-      notifiable_id => String | NilClass
+      notifiable_id.nil? || UUID.valid?(notifiable_id) => true
       data => Hash
 
       super.tap do

@@ -6,7 +6,7 @@ RSpec.describe Core::Settlement::Processing::FailureNotifying do
   let(:user) { create(:user, :verified) }
   let(:month) { 8 }
   let(:year) { 2026 }
-  let(:transaction_id) { SecureRandom.uuid }
+  let(:transaction_id) { UUID.generate }
   let(:credit_card_id) { create(:credit_card, user:).id }
 
   def notify(failures:, **overrides)

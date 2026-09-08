@@ -3,7 +3,7 @@ module Core::CreditCard::InvoiceSettlement::Repository::Interface
 
   module Methods
     def list_due(user_id:, month:, year:, reference_date:)
-      user_id => String
+      UUID.valid?(user_id) => true
       month => Integer
       year => Integer
       reference_date => Date
@@ -14,8 +14,8 @@ module Core::CreditCard::InvoiceSettlement::Repository::Interface
     end
 
     def create(credit_card_id:, payment_account_id:, opening_date:, closing_date:, due_date:, total_value:, released_limit:, settled_on:)
-      credit_card_id => String
-      payment_account_id => String
+      UUID.valid?(credit_card_id) => true
+      UUID.valid?(payment_account_id) => true
       opening_date => Date
       closing_date => Date
       due_date => Date
@@ -52,7 +52,9 @@ module Core::CreditCard::InvoiceSettlement::Repository::Interface
 
     def paid_keys(credit_card_ids:, due_dates:)
       credit_card_ids => Array
+      credit_card_ids.all? { |id| UUID.valid?(id) } => true
       due_dates => Array
+      due_dates.all?(Date) => true
 
       super.tap do
         _1 => Solid::Success(:credit_card_invoice_settlements_listed, { keys: Array })
@@ -60,12 +62,12 @@ module Core::CreditCard::InvoiceSettlement::Repository::Interface
     end
 
     def paid_covering?(credit_card_id:, from:, to:)
-      credit_card_id => String
+      UUID.valid?(credit_card_id) => true
       from => Date
       to => Date | NilClass
 
       super.tap do
-        _1 => true | false
+        _1 => (true | false)
       end
     end
   end

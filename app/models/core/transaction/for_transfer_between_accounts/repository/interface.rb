@@ -4,8 +4,8 @@ module Core::Transaction::ForTransferBetweenAccounts::Repository::Interface
   module Methods
     def create(transaction:, source_account_id:, destination_account_id:)
       transaction => Core::Transaction::Entity
-      source_account_id => String
-      destination_account_id => String
+      UUID.valid?(source_account_id) => true
+      UUID.valid?(destination_account_id) => true
 
       super.tap do
         _1 => (
@@ -17,8 +17,8 @@ module Core::Transaction::ForTransferBetweenAccounts::Repository::Interface
 
     def upsert(transaction:, source_account_id:, destination_account_id:)
       transaction => Core::Transaction::Entity
-      source_account_id => String | NilClass
-      destination_account_id => String | NilClass
+      source_account_id.nil? || UUID.valid?(source_account_id) => true
+      destination_account_id.nil? || UUID.valid?(destination_account_id) => true
 
       super.tap do
         _1 => (

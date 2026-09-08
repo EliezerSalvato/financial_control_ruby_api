@@ -20,7 +20,7 @@ FactoryBot.define do
 
     trait :with_notifiable do
       notifiable_type { "Transaction" }
-      notifiable_id { SecureRandom.uuid }
+      notifiable_id { UUID.generate }
     end
   end
 end

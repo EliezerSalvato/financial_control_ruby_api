@@ -4,7 +4,7 @@ module Core::Transaction::ForCreditCard::Repository::Interface
   module Methods
     def create(transaction:, credit_card_id:, limit_consumption_type:)
       transaction => Core::Transaction::Entity
-      credit_card_id => String
+      UUID.valid?(credit_card_id) => true
       limit_consumption_type => String | NilClass
 
       super.tap do
@@ -17,7 +17,7 @@ module Core::Transaction::ForCreditCard::Repository::Interface
 
     def upsert(transaction:, credit_card_id:, limit_consumption_type:)
       transaction => Core::Transaction::Entity
-      credit_card_id => String | NilClass
+      credit_card_id.nil? || UUID.valid?(credit_card_id) => true
       limit_consumption_type => String | NilClass
 
       super.tap do

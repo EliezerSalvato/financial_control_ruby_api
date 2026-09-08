@@ -3,7 +3,7 @@ module Core::MonthlyStatement::Repository::Interface
 
   module Methods
     def list(user_id:, month:, year:, statuses: nil, on: nil)
-      user_id => String
+      UUID.valid?(user_id) => true
       month => Integer
       year => Integer
       statuses => Array | NilClass
@@ -15,7 +15,7 @@ module Core::MonthlyStatement::Repository::Interface
     end
 
     def list_transfers(user_id:, month:, year:, statuses: nil, on: nil)
-      user_id => String
+      UUID.valid?(user_id) => true
       month => Integer
       year => Integer
       statuses => Array | NilClass

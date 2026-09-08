@@ -21,7 +21,7 @@ RSpec.describe User::Repository::Adapters::ActiveRecord do
     end
 
     it "returns Failure(:user_not_found) when the user does not exist" do
-      result = repository.find_by_id(id: SecureRandom.uuid)
+      result = repository.find_by_id(id: UUID.generate)
 
       expect(result).to be_a(Solid::Failure)
       expect(result.type).to eq(:user_not_found)

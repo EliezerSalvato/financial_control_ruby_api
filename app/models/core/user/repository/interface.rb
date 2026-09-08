@@ -77,7 +77,7 @@ module Core::User::Repository::Interface
     end
 
     def find_by_id(id:)
-      id => String
+      UUID.valid?(id) => true
 
       super.tap do
         _1 => (

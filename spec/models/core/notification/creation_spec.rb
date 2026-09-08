@@ -55,7 +55,7 @@ RSpec.describe Core::Notification::Creation do
   end
 
   it "rejects notifiable_id without notifiable_type" do
-    result = create_notification(notifiable_id: SecureRandom.uuid)
+    result = create_notification(notifiable_id: UUID.generate)
 
     expect(result).to be_a(Solid::Failure)
     expect(result.value[:input].errors[:notifiable_type]).to be_present
@@ -74,7 +74,7 @@ RSpec.describe Core::Notification::Creation do
   end
 
   describe "dedup_keys" do
-    let(:transaction_id) { SecureRandom.uuid }
+    let(:transaction_id) { UUID.generate }
     let(:data) { { "month" => 8, "year" => 2026, "occurred_on" => Date.new(2026, 8, 11) } }
 
     def create_with_dedup(**overrides)

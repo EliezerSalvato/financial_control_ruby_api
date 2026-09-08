@@ -5,14 +5,14 @@ module Core::Transaction::Settlement::Repository::Interface
     def create(
       transaction_id:, occurred_on:, settled_on:, value:, installment_number:, account_id: nil, source_account_id: nil, destination_account_id: nil, limit_consumed: nil
     )
-      transaction_id => String
+      UUID.valid?(transaction_id) => true
       occurred_on => Date
       settled_on => Date
       value => Numeric
       installment_number => Integer | NilClass
-      account_id => String | NilClass
-      source_account_id => String | NilClass
-      destination_account_id => String | NilClass
+      account_id.nil? || UUID.valid?(account_id) => true
+      source_account_id.nil? || UUID.valid?(source_account_id) => true
+      destination_account_id.nil? || UUID.valid?(destination_account_id) => true
       limit_consumed => Numeric | NilClass
 
       super.tap do
@@ -37,6 +37,7 @@ module Core::Transaction::Settlement::Repository::Interface
 
     def settled_keys(transaction_ids:, occurred_on_range:)
       transaction_ids => Array
+      transaction_ids.all? { |id| UUID.valid?(id) } => true
       occurred_on_range => Range
 
       super.tap do
@@ -45,7 +46,7 @@ module Core::Transaction::Settlement::Repository::Interface
     end
 
     def count_for(transaction_id:)
-      transaction_id => String
+      UUID.valid?(transaction_id) => true
 
       super.tap do
         _1 => Solid::Success(:transaction_settlements_counted, { count: Integer })

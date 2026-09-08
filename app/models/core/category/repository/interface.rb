@@ -19,7 +19,7 @@ module Core::Category::Repository::Interface
 
     def find_by_id(user:, id:)
       user => Core::User::Entity
-      id => String
+      UUID.valid?(id) => true
 
       super.tap do
         _1 => (
@@ -32,7 +32,7 @@ module Core::Category::Repository::Interface
     def exists?(user:, name:, excluding_id: nil)
       user => Core::User::Entity
       name => String
-      excluding_id => String | NilClass
+      excluding_id.nil? || UUID.valid?(excluding_id) => true
 
       super.tap do
         _1 => (true | false)

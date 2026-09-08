@@ -3,14 +3,14 @@ module Core::MonthlyStatus::Closing::Job::Interface
 
   module Methods
     def start(user_id:, date:)
-      user_id => String
+      UUID.valid?(user_id) => true
       date => Date
 
       super
     end
 
     def schedule(user_id:, date:, wait_until:)
-      user_id => String
+      UUID.valid?(user_id) => true
       date => Date
       wait_until => ActiveSupport::TimeWithZone | Time
 

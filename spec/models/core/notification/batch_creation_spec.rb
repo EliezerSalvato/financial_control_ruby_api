@@ -81,13 +81,14 @@ RSpec.describe Core::Notification::BatchCreation do
   end
 
   it "skips duplicate unread items and still creates the others" do
+    transaction_id = UUID.generate
     create(
       :notification,
       :silent,
       user:,
       kind: "transaction.validation.errors",
       notifiable_type: "Transaction::Record",
-      notifiable_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      notifiable_id: transaction_id,
       data: { "month" => 8, "year" => 2026 }
     )
     result = nil
@@ -99,7 +100,7 @@ RSpec.describe Core::Notification::BatchCreation do
             kind: "transaction.validation.errors",
             title: "Duplicate",
             notifiable_type: "Transaction::Record",
-            notifiable_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            notifiable_id: transaction_id,
             data: { month: 8, year: 2026 },
             dedup_keys: %w[month year]
           },

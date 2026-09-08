@@ -4,7 +4,7 @@ module Core::Transaction::ForAccount::Repository::Interface
   module Methods
     def create(transaction:, account_id:)
       transaction => Core::Transaction::Entity
-      account_id => String
+      UUID.valid?(account_id) => true
 
       super.tap do
         _1 => (
@@ -16,7 +16,7 @@ module Core::Transaction::ForAccount::Repository::Interface
 
     def upsert(transaction:, account_id:)
       transaction => Core::Transaction::Entity
-      account_id => String | NilClass
+      account_id.nil? || UUID.valid?(account_id) => true
 
       super.tap do
         _1 => (
