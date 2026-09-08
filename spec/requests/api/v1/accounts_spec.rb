@@ -552,6 +552,42 @@ RSpec.describe "API::V1::Accounts", type: :request do
         expect(response.parsed_body["message"]).to eq("Account deleted successfully")
       end
 
+      it "does not delete an account used by transactions" do
+        create(:transaction, user:, account:)
+
+        expect { destroy_account(account.id) }.not_to change(Account::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body["message"]).to eq(
+          "This account cannot be deleted because it is already used by transactions. To stop using it, inactivate the account."
+        )
+        expect(response.parsed_body.dig("details", "base")).to eq(
+          [ "This account cannot be deleted because it is already used by transactions. To stop using it, inactivate the account." ]
+        )
+      end
+
+      it "does not delete an account used as a transfer source" do
+        create(:transaction, :transfer, user:, source_account: account, destination_account: create(:account, user:))
+
+        expect { destroy_account(account.id) }.not_to change(Account::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq(
+          [ "This account cannot be deleted because it is already used by transactions. To stop using it, inactivate the account." ]
+        )
+      end
+
+      it "does not delete an account used as a transfer destination" do
+        create(:transaction, :transfer, user:, source_account: create(:account, user:), destination_account: account)
+
+        expect { destroy_account(account.id) }.not_to change(Account::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq(
+          [ "This account cannot be deleted because it is already used by transactions. To stop using it, inactivate the account." ]
+        )
+      end
+
       it "returns 404 for another user's account" do
         destroy_account(create(:account).id)
 

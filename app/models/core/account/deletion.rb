@@ -1,8 +1,10 @@
 class Core::Account::Deletion < ApplicationSolidProcess
   deps do
     attribute :account_repository, default: -> { Account::Adapters.repository }
+    attribute :transaction_repository, default: -> { Transaction::Adapters.repository }
 
     validates :account_repository, kind_of: Core::Account::Repository::Interface
+    validates :transaction_repository, kind_of: Core::Transaction::Repository::Interface
   end
 
   input do
@@ -16,6 +18,7 @@ class Core::Account::Deletion < ApplicationSolidProcess
   def call(attributes)
     Given(attributes)
       .and_then(:find_account)
+      .and_then(:reject_if_used_by_transactions)
       .and_then(:destroy_account)
   end
 
@@ -27,6 +30,13 @@ class Core::Account::Deletion < ApplicationSolidProcess
     in Solid::Failure(type: :account_not_found)
       Failure(:account_not_found)
     end
+  end
+
+  def reject_if_used_by_transactions(user:, account:, **)
+    return Continue() unless deps.transaction_repository.exists_by_account_id?(user:, account_id: account.id)
+
+    input.errors.add(:base, :used_by_transactions)
+    Failure(:account_used_by_transactions, input:)
   end
 
   def destroy_account(account:, **)

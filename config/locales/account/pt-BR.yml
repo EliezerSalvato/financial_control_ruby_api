@@ -26,6 +26,7 @@ pt-BR:
             base:
               account_destruction_failed: Falha ao excluir a conta
               account_not_found: Conta não encontrada
+              used_by_transactions: Esta conta não pode ser excluída porque já está em uso em transações. Para deixar de utilizá-la, inative a conta.
         core/account/update/input:
           attributes:
             base:
