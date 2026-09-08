@@ -4,6 +4,18 @@ class Rack::Attack
   end
 
   throttle("login/ip", limit: 10, period: 1.minute) do |req|
-    req.ip if req.post? && req.path == "/api/v1/session"
+    req.ip if req.post? && req.path == "/api/v1/user/authentications"
+  end
+
+  throttle("registrations/ip", limit: 10, period: 1.minute) do |req|
+    req.ip if req.post? && req.path == "/api/v1/user/registrations"
+  end
+
+  throttle("password_resets/ip", limit: 10, period: 1.minute) do |req|
+    req.ip if req.path == "/api/v1/user/password/resets" && (req.post? || req.patch? || req.put?)
+  end
+
+  throttle("session_refreshes/ip", limit: 10, period: 1.minute) do |req|
+    req.ip if req.patch? && req.path == "/api/v1/user/session/refreshes"
   end
 end
