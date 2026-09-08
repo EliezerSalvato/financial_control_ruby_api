@@ -24,6 +24,17 @@ module Core::Transaction::Settlement::Repository::Interface
       end
     end
 
+    def list_for_month(user:, month:, year:, type: nil)
+      user => Core::User::Entity
+      month => Integer
+      year => Integer
+      type => String | NilClass
+
+      super.tap do
+        _1 => Solid::Success(:settled_transactions_listed, { settled_transactions: Array })
+      end
+    end
+
     def settled_keys(transaction_ids:, occurred_on_range:)
       transaction_ids => Array
       occurred_on_range => Range

@@ -81,6 +81,7 @@ pt-BR:
       success: Transação excluída com sucesso
     errors:
       invalid_filters: Filtro inválido
+      invalid_period: Período inválido
       not_found: Transação não encontrada
     recurrence:
       change:

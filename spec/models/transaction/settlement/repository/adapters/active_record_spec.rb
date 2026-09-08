@@ -185,4 +185,122 @@ RSpec.describe Transaction::Settlement::Repository::Adapters::ActiveRecord do
       expect(result.value[:count]).to eq(2)
     end
   end
+
+  describe "#list_for_month" do
+    let(:user_entity) { User::Mapper.to_entity(user) }
+
+    def list_for_month(month: 8, year: 2026, type: nil)
+      repository.list_for_month(user: user_entity, month:, year:, type:)
+    end
+
+    def settle!(transaction, occurred_on:, settled_on: occurred_on, value: 100, installment_number: nil, trait: :for_account)
+      create(
+        :transaction_settlement,
+        trait,
+        financial_transaction: transaction,
+        occurred_on:,
+        settled_on:,
+        value:,
+        installment_number:
+      )
+    end
+
+    it "returns only the current user's settlements whose occurred_on is in the month" do
+      in_month = create(:transaction, :active, user:, account:, description: "August", starts_on: Date.new(2026, 8, 11))
+      next_month = create(:transaction, :active, user:, account:, description: "September", starts_on: Date.new(2026, 9, 11))
+      other = create(:transaction, :active, description: "Other", starts_on: Date.new(2026, 8, 11))
+      in_month_settlement = settle!(in_month, occurred_on: Date.new(2026, 8, 11))
+      settle!(next_month, occurred_on: Date.new(2026, 9, 11))
+      create(
+        :transaction_settlement,
+        :for_account,
+        financial_transaction: other,
+        occurred_on: Date.new(2026, 8, 11)
+      )
+
+      result = list_for_month
+
+      expect(result).to be_a(Solid::Success)
+      expect(result.type).to eq(:settled_transactions_listed)
+      expect(result.value[:settled_transactions]).to contain_exactly(
+        have_attributes(
+          id: in_month_settlement.id,
+          transaction_id: in_month.id,
+          description: "August",
+          occurred_on: Date.new(2026, 8, 11),
+          account_id: account.id
+        )
+      )
+    end
+
+    it "maps credit card and transfer payment targets" do
+      credit_card = create(:credit_card, user:)
+      source = create(:account, user:, name: "Source")
+      destination = create(:account, user:, name: "Destination")
+      card_transaction = create(:transaction, :with_credit_card, :active, user:, credit_card:, description: "Card", starts_on: Date.new(2026, 8, 1))
+      transfer = create(
+        :transaction,
+        :transfer,
+        :active,
+        user:,
+        source_account: source,
+        destination_account: destination,
+        description: "Transfer",
+        starts_on: Date.new(2026, 8, 11)
+      )
+      settle!(card_transaction, occurred_on: Date.new(2026, 8, 1), trait: :for_credit_card)
+      settle!(transfer, occurred_on: Date.new(2026, 8, 11), trait: :for_transfer)
+
+      result = list_for_month
+      by_description = result.value[:settled_transactions].index_by(&:description)
+
+      expect(by_description.fetch("Card")).to have_attributes(
+        credit_card_id: credit_card.id,
+        limit_consumption_type: "upfront",
+        account_id: nil
+      )
+      expect(by_description.fetch("Transfer")).to have_attributes(
+        source_account_id: source.id,
+        destination_account_id: destination.id
+      )
+    end
+
+    it "orders by occurred_on, then description" do
+      later = create(:transaction, :active, user:, account:, description: "Zebra", starts_on: Date.new(2026, 8, 20))
+      earlier_b = create(:transaction, :active, user:, account:, description: "Beta", starts_on: Date.new(2026, 8, 11))
+      earlier_a = create(:transaction, :active, user:, account:, description: "Alpha", starts_on: Date.new(2026, 8, 11))
+      settle!(later, occurred_on: Date.new(2026, 8, 20))
+      settle!(earlier_b, occurred_on: Date.new(2026, 8, 11))
+      settle!(earlier_a, occurred_on: Date.new(2026, 8, 11))
+
+      result = list_for_month
+
+      expect(result.value[:settled_transactions].map(&:description)).to eq(%w[Alpha Beta Zebra])
+    end
+
+    it "filters by payment target type" do
+      credit_card = create(:credit_card, user:)
+      source = create(:account, user:, name: "Source")
+      destination = create(:account, user:, name: "Destination")
+      account_transaction = create(:transaction, :active, user:, account:, description: "Account", starts_on: Date.new(2026, 8, 11))
+      card_transaction = create(:transaction, :with_credit_card, :active, user:, credit_card:, description: "Card", starts_on: Date.new(2026, 8, 1))
+      transfer = create(
+        :transaction,
+        :transfer,
+        :active,
+        user:,
+        source_account: source,
+        destination_account: destination,
+        description: "Transfer",
+        starts_on: Date.new(2026, 8, 11)
+      )
+      settle!(account_transaction, occurred_on: Date.new(2026, 8, 11))
+      settle!(card_transaction, occurred_on: Date.new(2026, 8, 1), trait: :for_credit_card)
+      settle!(transfer, occurred_on: Date.new(2026, 8, 11), trait: :for_transfer)
+
+      expect(list_for_month(type: "credit_card").value[:settled_transactions].map(&:description)).to eq(%w[Card])
+      expect(list_for_month(type: "account").value[:settled_transactions].map(&:description)).to eq(%w[Account])
+      expect(list_for_month(type: "transfer_between_accounts").value[:settled_transactions].map(&:description)).to eq(%w[Transfer])
+    end
+  end
 end

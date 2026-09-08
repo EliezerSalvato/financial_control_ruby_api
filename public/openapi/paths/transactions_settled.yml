@@ -1,0 +1,53 @@
+get:
+  tags: [Transactions]
+  summary: List settled transactions
+  description: |
+    Returns the authenticated user's transaction occurrences that were settled in the given calendar month.
+    An item is included when it has a settlement whose `occurred_on` falls in that month.
+    Pending transactions without a settlement are not included.
+    Recurring and installment transactions appear once per settled occurrence in the month.
+    Each item exposes the settlement amount and dates (`occurred_on`, `settled_on`, `value`, `installment_number`)
+    together with the transaction identity and payment target.
+    Income, expense, and transfers between accounts are included.
+    Optional `type` limits the list to one payment target (`account`, `credit_card`, or `transfer_between_accounts`).
+  operationId: listSettledTransactions
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: month
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 12
+      description: Calendar month of the settlement occurrence (1-12)
+    - name: year
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 9999
+      description: Calendar year of the settlement occurrence
+    - name: type
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [account, credit_card, transfer_between_accounts]
+      description: |
+        Filter by payment target. When omitted, account, credit card, and transfer settlements are all included.
+  responses:
+    "200":
+      description: Settled transactions listed
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/SettledTransactionCollection"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"

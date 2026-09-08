@@ -81,6 +81,7 @@ en:
       success: Transaction deleted successfully
     errors:
       invalid_filters: Invalid filter
+      invalid_period: Invalid period
       not_found: Transaction not found
     recurrence:
       change:

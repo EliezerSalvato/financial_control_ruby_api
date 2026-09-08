@@ -9,6 +9,7 @@ module Transaction
     update: Core::Transaction::Update,
     cancel: Core::Transaction::Cancellation,
     destroy: Core::Transaction::Deletion,
-    settle: Core::Transaction::Settlement::Creation
+    settle: Core::Transaction::Settlement::Creation,
+    list_settled: Core::Transaction::Settled::Listing
   }
 end

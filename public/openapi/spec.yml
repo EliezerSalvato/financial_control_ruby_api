@@ -51,6 +51,8 @@ paths:
     $ref: "./paths/notifications_read_all.yml"
   /api/v1/transactions:
     $ref: "./paths/transactions.yml"
+  /api/v1/transactions/settled:
+    $ref: "./paths/transactions_settled.yml"
   /api/v1/transactions/{id}:
     $ref: "./paths/transaction.yml"
   /api/v1/transactions/{id}/cancel:

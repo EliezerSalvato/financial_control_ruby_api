@@ -1291,6 +1291,114 @@ TransactionCollection:
     meta:
       $ref: "#/PaginationMeta"
 
+SettledTransactionAttributes:
+  type: object
+  description: |
+    One settled occurrence in the requested month.
+    `id` is the settlement id. `transaction_id` is the parent transaction.
+    `value` is the settled amount, not the transaction `current_value`.
+    `account_id` is only included for account-based payment methods.
+    `credit_card_id` and `limit_consumption_type` are only included when `payment_method` is `credit_card`.
+    `source_account_id` and `destination_account_id` are only included when `kind` is `transfer_between_accounts`.
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: Settlement id
+    transaction_id:
+      type: string
+      format: uuid
+    category_id:
+      type: string
+      format: uuid
+      nullable: true
+    description:
+      type: string
+    kind:
+      type: string
+      enum: [income, expense, transfer_between_accounts]
+    status:
+      type: string
+      enum: [pending, active, completed, canceled]
+    payment_method:
+      type: string
+      nullable: true
+      enum: [pix, debit, credit_card, ted, doc, deposit, cash, boleto]
+    recurrence_type:
+      type: string
+      enum: [one_time, installment, recurring]
+    installments_count:
+      type: integer
+      nullable: true
+    ends_on:
+      type: [string, "null"]
+      format: date
+    canceled_on:
+      type: [string, "null"]
+      format: date
+    occurred_on:
+      type: string
+      format: date
+      description: Business date of the settled occurrence. Used to select the calendar month.
+    settled_on:
+      type: string
+      format: date
+      description: Date the occurrence was processed.
+    value:
+      type: string
+      description: Decimal amount as string (precision 15, scale 2) from the settlement
+      example: "100.0"
+    installment_number:
+      type: [integer, "null"]
+      description: Present for installment and recurring occurrences. Null for one-time.
+    account_id:
+      type: string
+      format: uuid
+      description: Present only for account-based payment methods.
+    credit_card_id:
+      type: string
+      format: uuid
+      description: Present only when `payment_method` is `credit_card`.
+    limit_consumption_type:
+      type: string
+      enum: [upfront, monthly]
+      description: Present only when `payment_method` is `credit_card`.
+    source_account_id:
+      type: string
+      format: uuid
+      description: Present only when `kind` is `transfer_between_accounts`.
+    destination_account_id:
+      type: string
+      format: uuid
+      description: Present only when `kind` is `transfer_between_accounts`.
+
+SettledTransactionResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: settled_transaction
+    attributes:
+      $ref: "#/SettledTransactionAttributes"
+
+SettledTransactionCollection:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: collection
+    data:
+      type: array
+      items:
+        $ref: "#/SettledTransactionResource"
+
 MonthlyStatementAttributes:
   type: object
   properties:

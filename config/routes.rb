@@ -22,6 +22,10 @@ Rails.application.routes.draw do
       end
 
       resources :transactions, only: %i[index show create update destroy] do
+        collection do
+          get :settled
+        end
+
         member do
           post :cancel
         end

@@ -22,6 +22,24 @@ module Transaction::Settlement::Repository::Adapters::ActiveRecord
     Failure(:transaction_settlement_creation_failed, errors: Transaction::Settlement::Mapper.to_errors(e.record))
   end
 
+  def list_for_month(user:, month:, year:, type: nil)
+    period = Date.new(year, month, 1)..Date.new(year, month, 1).end_of_month
+
+    records = apply_type_filter(
+      Transaction::Settlement::Record
+        .joins(:financial_transaction)
+        .includes(
+          :for_account,
+          :for_transfer_between_accounts,
+          financial_transaction: [ :for_credit_card ]
+        )
+        .where(transactions: { user_id: user.id }, occurred_on: period),
+      type
+    ).order("transaction_settlements.occurred_on ASC, transactions.description ASC, transaction_settlements.id ASC")
+
+    Success(:settled_transactions_listed, settled_transactions: Transaction::Settled::Mapper.to_entities(records))
+  end
+
   def settled_keys(transaction_ids:, occurred_on_range:)
     keys = Transaction::Settlement::Record
       .where(transaction_id: transaction_ids, occurred_on: occurred_on_range)
@@ -35,6 +53,19 @@ module Transaction::Settlement::Repository::Adapters::ActiveRecord
   end
 
   private
+
+  def apply_type_filter(records, type)
+    case type
+    when Core::Transaction::Settled::Type::ACCOUNT
+      records.where.associated(:for_account)
+    when Core::Transaction::Settled::Type::CREDIT_CARD
+      records.where.associated(:for_credit_card)
+    when Core::Transaction::Settled::Type::TRANSFER_BETWEEN_ACCOUNTS
+      records.where.associated(:for_transfer_between_accounts)
+    else
+      records
+    end
+  end
 
   def create_dependencies!(record, account_id:, source_account_id:, destination_account_id:, limit_consumed:)
     if account_id.present?

@@ -14,6 +14,19 @@ class API::V1::TransactionsController < API::V1::BaseController
     end
   end
 
+  def settled
+    case Transaction.list_settled(settled_params.merge(user: current_user))
+    in Solid::Success(settled_transactions:)
+      data = Transaction::Settled::Serializer.new(settled_transactions)
+
+      render_json_with_success(status: :ok, **data)
+    in Solid::Failure(input:)
+      render_json_with_model_errors(input)
+    else
+      render_json_with_error(status: :bad_request, message: I18n.t("transaction.errors.invalid_period"))
+    end
+  end
+
   def show
     case Transaction.find(id: params[:id], user: current_user)
     in Solid::Success(transaction:)
@@ -84,6 +97,14 @@ class API::V1::TransactionsController < API::V1::BaseController
   end
 
   private
+
+  def settled_params
+    {
+      month: params[:month],
+      year: params[:year],
+      type: params[:type]
+    }
+  end
 
   def list_params
     {
