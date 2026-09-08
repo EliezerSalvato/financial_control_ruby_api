@@ -133,7 +133,8 @@ RSpec.describe Core::Settlement::Processing do
       expect(result.value[:invoices_count]).to eq(1)
       expect(account.reload.current_balance).to eq(BigDecimal("700"))
       expect(credit_card.reload.available_limit).to eq(BigDecimal("2000"))
-      expect(CreditCard::InvoiceSettlement::Record.count).to eq(1)
+      expect(CreditCard::InvoiceSettlement::Record.sole.settled_on).to eq(Date.current)
+      expect(Transaction::Settlement::Record.sole.settled_on).to eq(Date.current)
     end
 
     it "consumes limit before paying the invoice so the invoice sums the cycle rows recorded in the same run" do
@@ -327,6 +328,10 @@ RSpec.describe Core::Settlement::Processing do
 
       expect(result).to be_a(Solid::Success)
       expect(account.reload.current_balance).to eq(BigDecimal("900"))
+      expect(Transaction::Settlement::Record.sole).to have_attributes(
+        occurred_on: Date.new(2026, 8, 11),
+        settled_on: Date.current
+      )
     end
 
     it "ignores the given reference_date and uses the last day of a past month" do
@@ -338,7 +343,10 @@ RSpec.describe Core::Settlement::Processing do
 
       expect(result).to be_a(Solid::Success)
       expect(account.reload.current_balance).to eq(BigDecimal("900"))
-      expect(Transaction::Settlement::Record.sole.occurred_on).to eq(Date.new(2026, 7, 20))
+      expect(Transaction::Settlement::Record.sole).to have_attributes(
+        occurred_on: Date.new(2026, 7, 20),
+        settled_on: Date.current
+      )
     end
 
     it "settles a credit card occurrence and invoice in a past month" do
@@ -363,6 +371,8 @@ RSpec.describe Core::Settlement::Processing do
       expect(result.value[:invoices_count]).to eq(1)
       expect(account.reload.current_balance).to eq(BigDecimal("700"))
       expect(credit_card.reload.available_limit).to eq(BigDecimal("5000"))
+      expect(Transaction::Settlement::Record.sole.settled_on).to eq(Date.current)
+      expect(CreditCard::InvoiceSettlement::Record.sole.settled_on).to eq(Date.current)
     end
 
     it "skips past-month invoices for later upfront installments when the release would exceed total_limit" do

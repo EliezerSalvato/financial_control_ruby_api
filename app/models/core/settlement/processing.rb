@@ -210,7 +210,6 @@ class Core::Settlement::Processing < ApplicationSolidProcess
     settled_count, failures = settle_transaction_entities(
       entities,
       user:,
-      reference_date:,
       kind: :occurrence,
       settled_count:,
       failures:
@@ -225,7 +224,6 @@ class Core::Settlement::Processing < ApplicationSolidProcess
     settled_count, failures = settle_transaction_entities(
       entities,
       user:,
-      reference_date:,
       kind: :transfer,
       settled_count:,
       failures:
@@ -245,8 +243,7 @@ class Core::Settlement::Processing < ApplicationSolidProcess
           opening_date: due_invoice.opening_date,
           closing_date: due_invoice.closing_date,
           due_date: due_invoice.due_date,
-          total_value: due_invoice.total_value,
-          settled_on: reference_date
+          total_value: due_invoice.total_value
         )
 
         case apply_item_result(
@@ -302,14 +299,13 @@ class Core::Settlement::Processing < ApplicationSolidProcess
     end
   end
 
-  def settle_transaction_entities(entities, user:, reference_date:, kind:, settled_count:, failures:)
+  def settle_transaction_entities(entities, user:, kind:, settled_count:, failures:)
     entities.each do |entity|
       result = Core::Transaction::Settlement::Creation.call(
         user:,
         transaction_id: entity.id,
         occurred_on: entity.current_recurrence_on,
-        value: entity.value,
-        settled_on: reference_date
+        value: entity.value
       )
 
       case apply_item_result(
