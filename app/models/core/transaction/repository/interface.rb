@@ -29,6 +29,42 @@ module Core::Transaction::Repository::Interface
       end
     end
 
+    def exists_by_category_id?(user:, category_id:)
+      user => Core::User::Entity
+      category_id => String
+
+      super.tap do
+        _1 => (true | false)
+      end
+    end
+
+    def exists_by_institution_id?(user:, institution_id:)
+      user => Core::User::Entity
+      institution_id => String
+
+      super.tap do
+        _1 => (true | false)
+      end
+    end
+
+    def exists_by_account_id?(user:, account_id:)
+      user => Core::User::Entity
+      account_id => String
+
+      super.tap do
+        _1 => (true | false)
+      end
+    end
+
+    def exists_by_credit_card_id?(user:, credit_card_id:)
+      user => Core::User::Entity
+      credit_card_id => String
+
+      super.tap do
+        _1 => (true | false)
+      end
+    end
+
     def create(user:, attributes:)
       user => Core::User::Entity
       attributes => Hash

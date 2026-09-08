@@ -14,13 +14,41 @@ module Transaction::Repository::Adapters::ActiveRecord
     Failure(:invalid_filters)
   end
 
-  def find_by_id(user:, id:)
-    record = user_transactions(user).find_by(id:)
+    def find_by_id(user:, id:)
+      record = user_transactions(user).find_by(id:)
 
-    return Success(:transaction_found, transaction: Transaction::Mapper.to_entity(record)) if record.present?
+      return Success(:transaction_found, transaction: Transaction::Mapper.to_entity(record)) if record.present?
 
-    Failure(:transaction_not_found)
-  end
+      Failure(:transaction_not_found)
+    end
+
+    def exists_by_category_id?(user:, category_id:)
+      user_transactions(user).exists?(category_id:)
+    end
+
+    def exists_by_institution_id?(user:, institution_id:)
+      account_ids = Account::Record.where(user_id: user.id, institution_id:).select(:id)
+      credit_card_ids = CreditCard::Record.where(user_id: user.id, institution_id:).select(:id)
+
+      Transaction::ForAccount::Record.where(account_id: account_ids).exists? ||
+        Transaction::ForCreditCard::Record.where(credit_card_id: credit_card_ids).exists? ||
+        Transaction::ForTransferBetweenAccounts::Record.where(source_account_id: account_ids).exists? ||
+        Transaction::ForTransferBetweenAccounts::Record.where(destination_account_id: account_ids).exists?
+    end
+
+    def exists_by_account_id?(user:, account_id:)
+      transaction_ids = user_transactions(user).select(:id)
+
+      Transaction::ForAccount::Record.where(transaction_id: transaction_ids, account_id:).exists? ||
+        Transaction::ForTransferBetweenAccounts::Record.where(transaction_id: transaction_ids, source_account_id: account_id).exists? ||
+        Transaction::ForTransferBetweenAccounts::Record.where(transaction_id: transaction_ids, destination_account_id: account_id).exists?
+    end
+
+    def exists_by_credit_card_id?(user:, credit_card_id:)
+      transaction_ids = user_transactions(user).select(:id)
+
+      Transaction::ForCreditCard::Record.where(transaction_id: transaction_ids, credit_card_id:).exists?
+    end
 
   def create(user:, attributes:)
     record = user_transactions(user).create(create_attributes(attributes))
