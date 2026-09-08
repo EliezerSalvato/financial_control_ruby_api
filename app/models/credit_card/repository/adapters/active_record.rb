@@ -43,6 +43,8 @@ module CreditCard::Repository::Adapters::ActiveRecord
 
   def update(credit_card:, attributes:)
     record = CreditCard::Mapper.to_record(credit_card)
+    record.lock!
+    record.reload
     updated = record.update(attributes)
 
     return Success(:credit_card_updated, credit_card: CreditCard::Mapper.to_entity(record)) if updated

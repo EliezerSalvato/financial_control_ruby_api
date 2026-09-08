@@ -39,6 +39,8 @@ module Account::Repository::Adapters::ActiveRecord
 
   def update(account:, attributes:)
     record = Account::Mapper.to_record(account)
+    record.lock!
+    record.reload
     updated = record.update(attributes)
 
     return Success(:account_updated, account: Account::Mapper.to_entity(record)) if updated
