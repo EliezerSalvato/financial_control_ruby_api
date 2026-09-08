@@ -12,6 +12,9 @@ pt-BR:
             base:
               institution_destruction_failed: Falha ao excluir a instituição
               institution_not_found: Instituição não encontrada
+              used_by_transactions: >-
+                Esta instituição não pode ser excluída porque possui contas ou cartões de crédito já utilizados em transações. Para deixar de utilizá-la,
+                inative a instituição.
         core/institution/update/input:
           attributes:
             base:

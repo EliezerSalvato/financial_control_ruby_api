@@ -1,8 +1,10 @@
 class Core::Institution::Deletion < ApplicationSolidProcess
   deps do
     attribute :institution_repository, default: -> { Institution::Adapters.repository }
+    attribute :transaction_repository, default: -> { Transaction::Adapters.repository }
 
     validates :institution_repository, kind_of: Core::Institution::Repository::Interface
+    validates :transaction_repository, kind_of: Core::Transaction::Repository::Interface
   end
 
   input do
@@ -16,6 +18,7 @@ class Core::Institution::Deletion < ApplicationSolidProcess
   def call(attributes)
     Given(attributes)
       .and_then(:find_institution)
+      .and_then(:reject_if_used_by_transactions)
       .and_then(:destroy_institution)
   end
 
@@ -27,6 +30,13 @@ class Core::Institution::Deletion < ApplicationSolidProcess
     in Solid::Failure(type: :institution_not_found)
       Failure(:institution_not_found)
     end
+  end
+
+  def reject_if_used_by_transactions(user:, institution:, **)
+    return Continue() unless deps.transaction_repository.exists_by_institution_id?(user:, institution_id: institution.id)
+
+    input.errors.add(:base, :used_by_transactions)
+    Failure(:institution_used_by_transactions, input:)
   end
 
   def destroy_institution(institution:, **)

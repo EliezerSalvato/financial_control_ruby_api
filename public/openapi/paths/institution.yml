@@ -58,7 +58,10 @@ patch:
 delete:
   tags: [Institutions]
   summary: Delete institution
-  description: Deletes an institution owned by the authenticated user.
+  description: |
+    Deletes an institution owned by the authenticated user.
+    Institutions with accounts or credit cards already used by transactions cannot be deleted; inactivate them instead.
+    Linked accounts and credit cards that are not used by transactions are also deleted.
   operationId: deleteInstitution
   security:
     - bearerAuth: []

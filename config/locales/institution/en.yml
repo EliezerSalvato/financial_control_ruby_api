@@ -12,6 +12,8 @@ en:
             base:
               institution_destruction_failed: Institution deletion failed
               institution_not_found: Institution not found
+              used_by_transactions: This institution cannot be deleted because it has accounts or credit cards already used by transactions. To stop using
+                it, inactivate the institution.
         core/institution/update/input:
           attributes:
             base:

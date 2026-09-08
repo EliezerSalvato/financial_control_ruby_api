@@ -273,11 +273,64 @@ RSpec.describe "API::V1::Institutions", type: :request do
     end
 
     context "when authenticated" do
+      let(:used_by_transactions_message) do
+        "This institution cannot be deleted because it has accounts or credit cards already used by transactions. To stop using it, inactivate the institution."
+      end
+
       it "deletes the institution" do
         expect { destroy_institution(institution.id) }.to change(Institution::Record, :count).by(-1)
 
         expect(response).to have_http_status(:ok)
         expect(response.parsed_body["message"]).to eq("Institution deleted successfully")
+      end
+
+      it "deletes linked accounts and credit cards without transactions" do
+        account = create(:account, :bank_account, user:, institution:)
+        create(:credit_card, user:, institution:, default_payment_account: account)
+
+        expect { destroy_institution(institution.id) }
+          .to change(Institution::Record, :count).by(-1)
+          .and change(Account::Record, :count).by(-1)
+          .and change(CreditCard::Record, :count).by(-1)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body["message"]).to eq("Institution deleted successfully")
+      end
+
+      it "does not delete an institution whose accounts are used by transactions" do
+        account = create(:account, :bank_account, user:, institution:)
+        create(:transaction, user:, account:)
+
+        expect { destroy_institution(institution.id) }.not_to change(Institution::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body["message"]).to eq(used_by_transactions_message)
+        expect(response.parsed_body.dig("details", "base")).to eq([ used_by_transactions_message ])
+        expect(account.reload).to be_present
+      end
+
+      it "does not delete an institution whose credit cards are used by transactions" do
+        account = create(:account, :bank_account, user:, institution:)
+        credit_card = create(:credit_card, user:, institution:, default_payment_account: account)
+        create(:transaction, :with_credit_card, user:, credit_card:)
+
+        expect { destroy_institution(institution.id) }.not_to change(Institution::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body["message"]).to eq(used_by_transactions_message)
+        expect(credit_card.reload).to be_present
+      end
+
+      it "does not delete accounts or credit cards of another institution" do
+        other_institution = create(:institution, user:, name: "Other Bank")
+        other_account = create(:account, :bank_account, user:, institution: other_institution)
+        create(:credit_card, user:, institution: other_institution, default_payment_account: other_account)
+
+        destroy_institution(institution.id)
+
+        expect(response).to have_http_status(:ok)
+        expect(Institution::Record.find_by(id: other_institution.id)).to be_present
+        expect(Account::Record.find_by(id: other_account.id)).to be_present
       end
 
       it "returns 404 for another user's institution" do
