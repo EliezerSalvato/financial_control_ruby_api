@@ -456,6 +456,20 @@ RSpec.describe "API::V1::CreditCards", type: :request do
         expect(response.parsed_body["message"]).to eq("Credit card deleted successfully")
       end
 
+      it "does not delete a credit card used by transactions" do
+        create(:transaction, :with_credit_card, user:, credit_card:)
+
+        expect { destroy_credit_card(credit_card.id) }.not_to change(CreditCard::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body["message"]).to eq(
+          "This credit card cannot be deleted because it is already used by transactions. To stop using it, inactivate the credit card."
+        )
+        expect(response.parsed_body.dig("details", "base")).to eq(
+          [ "This credit card cannot be deleted because it is already used by transactions. To stop using it, inactivate the credit card." ]
+        )
+      end
+
       it "returns 404 for another user's credit card" do
         destroy_credit_card(create(:credit_card).id)
 

@@ -1,8 +1,10 @@
 class Core::CreditCard::Deletion < ApplicationSolidProcess
   deps do
     attribute :credit_card_repository, default: -> { CreditCard::Adapters.repository }
+    attribute :transaction_repository, default: -> { Transaction::Adapters.repository }
 
     validates :credit_card_repository, kind_of: Core::CreditCard::Repository::Interface
+    validates :transaction_repository, kind_of: Core::Transaction::Repository::Interface
   end
 
   input do
@@ -16,6 +18,7 @@ class Core::CreditCard::Deletion < ApplicationSolidProcess
   def call(attributes)
     Given(attributes)
       .and_then(:find_credit_card)
+      .and_then(:reject_if_used_by_transactions)
       .and_then(:destroy_credit_card)
   end
 
@@ -27,6 +30,13 @@ class Core::CreditCard::Deletion < ApplicationSolidProcess
     in Solid::Failure(type: :credit_card_not_found)
       Failure(:credit_card_not_found)
     end
+  end
+
+  def reject_if_used_by_transactions(user:, credit_card:, **)
+    return Continue() unless deps.transaction_repository.exists_by_credit_card_id?(user:, credit_card_id: credit_card.id)
+
+    input.errors.add(:base, :used_by_transactions)
+    Failure(:credit_card_used_by_transactions, input:)
   end
 
   def destroy_credit_card(credit_card:, **)

@@ -12,6 +12,8 @@ pt-BR:
             base:
               credit_card_destruction_failed: Falha ao excluir o cartão de crédito
               credit_card_not_found: Cartão de crédito não encontrado
+              used_by_transactions: Este cartão de crédito não pode ser excluído porque já está em uso em transações. Para deixar de utilizá-lo, inative
+                o cartão.
         core/credit_card/invoice_settlement/creation/input:
           attributes:
             base:

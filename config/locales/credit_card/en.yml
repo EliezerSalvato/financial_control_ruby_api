@@ -12,6 +12,8 @@ en:
             base:
               credit_card_destruction_failed: Credit card deletion failed
               credit_card_not_found: Credit card not found
+              used_by_transactions: This credit card cannot be deleted because it is already used by transactions. To stop using it, inactivate the credit
+                card.
         core/credit_card/invoice_settlement/creation/input:
           attributes:
             base:

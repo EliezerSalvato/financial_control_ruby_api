@@ -62,7 +62,9 @@ patch:
 delete:
   tags: [Credit Cards]
   summary: Delete credit card
-  description: Deletes a credit card owned by the authenticated user.
+  description: |
+    Deletes a credit card owned by the authenticated user.
+    Credit cards already used by transactions cannot be deleted; inactivate them instead.
   operationId: deleteCreditCard
   security:
     - bearerAuth: []
