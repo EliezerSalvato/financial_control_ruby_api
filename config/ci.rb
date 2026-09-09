@@ -1,16 +1,32 @@
 # Run using bin/ci
 #
 # Single source of truth for which checks to run.
-# Machine/environment prep lives in .github/workflows/ci.yml (and locally via Docker).
+# GitHub Actions runs these as parallel jobs via CI_JOB (lint, security, test).
+# Locally, omit CI_JOB to run everything. Machine prep lives in .github/workflows/ci.yml.
+
+job = ENV["CI_JOB"]
+all = job.nil?
+
+if job && !%w[lint security test].include?(job)
+  abort "Unknown CI_JOB=#{job.inspect}. Expected lint, security, or test."
+end
 
 CI.run do
-  step "Setup", "bin/setup --skip-server"
+  if all || job == "test"
+    step "Setup", "bin/setup --skip-server"
+  end
 
-  step "Style: Ruby", "bin/rubocop"
-  step "I18n: Health", "bundle exec i18n-tasks health"
+  if all || job == "lint"
+    step "Style: Ruby", "bin/rubocop"
+    step "I18n: Health", "bundle exec i18n-tasks health"
+  end
 
-  step "Security: Gem audit", "bin/bundler-audit check --update"
-  step "Security: Brakeman code analysis", "bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error"
+  if all || job == "security"
+    step "Security: Gem audit", "bin/bundler-audit check --update"
+    step "Security: Brakeman code analysis", "bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error"
+  end
 
-  step "Test: RSpec", "bin/rspec"
+  if all || job == "test"
+    step "Test: RSpec", "bin/rspec"
+  end
 end

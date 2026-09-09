@@ -1,0 +1,14 @@
+name: Set up CI
+description: Install system packages and Ruby with Bundler cache
+
+runs:
+  using: composite
+  steps:
+    - name: Install packages
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libpq-dev
+
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        bundler-cache: true
