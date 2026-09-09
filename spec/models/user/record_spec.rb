@@ -40,6 +40,32 @@ RSpec.describe User::Record, type: :model do
     end
   end
 
+  describe "paper trail" do
+    it "does not store password_digest on create" do
+      version = user.versions.find_by!(event: "create")
+
+      expect(version.object_changes.keys).not_to include("password_digest")
+      expect(Array(version.object&.keys)).not_to include("password_digest")
+    end
+
+    it "does not store password_digest when other attributes change" do
+      user.update!(first_name: "Updated")
+      version = user.versions.where(event: "update").last
+
+      expect(version.object.keys).not_to include("password_digest")
+      expect(version.object_changes.keys).not_to include("password_digest")
+    end
+
+    it "does not store password_digest when the password changes" do
+      user.update!(password: "new-password123", password_confirmation: "new-password123")
+
+      user.versions.find_each do |version|
+        expect(Array(version.object&.keys)).not_to include("password_digest")
+        expect(Array(version.object_changes&.keys)).not_to include("password_digest")
+      end
+    end
+  end
+
   describe "password authentication" do
     it "stores a password digest and authenticates the correct password" do
       expect(user.password_digest).to be_present
