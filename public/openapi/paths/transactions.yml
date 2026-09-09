@@ -4,7 +4,8 @@ get:
   description: |
     Returns a paginated list of transactions for the authenticated user. Supports Ransack filters via `q`.
     List items include recurrences and `current_value`.
-    Payment targets (`account_id`, `credit_card_id`, `limit_consumption_type`, `source_account_id`, `destination_account_id`) and `tag_ids` are not loaded; use show to read them.
+    Payment targets that apply to the item are present as `null`; targets that do not apply are omitted.
+    `tag_ids` is always `null` on list. Use show to read populated payment targets and tags.
   operationId: listTransactions
   security:
     - bearerAuth: []
@@ -126,6 +127,8 @@ get:
       $ref: "../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"
 
 post:
   tags: [Transactions]
@@ -174,3 +177,5 @@ post:
       $ref: "../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

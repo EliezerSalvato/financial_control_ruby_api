@@ -53,11 +53,13 @@ get:
       $ref: "../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"
 
 post:
   tags: [Institutions]
   summary: Create institution
-  description: Creates a new institution for the authenticated user.
+  description: Creates a new institution for the authenticated user. `name` and `logo_key` are required.
   operationId: createInstitution
   security:
     - bearerAuth: []
@@ -85,3 +87,5 @@ post:
       $ref: "../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

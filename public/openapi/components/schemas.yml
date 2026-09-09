@@ -8,13 +8,14 @@ AuthenticationRequest:
     password:
       type: string
       format: password
-      minLength: 8
+      description: Presence is required. Minimum length is not enforced on sign-in.
     remember_me:
       type: boolean
       default: false
       description: |
         When `true`, the refresh cookie is persistent and the server-side refresh token lasts 30 days.
         When omitted or `false`, the cookie is a session cookie and the server-side token lasts 1 day.
+        The cookie is httpOnly, `SameSite=Lax`, and `Secure` in production.
 
 RegistrationRequest:
   type: object
@@ -44,7 +45,7 @@ RefreshSessionRequest:
       description: |
         When `true`, the rotated refresh cookie is persistent and the server-side token lasts 30 days.
         When omitted or `false`, the cookie is a session cookie and the server-side token lasts 1 day.
-        The `refresh_token` is read from the encrypted httpOnly cookie, not from this body.
+        The `refresh_token` is read from the encrypted httpOnly cookie (`SameSite=Lax`; `Secure` in production), not from this body.
 
 ProfileUpdateRequest:
   type: object
@@ -60,6 +61,7 @@ ProfileUpdateRequest:
       description: |
         Merged into the stored configs. Sent keys overwrite existing ones; keys that are not sent are kept.
         Can be sent alone, without `first_name` or `last_name`.
+        Known key: `locale` (`en` or `pt-BR`). Other keys are stored as-is.
 
 AccountDeletionRequest:
   type: object
@@ -173,7 +175,7 @@ UserAttributes:
     configs:
       type: object
       additionalProperties: true
-      description: User preferences stored as JSON. Defaults to an empty object.
+      description: User preferences stored as JSON. Defaults to an empty object. Known key: `locale` (`en` or `pt-BR`).
 
 UserResource:
   type: object
@@ -444,8 +446,8 @@ InstitutionAttributes:
     name:
       type: string
     logo_key:
-      type: [string, "null"]
-      description: Storage key for the institution logo
+      type: string
+      description: Storage key for the institution logo. Always present; never null.
       example: institutions/nubank.png
     active:
       type: boolean
@@ -468,13 +470,13 @@ InstitutionRequest:
   properties:
     institution:
       type: object
-      required: [name]
+      required: [name, logo_key]
       properties:
         name:
           type: string
         logo_key:
           type: string
-          description: Storage key for the institution logo
+          description: Storage key for the institution logo. Required on create.
           example: institutions/nubank.png
         active:
           type: boolean
@@ -707,7 +709,11 @@ CreditCardAttributes:
       example: "5000.0"
     available_limit:
       type: string
-      description: Decimal amount as string (precision 15, scale 2). Must be between 0 and `total_limit`.
+      description: |
+        Decimal amount as string (precision 15, scale 2).
+        Settlement keeps it between 0 and `total_limit` unless `allow_negative_available_limit` is true,
+        in which case it may go below 0. Updating `total_limit` still rejects a resulting negative
+        `available_limit`, even when that flag is true.
       example: "5000.0"
     closing_day:
       type: integer
@@ -814,7 +820,9 @@ CreditCardUpdateRequest:
           type: boolean
         active:
           type: boolean
-      description: Partial update — only provided fields are changed
+      description: |
+        Partial update — only provided fields are changed.
+        `closing_day` and `due_day` cannot be changed after create.
 
 CreditCardSuccessResponse:
   type: object
@@ -948,7 +956,11 @@ TransactionAttributes:
   type: object
   description: |
     Common attributes, recurrences, and `current_value` are present on list and show.
-    `account_id`, `credit_card_id`, `limit_consumption_type`, `source_account_id`, `destination_account_id`, and `tag_ids` are populated on show, create, update, and cancel. On list they are null.
+    `account_id`, `credit_card_id`, `limit_consumption_type`, `source_account_id`, `destination_account_id`, and `tag_ids` are populated on show, create, update, and cancel.
+    On list, `tag_ids` is always `null`. Payment targets that apply to the item
+    (`account_id` for account-based methods, `credit_card_id` and `limit_consumption_type` for credit card,
+    `source_account_id` and `destination_account_id` for transfers) are present as `null`.
+    Fields that do not apply to the item are omitted, not sent as `null`.
     `account_id` is only included for account-based payment methods.
     `credit_card_id` and `limit_consumption_type` are only included when `payment_method` is `credit_card`.
     `source_account_id` and `destination_account_id` are only included when `kind` is `transfer_between_accounts`.
@@ -993,37 +1005,37 @@ TransactionAttributes:
       type: string
       format: uuid
       nullable: true
-      description: Present only for account-based payment methods. Null on list.
+      description: Present only for account-based payment methods. `null` on list; omitted otherwise.
     credit_card_id:
       type: string
       format: uuid
       nullable: true
-      description: Present only when `payment_method` is `credit_card`. Null on list.
+      description: Present only when `payment_method` is `credit_card`. `null` on list; omitted otherwise.
     limit_consumption_type:
       type: string
       nullable: true
       enum: [upfront, monthly]
       description: |
-        Present only when `payment_method` is `credit_card`. Null on list.
+        Present only when `payment_method` is `credit_card`. `null` on list; omitted otherwise.
         Always `upfront` for `one_time` and `monthly` for `recurring`.
         `installment` may be `upfront` or `monthly`.
     source_account_id:
       type: string
       format: uuid
       nullable: true
-      description: Present only when `kind` is `transfer_between_accounts`. Null on list.
+      description: Present only when `kind` is `transfer_between_accounts`. `null` on list; omitted otherwise.
     destination_account_id:
       type: string
       format: uuid
       nullable: true
-      description: Present only when `kind` is `transfer_between_accounts`. Null on list.
+      description: Present only when `kind` is `transfer_between_accounts`. `null` on list; omitted otherwise.
     tag_ids:
       type: array
       nullable: true
       items:
         type: string
         format: uuid
-      description: Null on list. Populated on show, create, update, and cancel.
+      description: Always `null` on list. Populated on show, create, update, and cancel.
     current_value:
       type: string
       nullable: true
@@ -1677,7 +1689,9 @@ SettlementProcessingRequest:
   properties:
     settlement:
       type: object
-      required: [month, year, reference_date]
+      description: |
+        The job expects `month`, `year`, and `reference_date`. HTTP does not require or validate
+        these fields; missing or invalid values fail asynchronously and become notifications.
       properties:
         month:
           type: integer
@@ -1691,8 +1705,9 @@ SettlementProcessingRequest:
           type: string
           format: date
           description: |
-            Inclusive cutoff date. Required for the current month, where it must be today or yesterday.
+            Inclusive cutoff date. The job requires today or yesterday for the current month.
             Ignored for past months (the last day of the given month is used instead).
+            Future months are rejected by the job, not by HTTP.
 
 NotificationAttributes:
   type: object
@@ -1710,7 +1725,6 @@ NotificationAttributes:
         - `settlement.errors` — settlement process failed as a whole, or an unexpected error occurred
         - `monthly_status.closing.errors` — a month could not be closed (pending items or closing failure)
         - `monthly_status.errors` — unexpected error in monthly closing
-        - `system`, `credit_card_invoice_due`, `transaction_due` — other system notifications
     title:
       type: string
     body:

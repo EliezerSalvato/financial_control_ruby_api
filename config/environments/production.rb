@@ -84,14 +84,15 @@ Rails.application.configure do
   #     - .example.com
   config.hosts = Array(Rails.application.credentials.dig(:hosts)).compact_blank
 
-  # Skip DNS rebinding protection for the health check, docs, and Mission Control.
+  # Skip DNS rebinding protection for the health check, docs, OpenAPI spec, and Mission Control.
   config.host_authorization = {
     exclude: ->(request) {
       path = request.path
 
       path == "/up" ||
         path == "/jobs" || path.start_with?("/jobs/") ||
-        path == "/docs" || path.start_with?("/docs/")
+        path == "/docs" || path.start_with?("/docs/") ||
+        path == "/openapi" || path.start_with?("/openapi/")
     }
   }
 end

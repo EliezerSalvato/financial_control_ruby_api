@@ -1,7 +1,10 @@
 delete:
   tags: [Authentication]
   summary: Revoke all sessions
-  description: Invalidates all active refresh sessions for the authenticated user.
+  description: |
+    Invalidates all active refresh sessions for the authenticated user.
+    The current Bearer token remains valid until it expires (15 minutes).
+    The `refresh_token` cookie is not deleted; the next refresh attempt fails until the user signs in again.
   operationId: revokeSessions
   security:
     - bearerAuth: []
@@ -16,3 +19,5 @@ delete:
       $ref: "../../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../../components/responses.yml#/TooManyRequests"

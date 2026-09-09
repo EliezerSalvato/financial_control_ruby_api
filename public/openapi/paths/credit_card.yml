@@ -18,6 +18,8 @@ get:
       $ref: "../components/responses.yml#/Unauthorized"
     "404":
       $ref: "../components/responses.yml#/NotFound"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"
 
 patch:
   tags: [Credit Cards]
@@ -26,6 +28,7 @@ patch:
     Updates an existing credit card owned by the authenticated user.
     Changing `total_limit` adjusts `available_limit` by the same delta and
     is rejected when that would make `available_limit` negative.
+    `closing_day` and `due_day` cannot be changed after create.
   operationId: updateCreditCard
   security:
     - bearerAuth: []
@@ -58,6 +61,8 @@ patch:
       $ref: "../components/responses.yml#/NotFound"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"
 
 delete:
   tags: [Credit Cards]
@@ -83,3 +88,5 @@ delete:
       $ref: "../components/responses.yml#/NotFound"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

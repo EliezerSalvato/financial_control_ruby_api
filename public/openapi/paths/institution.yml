@@ -18,6 +18,8 @@ get:
       $ref: "../components/responses.yml#/Unauthorized"
     "404":
       $ref: "../components/responses.yml#/NotFound"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"
 
 patch:
   tags: [Institutions]
@@ -54,6 +56,8 @@ patch:
       $ref: "../components/responses.yml#/NotFound"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"
 
 delete:
   tags: [Institutions]
@@ -80,3 +84,5 @@ delete:
       $ref: "../components/responses.yml#/NotFound"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

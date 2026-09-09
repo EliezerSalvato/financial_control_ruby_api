@@ -107,6 +107,8 @@ get:
       $ref: "../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"
 
 post:
   tags: [Credit Cards]
@@ -145,3 +147,5 @@ post:
       $ref: "../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

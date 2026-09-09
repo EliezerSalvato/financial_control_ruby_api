@@ -10,6 +10,7 @@ get:
     together with the transaction identity and payment target.
     Income, expense, and transfers between accounts are included.
     Optional `type` limits the list to one payment target (`account`, `credit_card`, or `transfer_between_accounts`).
+    Missing or out-of-range `month`/`year` return **422**.
   operationId: listSettledTransactions
   security:
     - bearerAuth: []
@@ -45,9 +46,9 @@ get:
         application/json:
           schema:
             $ref: "../components/schemas.yml#/SettledTransactionCollection"
-    "400":
-      $ref: "../components/responses.yml#/BadRequest"
     "401":
       $ref: "../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

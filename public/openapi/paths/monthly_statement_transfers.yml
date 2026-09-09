@@ -21,6 +21,7 @@ get:
     Income, expense, and credit card transactions are not included.
     Pending, active, and completed transfers are included. Transfers canceled before
     `current_recurrence_on` are not included. Included canceled transfers expose `canceled_on`.
+    Missing or out-of-range `month`/`year` return **422**.
   operationId: listMonthlyStatementTransfers
   security:
     - bearerAuth: []
@@ -48,9 +49,9 @@ get:
         application/json:
           schema:
             $ref: "../components/schemas.yml#/MonthlyStatementTransferCollection"
-    "400":
-      $ref: "../components/responses.yml#/BadRequest"
     "401":
       $ref: "../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

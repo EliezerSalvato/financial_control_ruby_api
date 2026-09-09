@@ -12,7 +12,7 @@ UnprocessableContent:
             - has already been taken
 
 Unauthorized:
-  description: Missing or invalid Bearer token
+  description: Missing or invalid Bearer token, or a valid token for an inactive user
   content:
     application/json:
       schema:
@@ -42,4 +42,29 @@ NotFound:
       example:
         status: error
         message: Not found
+        details: {}
+
+TooManyRequests:
+  description: |
+    Rate limit exceeded. Body is Rack::Attack's default `text/plain` (`Retry later`),
+    not the JSON error envelope. See the Rate limiting section in the API description.
+  content:
+    text/plain:
+      schema:
+        type: string
+        example: |
+          Retry later
+
+InternalServerError:
+  description: |
+    Unexpected failure. Uses the JSON error envelope.
+    In production the message is a generic internal-server-error string;
+    outside production it is the exception message.
+  content:
+    application/json:
+      schema:
+        $ref: "./schemas.yml#/ErrorResponse"
+      example:
+        status: error
+        message: Internal Server Error
         details: {}

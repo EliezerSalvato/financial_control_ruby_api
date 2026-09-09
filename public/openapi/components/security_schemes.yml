@@ -5,7 +5,7 @@ bearerAuth:
   description: |
     Session token returned in the JSON body by `POST /api/v1/user/authentications`
     or `PATCH /api/v1/user/session/refreshes`. The refresh token is an encrypted
-    httpOnly cookie, not a Bearer header.
+    httpOnly cookie (`SameSite=Lax`; `Secure` in production), not a Bearer header.
 
     ```http
     Authorization: Bearer <token>

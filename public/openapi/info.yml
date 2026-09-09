@@ -1,5 +1,5 @@
 title: Financial Control Ruby API
-version: "1.0.18"
+version: "1.0.19"
 description: |
   ## Authentication
 
@@ -13,10 +13,10 @@ description: |
 
   1. **Register** — `POST /api/v1/user/registrations`
   2. **Confirm email** — `POST /api/v1/user/email/confirmations` (token from email)
-  3. **Sign in** — `POST /api/v1/user/authentications` → `token` in the JSON body; `refresh_token` is set as an encrypted httpOnly cookie. Optional `remember_me` controls cookie and refresh lifetime
-  4. **Call protected endpoints** with `Authorization: Bearer <token>`
+  3. **Sign in** — `POST /api/v1/user/authentications` → `token` in the JSON body; `refresh_token` is set as an encrypted httpOnly cookie (`SameSite=Lax`; `Secure` in production). Optional `remember_me` controls cookie and refresh lifetime. Sign in **revokes every previous refresh session**. An older Bearer token remains valid until it expires (15 minutes)
+  4. **Call protected endpoints** with `Authorization: Bearer <token>`. A valid token for an **inactive** user is also **401**
   5. **Refresh** — when the session token expires, `PATCH /api/v1/user/session/refreshes` (reads the `refresh_token` cookie; optional `remember_me` in the body)
-  6. **Revoke** — `DELETE /api/v1/user/session/revokes` to invalidate all active sessions (Bearer required)
+  6. **Revoke** — `DELETE /api/v1/user/session/revokes` to invalidate all active sessions (Bearer required). Does not clear the `refresh_token` cookie. Password change, password reset, and email change also revoke refresh sessions without deleting the cookie
 
   ### Token lifetimes
 
@@ -48,6 +48,8 @@ description: |
 
   Native clients may send `Authorization: Bearer <token>` on the WebSocket handshake instead of the query param.
 
+  The handshake is rejected when the token is missing or invalid, or when the user is inactive.
+
   Subscribe to a calendar month owned by the current user:
 
   ```json
@@ -76,20 +78,20 @@ description: |
 
   ```json
   {
-    "kind": "credit_card_invoice_due",
+    "kind": "transaction.validation.errors",
     "notification": {
       "id": "0199...",
       "type": "notification",
-      "attributes": { "id": "0199...", "kind": "credit_card_invoice_due", "title": "...", "read": false }
+      "attributes": { "id": "0199...", "kind": "transaction.validation.errors", "title": "...", "read": false }
     },
     "unread_count": 7
   }
   ```
 
-  When a job creates several notifications for the same user, the server sends a group event without the resource:
+  When a job creates several notifications for the same user, the server sends a group event without the resource. Batch kinds today are `settlement.errors` and `monthly_status.errors`:
 
   ```json
-  { "kind": "daily_summary", "unread_count": 7 }
+  { "kind": "settlement.errors", "unread_count": 7 }
   ```
 
   Distinguish the two by the presence of `notification`. If it is present, the item can be inserted at the top of the list. If it is absent, update the badge from `unread_count` and refetch `GET /api/v1/notifications`.
@@ -111,6 +113,9 @@ description: |
   2. `Accept-Language` header (`pt-BR`, `pt`, `en`, …)
   3. Default: English (`en`)
 
+  The API reads the `locale` cookie; it does not set it. The client must set the cookie when it
+  wants unauthenticated messages in a given locale.
+
   On sign in (`POST /api/v1/user/authentications`), if a valid `locale` cookie is present
   and differs from the user's `configs.locale`, the stored locale is updated to match the cookie.
 
@@ -129,3 +134,54 @@ description: |
   ```json
   { "status": "error", "message": "...", "details": { "field": ["..."] } }
   ```
+
+  Unexpected failures on `/api/v1` return **500** with that JSON envelope. In production the message is a generic internal-server-error string; outside production it is the exception message.
+
+  Rate-limit responses (**429**) are **not** JSON. They are Rack::Attack's default `text/plain` body (`Retry later`).
+
+  ---
+
+  ## Rate limiting
+
+  All HTTP endpoints except `/up` and `/cable` (any method) are throttled:
+
+  | Scope | Limit |
+  |-------|-------|
+  | General | 300 requests / 5 minutes per IP, hashed Bearer token, and user id |
+  | Auth endpoints | 10 requests / 1 minute |
+
+  Dedicated auth throttles apply to:
+
+  - `POST /api/v1/user/authentications` (per IP and email)
+  - `POST /api/v1/user/registrations` (per IP and email)
+  - `POST /api/v1/user/password/resets` (per IP and email)
+  - `PATCH /api/v1/user/password/resets` (per IP and token)
+  - `PATCH /api/v1/user/session/refreshes` (per IP and refresh cookie)
+
+  Every operation documents **429**. Email confirmation, password change, email change, and session revoke use only the general throttle.
+
+  ---
+
+  ## Time zone
+
+  The API uses `America/Sao_Paulo`. Calendar months, settlement `reference_date`, and production recurring jobs follow that zone.
+
+  Production jobs (`config/recurring.yml`):
+
+  - Settle open months daily at 03:00
+  - Close previous open months at 05:00 on the 1st
+  - Clear finished Solid Queue jobs hourly at minute 12
+
+  ---
+
+  ## Other HTTP surfaces
+
+  These are not OpenAPI operations:
+
+  | Path | Purpose |
+  |------|---------|
+  | `GET /up` | Rails health check |
+  | `GET /docs` | Redirects to the Redoc UI |
+  | `/openapi/*` | Static OpenAPI files (Redoc loads `/openapi/spec.yml`) |
+  | `/jobs` | Mission Control Jobs (HTTP basic auth) |
+  | `/cable` | Action Cable (see WebSockets) |

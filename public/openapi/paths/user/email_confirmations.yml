@@ -20,3 +20,5 @@ post:
             $ref: "../../components/schemas.yml#/MessageSuccessResponse"
     "422":
       $ref: "../../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../../components/responses.yml#/TooManyRequests"

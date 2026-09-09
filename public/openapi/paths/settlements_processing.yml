@@ -2,8 +2,14 @@ post:
   tags: [Settlements]
   summary: Enqueue settlement processing
   description: |
-    Enqueues a background job that processes due occurrences, transfers, and credit-card invoices
-    for the authenticated user in the given calendar month.
+    Accepts a settlement request and returns **202** immediately. HTTP does not validate `month`,
+    `year`, or `reference_date` beyond requiring the `settlement` wrapper (missing wrapper → 400).
+
+    A background job is enqueued unless that calendar month is already `processing`. In that case
+    the response is still 202 with the same queued message, and no new job is enqueued.
+
+    The job processes due occurrences, transfers, and credit-card invoices for the authenticated
+    user in the given calendar month.
 
     For the current month, `reference_date` must be today or yesterday. For a past month, `reference_date`
     is ignored and the last day of that month is used. Future months are rejected by the job.
@@ -14,8 +20,8 @@ post:
     A month that precedes a closed `monthly_status` is also rejected. Later open or missing months
     do not block processing.
 
-    Domain failures (insufficient balance or limit) are logged by the job and do not appear on this
-    response.
+    Those domain rules and item failures (insufficient balance or limit) run asynchronously.
+    They become notifications; they do not appear on this HTTP response.
   operationId: processSettlements
   security:
     - bearerAuth: []
@@ -32,7 +38,9 @@ post:
             reference_date: "2026-08-28"
   responses:
     "202":
-      description: Settlement processing enqueued
+      description: |
+        Accepted. A job is enqueued unless the month is already processing.
+        The message is the same in both cases.
       content:
         application/json:
           schema:
@@ -44,3 +52,5 @@ post:
       $ref: "../components/responses.yml#/BadRequest"
     "401":
       $ref: "../components/responses.yml#/Unauthorized"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

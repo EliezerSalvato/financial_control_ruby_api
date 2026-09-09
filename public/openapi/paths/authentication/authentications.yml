@@ -5,10 +5,12 @@ post:
     Authenticates with email and password.
     The user must be **verified** and **active**.
     Returns a short-lived session `token` in the JSON body and sets an encrypted
-    httpOnly `refresh_token` cookie (`SameSite=Lax`). The refresh token is never
+    httpOnly `refresh_token` cookie (`SameSite=Lax`; `Secure` in production). The refresh token is never
     returned in the JSON body. Optional `remember_me` controls cookie and refresh lifetime.
     When a valid `locale` cookie is present and differs from `configs.locale`, the user's
     locale is updated to match the cookie. Other config keys are kept.
+    Sign in **revokes every previous refresh session** for that user, so only the new refresh
+    cookie is valid. An older Bearer token remains valid until it expires (15 minutes).
   operationId: createAuthentication
   requestBody:
     required: true
@@ -36,7 +38,7 @@ post:
           schema:
             type: string
           description: |
-            Encrypted httpOnly `refresh_token` cookie (`SameSite=Lax`).
+            Encrypted httpOnly `refresh_token` cookie (`SameSite=Lax`; `Secure` in production).
             Session cookie by default. Persistent (30 days) when `remember_me` is true.
       content:
         application/json:
@@ -59,3 +61,5 @@ post:
                     configs: {}
     "422":
       $ref: "../../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../../components/responses.yml#/TooManyRequests"

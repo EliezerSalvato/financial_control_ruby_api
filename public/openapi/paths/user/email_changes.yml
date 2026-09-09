@@ -4,6 +4,9 @@ patch:
   description: |
     Changes the email of the authenticated user.
     Requires the current password. Marks the user as unverified and sends a new confirmation email.
+    Revokes all refresh sessions. The current Bearer token remains valid until it expires
+    (the user stays authenticated on this request). The `refresh_token` cookie is not deleted.
+    Sign in with the new email is blocked until the user confirms it.
   operationId: changeEmail
   security:
     - bearerAuth: []
@@ -27,3 +30,5 @@ patch:
       $ref: "../../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../../components/responses.yml#/TooManyRequests"

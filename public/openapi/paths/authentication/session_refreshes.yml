@@ -29,7 +29,7 @@ patch:
           schema:
             type: string
           description: |
-            Rotated encrypted httpOnly `refresh_token` cookie (`SameSite=Lax`).
+            Rotated encrypted httpOnly `refresh_token` cookie (`SameSite=Lax`; `Secure` in production).
             Session cookie by default. Persistent (30 days) when `remember_me` is true.
       content:
         application/json:
@@ -37,3 +37,5 @@ patch:
             $ref: "../../components/schemas.yml#/TokensSuccessResponse"
     "422":
       $ref: "../../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../../components/responses.yml#/TooManyRequests"

@@ -6,6 +6,7 @@ get:
     Each item exposes the invoice cycle (`opening_date`, `closing_date`, `due_date`), the payment account,
     the settled amount (`total_value`), the released limit, and `settled_on`.
     Invoices from the previous or next month are not included.
+    Missing or out-of-range `month`/`year` return **422**.
   operationId: listCreditCardInvoiceSettlements
   security:
     - bearerAuth: []
@@ -33,9 +34,9 @@ get:
         application/json:
           schema:
             $ref: "../components/schemas.yml#/CreditCardInvoiceSettlementCollection"
-    "400":
-      $ref: "../components/responses.yml#/BadRequest"
     "401":
       $ref: "../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

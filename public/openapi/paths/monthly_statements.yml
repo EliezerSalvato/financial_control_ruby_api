@@ -8,7 +8,7 @@ get:
     does not exist in that month). Account items use the first and last days of the month and have no `due_date`.
     `payment_method` is `credit_card` or `account`. `value` and `starts_on` come from the latest recurrence
     whose `starts_on` is on or before the period closing date. `first_recurrence_on` is the earliest
-    `starts_on` across all recurrences of the transaction.     `current_recurrence_on` is that first
+    `starts_on` across all recurrences of the transaction. `current_recurrence_on` is that first
     recurrence day projected onto the period opening month. If that date is before `opening_date`,
     it advances one month. If that date is after `closing_date` and the previous month is shorter
     than the cycle closing day, it moves to the day after that previous month's last day so it
@@ -20,6 +20,7 @@ get:
     Transfers between accounts are not included.
     Pending, active, and completed transactions are included. Transactions canceled before
     `current_recurrence_on` are not included. Included canceled transactions expose `canceled_on`.
+    Missing or out-of-range `month`/`year` return **422**.
   operationId: listMonthlyStatements
   security:
     - bearerAuth: []
@@ -47,9 +48,9 @@ get:
         application/json:
           schema:
             $ref: "../components/schemas.yml#/MonthlyStatementCollection"
-    "400":
-      $ref: "../components/responses.yml#/BadRequest"
     "401":
       $ref: "../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

@@ -2,7 +2,7 @@ delete:
   tags: [User]
   summary: Delete account
   description: Permanently deletes the authenticated user. Requires the current password.
-  operationId: deleteAccount
+  operationId: deleteUserAccount
   security:
     - bearerAuth: []
   requestBody:
@@ -24,3 +24,5 @@ delete:
       $ref: "../../components/responses.yml#/Unauthorized"
     "422":
       $ref: "../../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../../components/responses.yml#/TooManyRequests"
