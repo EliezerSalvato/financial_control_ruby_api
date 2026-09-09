@@ -24,6 +24,8 @@ en:
           attributes:
             base:
               invoice_already_paid: Expenses cannot be posted to this card because the invoice for this period has already been paid
+            credit_card_id:
+              not_found: was not found
         core/credit_card/update/input:
           attributes:
             base:

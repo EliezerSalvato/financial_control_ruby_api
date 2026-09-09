@@ -24,6 +24,8 @@ pt-BR:
           attributes:
             base:
               invoice_already_paid: Não é possível lançar despesas neste cartão, pois a fatura deste período já foi paga
+            credit_card_id:
+              not_found: não foi encontrado
         core/credit_card/update/input:
           attributes:
             base:

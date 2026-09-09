@@ -620,6 +620,30 @@ RSpec.describe "API::V1::Transactions", type: :request do
         expect(response.parsed_body.dig("details", "credit_card_id")).to be_present
       end
 
+      it "does not reveal whether another user's invoice is paid" do
+        other_card = create(:credit_card, closing_day: 10, due_day: 17)
+        create(
+          :credit_card_invoice_settlement,
+          credit_card: other_card,
+          payment_account: other_card.default_payment_account,
+          opening_date: Date.new(2026, 7, 11),
+          closing_date: Date.new(2026, 8, 10),
+          due_date: Date.new(2026, 8, 17)
+        )
+
+        create_transaction(
+          create_params(
+            payment_method: "credit_card",
+            starts_on: "2026-08-01",
+            credit_card_id: other_card.id
+          ).tap { |params| params[:transaction].delete(:account_id) }
+        )
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "credit_card_id")).to be_present
+        expect(response.parsed_body.dig("details", "base")).to be_blank
+      end
+
       it "rejects installment without ends_on" do
         create_transaction(create_params(recurrence_type: "installment"))
 
@@ -1183,6 +1207,32 @@ RSpec.describe "API::V1::Transactions", type: :request do
         expect(response.parsed_body.dig("details", "base")).to eq([
           "Expenses cannot be posted to this card because the invoice for this period has already been paid"
         ])
+      end
+
+      it "does not reveal whether another user's invoice is paid when changing credit_card_id" do
+        other_card = create(:credit_card, closing_day: 10, due_day: 17)
+        create(
+          :credit_card_invoice_settlement,
+          credit_card: other_card,
+          payment_account: other_card.default_payment_account,
+          opening_date: Date.new(2026, 7, 11),
+          closing_date: Date.new(2026, 8, 10),
+          due_date: Date.new(2026, 8, 17)
+        )
+        card_transaction = create(
+          :transaction,
+          :with_credit_card,
+          user:,
+          credit_card:,
+          category:,
+          starts_on: Date.new(2026, 8, 1)
+        )
+
+        update_transaction(card_transaction.id, transaction: { credit_card_id: other_card.id })
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "credit_card_id")).to be_present
+        expect(response.parsed_body.dig("details", "base")).to be_blank
       end
 
       it "keeps an already linked inactive tag" do

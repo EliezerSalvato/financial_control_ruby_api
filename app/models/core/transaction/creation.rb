@@ -86,9 +86,10 @@ class Core::Transaction::Creation < ApplicationSolidProcess
     )
   end
 
-  def ensure_invoice_unpaid(starts_on:, ends_on:, payment_method:, credit_card_id:, recurrence_type:, **)
+  def ensure_invoice_unpaid(user:, starts_on:, ends_on:, payment_method:, credit_card_id:, recurrence_type:, **)
     with_nested_process(
       Core::CreditCard::InvoiceSettlement::EnsureUnpaid.call(
+        user:,
         from: starts_on,
         to: invoice_coverage_to(recurrence_type:, starts_on:, ends_on:),
         payment_method:,

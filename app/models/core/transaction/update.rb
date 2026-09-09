@@ -139,6 +139,7 @@ class Core::Transaction::Update < ApplicationSolidProcess
   end
 
   def ensure_invoice_unpaid(
+    user:,
     transaction:,
     starts_on:,
     ends_on:,
@@ -164,6 +165,7 @@ class Core::Transaction::Update < ApplicationSolidProcess
 
     with_nested_process(
       Core::CreditCard::InvoiceSettlement::EnsureUnpaid.call(
+        user:,
         from: date_from,
         to: invoice_coverage_to(recurrence_type: effective_recurrence_type, starts_on: date_from, ends_on: effective_ends_on),
         payment_method: effective_payment_method,

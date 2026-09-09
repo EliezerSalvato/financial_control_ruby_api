@@ -3,6 +3,7 @@ require "rails_helper"
 RSpec.describe Core::CreditCard::InvoiceSettlement::EnsureUnpaid do
   subject(:result) do
     described_class.call(
+      user: user_entity,
       from:,
       to:,
       payment_method:,
@@ -11,6 +12,7 @@ RSpec.describe Core::CreditCard::InvoiceSettlement::EnsureUnpaid do
   end
 
   let(:user) { create(:user, :verified) }
+  let(:user_entity) { User::Mapper.to_entity(user) }
   let(:account) { create(:account, :bank_account, user:) }
   let(:credit_card) { create(:credit_card, user:, default_payment_account: account, closing_day: 10, due_day: 17) }
   let(:from) { Date.new(2026, 8, 1) }
@@ -39,6 +41,7 @@ RSpec.describe Core::CreditCard::InvoiceSettlement::EnsureUnpaid do
   it "skips the check for an account payment" do
     pay_invoice
     result = described_class.call(
+      user: user_entity,
       from:,
       to:,
       payment_method: Core::Transaction::PaymentMethod::PIX,
@@ -55,6 +58,7 @@ RSpec.describe Core::CreditCard::InvoiceSettlement::EnsureUnpaid do
   it "continues when the paid invoice is outside the period" do
     pay_invoice
     result = described_class.call(
+      user: user_entity,
       from: Date.new(2026, 8, 11),
       to: Date.new(2026, 8, 11),
       payment_method:,
@@ -76,6 +80,7 @@ RSpec.describe Core::CreditCard::InvoiceSettlement::EnsureUnpaid do
     pay_invoice
 
     result = described_class.call(
+      user: user_entity,
       from: Date.new(2026, 7, 5),
       to: nil,
       payment_method:,
@@ -84,5 +89,23 @@ RSpec.describe Core::CreditCard::InvoiceSettlement::EnsureUnpaid do
 
     expect(result).to be_a(Solid::Failure)
     expect(result.type).to eq(:invoice_already_paid)
+  end
+
+  it "returns credit_card_id not_found for another user's paid invoice instead of invoice_already_paid" do
+    other_card = create(:credit_card, closing_day: 10, due_day: 17)
+    pay_invoice(card: other_card)
+
+    result = described_class.call(
+      user: user_entity,
+      from:,
+      to:,
+      payment_method:,
+      credit_card_id: other_card.id
+    )
+
+    expect(result).to be_a(Solid::Failure)
+    expect(result.type).to eq(:invalid_input)
+    expect(result.value[:input].errors.details[:credit_card_id]).to include(error: :not_found)
+    expect(result.value[:input].errors.details[:base]).not_to include(error: :invoice_already_paid)
   end
 end
