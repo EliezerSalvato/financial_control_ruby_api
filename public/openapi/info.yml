@@ -1,5 +1,5 @@
 title: Financial Control Ruby API
-version: "1.0.19"
+version: "1.0.20"
 description: |
   ## Authentication
 
@@ -182,6 +182,6 @@ description: |
   |------|---------|
   | `GET /up` | Rails health check |
   | `GET /docs` | Redirects to the Redoc UI |
-  | `/openapi/*` | Static OpenAPI files (Redoc loads `/openapi/spec.yml`) |
+  | `/openapi/*` | Static OpenAPI files (Redoc loads `/openapi/bundled.yml`) |
   | `/jobs` | Mission Control Jobs (HTTP basic auth) |
   | `/cable` | Action Cable (see WebSockets) |

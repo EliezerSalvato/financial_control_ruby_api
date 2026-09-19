@@ -1,0 +1,4638 @@
+openapi: 3.1.0
+info:
+  title: Financial Control Ruby API
+  version: 1.0.23
+  description: |
+    ## Authentication
+
+    Protected endpoints require a **Bearer session token** in the `Authorization` header:
+
+    ```http
+    Authorization: Bearer <token>
+    ```
+
+    ### Flow
+
+    1. **Register** — `POST /api/v1/user/registrations`
+    2. **Confirm email** — `POST /api/v1/user/email/confirmations` (token from email)
+    3. **Sign in** — `POST /api/v1/user/authentications` → `token` in the JSON body; `refresh_token` is set as an encrypted httpOnly cookie (`SameSite=Lax`; `Secure` in production). Optional `remember_me` controls cookie and refresh lifetime. Sign in **revokes every previous refresh session**. An older Bearer token remains valid until it expires (15 minutes)
+    4. **Call protected endpoints** with `Authorization: Bearer <token>`. A valid token for an **inactive** user is also **401**
+    5. **Refresh** — when the session token expires, `PATCH /api/v1/user/session/refreshes` (reads the `refresh_token` cookie; optional `remember_me` in the body)
+    6. **Revoke** — `DELETE /api/v1/user/session/revokes` to invalidate all active sessions (Bearer required). Does not clear the `refresh_token` cookie. Password change, password reset, and email change also revoke refresh sessions without deleting the cookie
+
+    ### Token lifetimes
+
+    | Token | Lifetime |
+    |-------|----------|
+    | Session (`token`) | 15 minutes |
+    | Refresh cookie (`remember_me: true`) | 30 days |
+    | Refresh cookie (without `remember_me`) | session cookie / 1 day server-side |
+    | Email confirmation | 24 hours |
+    | Password reset | 15 minutes |
+
+    ### Public vs protected
+
+    | Access | Endpoints |
+    |--------|-----------|
+    | Public | registrations, authentications, email confirmations, password resets, session refreshes |
+    | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, monthly statuses, settlements, transactions, notifications, profiles, account deletion, email changes, password changes, session revokes |
+    | Session token (query or `Authorization`) | Action Cable at `/cable` (`MonthlyStatusChannel`, `NotificationChannel`) |
+
+    ---
+
+    ## WebSockets
+
+    Action Cable is mounted at `/cable`. Use the same session token as the REST API:
+
+    ```
+    ws://localhost:3000/cable?token=<token>
+    ```
+
+    Native clients may send `Authorization: Bearer <token>` on the WebSocket handshake instead of the query param.
+
+    The handshake is rejected when the token is missing or invalid, or when the user is inactive.
+
+    Subscribe to a calendar month owned by the current user:
+
+    ```json
+    { "channel": "MonthlyStatusChannel", "month": 8, "year": 2026 }
+    ```
+
+    The monthly status row must already exist (same identity as `GET /api/v1/monthly_statuses`). Otherwise the subscription is rejected.
+
+    On subscribe, and whenever the `processing` column changes, the server sends:
+
+    ```json
+    { "processing": true, "last_processed_at": null }
+    ```
+
+    `last_processed_at` is an ISO 8601 timestamp, or `null` when the month has never finished a processing run.
+
+    Subscribe to the current user's notification stream (no params):
+
+    ```json
+    { "channel": "NotificationChannel" }
+    ```
+
+    There is no initial payload on subscribe. The client loads unread count and the first page via `GET /api/v1/notifications`.
+
+    When a single notification is created, the server sends the notification kind, the JSON:API resource, and the current unread count:
+
+    ```json
+    {
+      "kind": "transaction.validation.errors",
+      "notification": {
+        "id": "0199...",
+        "type": "notification",
+        "attributes": { "id": "0199...", "kind": "transaction.validation.errors", "title": "...", "read": false }
+      },
+      "unread_count": 7
+    }
+    ```
+
+    When a job creates several notifications for the same user, the server sends a group event without the resource. Batch kinds today are `settlement.errors` and `monthly_status.errors`:
+
+    ```json
+    { "kind": "settlement.errors", "unread_count": 7 }
+    ```
+
+    Distinguish the two by the presence of `notification`. If it is present, the item can be inserted at the top of the list. If it is absent, update the badge from `unread_count` and refetch `GET /api/v1/notifications`.
+
+    ---
+
+    ## Locale
+
+    When the request is authenticated, API messages follow this order:
+
+    1. `configs.locale` from the current user (`en` or `pt-BR`)
+    2. Default: English (`en`)
+
+    Cookie and `Accept-Language` are ignored while the user is authenticated.
+
+    When the request is not authenticated, API messages follow this order:
+
+    1. `locale` cookie (`en` or `pt-BR`)
+    2. `Accept-Language` header (`pt-BR`, `pt`, `en`, …)
+    3. Default: English (`en`)
+
+    The API reads the `locale` cookie; it does not set it. The client must set the cookie when it
+    wants unauthenticated messages in a given locale.
+
+    On sign in (`POST /api/v1/user/authentications`), if a valid `locale` cookie is present
+    and differs from the user's `configs.locale`, the stored locale is updated to match the cookie.
+
+    ---
+
+    ## Response envelope
+
+    Success:
+
+    ```json
+    { "status": "success", "type": "object", "data": {}, "message": "optional" }
+    ```
+
+    Error:
+
+    ```json
+    { "status": "error", "message": "...", "details": { "field": ["..."] } }
+    ```
+
+    Unexpected failures on `/api/v1` return **500** with that JSON envelope. In production the message is a generic internal-server-error string; outside production it is the exception message.
+
+    Rate-limit responses (**429**) are **not** JSON. They are Rack::Attack's default `text/plain` body (`Retry later`).
+
+    ---
+
+    ## Rate limiting
+
+    All HTTP endpoints except `/up` and `/cable` (any method) are throttled:
+
+    | Scope | Limit |
+    |-------|-------|
+    | General | 300 requests / 5 minutes per IP, hashed Bearer token, and user id |
+    | Auth endpoints | 10 requests / 1 minute |
+
+    Dedicated auth throttles apply to:
+
+    - `POST /api/v1/user/authentications` (per IP and email)
+    - `POST /api/v1/user/registrations` (per IP and email)
+    - `POST /api/v1/user/password/resets` (per IP and email)
+    - `PATCH /api/v1/user/password/resets` (per IP and token)
+    - `PATCH /api/v1/user/session/refreshes` (per IP and refresh cookie)
+
+    Every operation documents **429**. Email confirmation, password change, email change, and session revoke use only the general throttle.
+
+    ---
+
+    ## Time zone
+
+    The API uses `America/Sao_Paulo`. Calendar months, settlement `reference_date`, and production recurring jobs follow that zone.
+
+    Production jobs (`config/recurring.yml`):
+
+    - Settle open months daily at 03:00
+    - Close previous open months at 05:00 on the 1st
+    - Clear finished Solid Queue jobs hourly at minute 12
+
+    ---
+
+    ## Other HTTP surfaces
+
+    These are not OpenAPI operations:
+
+    | Path | Purpose |
+    |------|---------|
+    | `GET /up` | Rails health check |
+    | `GET /docs` | Redirects to the Redoc UI |
+    | `/openapi/*` | Static OpenAPI files (Redoc loads `/openapi/bundled.yml`) |
+    | `/jobs` | Mission Control Jobs (HTTP basic auth) |
+    | `/cable` | Action Cable (see WebSockets) |
+servers:
+  - url: http://localhost:3000
+    description: Local development
+tags:
+  - name: Authentication
+    description: Sign in, refresh session, and revoke sessions
+  - name: User
+    description: Registration, profile, account, email, and password
+  - name: Tags
+    description: User-owned labels for categorizing transactions
+  - name: Categories
+    description: User-owned categories for organizing transactions
+  - name: Institutions
+    description: User-owned financial institutions
+  - name: Accounts
+    description: User-owned financial accounts (bank accounts and cash)
+  - name: Credit Cards
+    description: User-owned credit cards
+  - name: Transactions
+    description: User-owned financial transactions (income, expense, and transfers)
+  - name: Monthly Statements
+    description: Monthly statement items for accounts, credit cards, and transfers between accounts
+  - name: Monthly Statuses
+    description: Open or closed status of a calendar month for the authenticated user, including processing updates over Action Cable
+  - name: Settlements
+    description: Enqueue processing of due transaction occurrences, transfers, and credit-card invoices
+  - name: Notifications
+    description: User notifications with cursor pagination, unread count, and real-time delivery over Action Cable
+paths:
+  /api/v1/tags:
+    get:
+      tags:
+        - Tags
+      summary: List tags
+      description: Returns a paginated list of tags for the authenticated user. Supports Ransack filters via `q`.
+      operationId: listTags
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q[name_cont]
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter tags whose name contains the given value
+        - name: q[active_eq]
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by active flag
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            example: name asc
+          description: Sort expression (default `active desc, name asc`)
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Tags listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagCollection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+        - Tags
+      summary: Create tag
+      description: Creates a new tag for the authenticated user.
+      operationId: createTag
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagRequest'
+            example:
+              tag:
+                name: Vacation
+                color: '#3B82F6'
+                active: true
+      responses:
+        '201':
+          description: Tag created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/tags/{id}:
+    get:
+      tags:
+        - Tags
+      summary: Show tag
+      description: Returns a single tag owned by the authenticated user.
+      operationId: showTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Tag found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags:
+        - Tags
+      summary: Update tag
+      description: Updates an existing tag owned by the authenticated user.
+      operationId: updateTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagUpdateRequest'
+            example:
+              tag:
+                name: Vacation
+                color: '#10B981'
+                active: false
+      responses:
+        '200':
+          description: Tag updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+        - Tags
+      summary: Delete tag
+      description: Deletes a tag owned by the authenticated user.
+      operationId: deleteTag
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Tag deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/categories:
+    get:
+      tags:
+        - Categories
+      summary: List categories
+      description: Returns a paginated list of categories for the authenticated user. Supports Ransack filters via `q`.
+      operationId: listCategories
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q[name_cont]
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter categories whose name contains the given value
+        - name: q[active_eq]
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by active flag
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            example: name asc
+          description: Sort expression (default `active desc, name asc`)
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Categories listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryCollection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+        - Categories
+      summary: Create category
+      description: Creates a new category for the authenticated user.
+      operationId: createCategory
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryRequest'
+            example:
+              category:
+                name: Vacation
+                color: '#3B82F6'
+                active: true
+      responses:
+        '201':
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategorySuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/categories/{id}:
+    get:
+      tags:
+        - Categories
+      summary: Show category
+      description: Returns a single category owned by the authenticated user.
+      operationId: showCategory
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Category found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategorySuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags:
+        - Categories
+      summary: Update category
+      description: Updates an existing category owned by the authenticated user.
+      operationId: updateCategory
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryUpdateRequest'
+            example:
+              category:
+                name: Vacation
+                color: '#10B981'
+                active: false
+      responses:
+        '200':
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategorySuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+        - Categories
+      summary: Delete category
+      description: |
+        Deletes a category owned by the authenticated user.
+        Categories already used by transactions cannot be deleted; inactivate them instead.
+      operationId: deleteCategory
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Category deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/institutions:
+    get:
+      tags:
+        - Institutions
+      summary: List institutions
+      description: Returns a paginated list of institutions for the authenticated user. Supports Ransack filters via `q`.
+      operationId: listInstitutions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q[name_cont]
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter institutions whose name contains the given value
+        - name: q[active_eq]
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by active flag
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            example: name asc
+          description: Sort expression (default `active desc, name asc`)
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Institutions listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstitutionCollection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+        - Institutions
+      summary: Create institution
+      description: Creates a new institution for the authenticated user. `name` and `logo_key` are required.
+      operationId: createInstitution
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstitutionRequest'
+            example:
+              institution:
+                name: Nubank
+                logo_key: institutions/nubank.png
+                active: true
+      responses:
+        '201':
+          description: Institution created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstitutionSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/institutions/{id}:
+    get:
+      tags:
+        - Institutions
+      summary: Show institution
+      description: Returns a single institution owned by the authenticated user.
+      operationId: showInstitution
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Institution found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstitutionSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags:
+        - Institutions
+      summary: Update institution
+      description: Updates an existing institution owned by the authenticated user.
+      operationId: updateInstitution
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstitutionUpdateRequest'
+            example:
+              institution:
+                name: Nubank
+                logo_key: institutions/nubank-v2.png
+                active: false
+      responses:
+        '200':
+          description: Institution updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstitutionSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+        - Institutions
+      summary: Delete institution
+      description: |
+        Deletes an institution owned by the authenticated user.
+        Institutions with accounts or credit cards already used by transactions cannot be deleted; inactivate them instead.
+        Linked accounts and credit cards that are not used by transactions are also deleted.
+      operationId: deleteInstitution
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Institution deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/accounts:
+    get:
+      tags:
+        - Accounts
+      summary: List accounts
+      description: Returns a paginated list of accounts for the authenticated user. Supports Ransack filters via `q`.
+      operationId: listAccounts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q[name_cont]
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter accounts whose name contains the given value
+        - name: q[kind_eq]
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - bank_account
+              - cash
+          description: Filter by account kind
+        - name: q[bank_account_type_eq]
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/BankAccountType'
+          description: Filter by bank account type (relevant for `bank_account` kind)
+        - name: q[institution_id_eq]
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter by institution id (relevant for `bank_account` kind)
+        - name: q[current_balance_eq]
+          in: query
+          required: false
+          schema:
+            type: number
+          description: Filter by exact current balance
+        - name: q[allow_negative_balance_eq]
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by whether negative balance is allowed
+        - name: q[active_eq]
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by active flag
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            example: name asc
+          description: Sort expression (default `active desc, name asc`)
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Accounts listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountCollection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+        - Accounts
+      summary: Create account
+      description: |
+        Creates a new account for the authenticated user.
+
+        Permitted fields depend on `kind`:
+        - `bank_account` — requires `institution_id` (must belong to the user and be active) and `bank_account_type`
+        - `cash` — must omit `institution_id` and `bank_account_type`
+      operationId: createAccount
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountRequest'
+            examples:
+              bank_account:
+                summary: Bank account
+                value:
+                  account:
+                    name: Nubank Checking
+                    kind: bank_account
+                    institution_id: 0198f0c2-7b3a-7b6e-9f2d-1a2b3c4d5e6f
+                    bank_account_type: checking
+                    color: '#820AD1'
+                    allow_negative_balance: false
+                    active: true
+              cash:
+                summary: Cash
+                value:
+                  account:
+                    name: Wallet
+                    kind: cash
+                    color: '#10B981'
+                    allow_negative_balance: false
+                    active: true
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/accounts/{id}:
+    get:
+      tags:
+        - Accounts
+      summary: Show account
+      description: Returns a single account owned by the authenticated user.
+      operationId: showAccount
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Account found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags:
+        - Accounts
+      summary: Update account
+      description: |
+        Updates an existing account owned by the authenticated user.
+
+        Permitted fields depend on `kind` (from the request body, or the existing account when omitted):
+        - `bank_account` — may include `institution_id` (when changing, must belong to the user and be active) and `bank_account_type`
+        - `cash` — `institution_id` and `bank_account_type` are not permitted
+
+        An already linked institution may be inactive; updates that keep the current `institution_id` are allowed.
+      operationId: updateAccount
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountUpdateRequest'
+            example:
+              account:
+                name: Updated Wallet
+                color: '#10B981'
+                allow_negative_balance: true
+                active: false
+      responses:
+        '200':
+          description: Account updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+        - Accounts
+      summary: Delete account
+      description: |
+        Deletes an account owned by the authenticated user.
+        Accounts already used by transactions cannot be deleted; inactivate them instead.
+      operationId: deleteAccount
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Account deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/credit_cards:
+    get:
+      tags:
+        - Credit Cards
+      summary: List credit cards
+      description: Returns a paginated list of credit cards for the authenticated user. Supports Ransack filters via `q`.
+      operationId: listCreditCards
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q[name_cont]
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter credit cards whose name contains the given value
+        - name: q[network_eq]
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by network
+        - name: q[institution_id_eq]
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter by institution id
+        - name: q[default_payment_account_id_eq]
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter by default payment account id
+        - name: q[allow_negative_available_limit_eq]
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by whether negative available limit is allowed
+        - name: q[active_eq]
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter by active flag
+        - name: q[total_limit_eq]
+          in: query
+          required: false
+          schema:
+            type: number
+          description: Filter by exact total limit
+        - name: q[available_limit_eq]
+          in: query
+          required: false
+          schema:
+            type: number
+          description: Filter by exact available limit
+        - name: q[closing_day_eq]
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 31
+          description: Filter by closing day
+        - name: q[due_day_eq]
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 31
+          description: Filter by due day
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            example: name asc
+          description: Sort expression (default `active desc, name asc`)
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Credit cards listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditCardCollection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+        - Credit Cards
+      summary: Create credit card
+      description: Creates a new credit card for the authenticated user.
+      operationId: createCreditCard
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditCardRequest'
+            example:
+              credit_card:
+                institution_id: 018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b
+                default_payment_account_id: 018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6c
+                name: Nubank Platinum
+                total_limit: 5000
+                closing_day: 10
+                due_day: 17
+                network: mastercard
+                allow_negative_available_limit: false
+                active: true
+      responses:
+        '201':
+          description: Credit card created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditCardSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/credit_cards/invoice_settlements:
+    get:
+      tags:
+        - Credit Cards
+      summary: List credit card invoice settlements
+      description: |
+        Returns the authenticated user's paid credit-card invoices whose `due_date` falls in the given calendar month.
+        Each item exposes the invoice cycle (`opening_date`, `closing_date`, `due_date`), the payment account,
+        the settled amount (`total_value`), the released limit, and `settled_on`.
+        Invoices from the previous or next month are not included.
+        Missing or out-of-range `month`/`year` return **422**.
+      operationId: listCreditCardInvoiceSettlements
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+          description: Calendar month of the invoice due date (1-12)
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9999
+          description: Calendar year of the invoice due date
+      responses:
+        '200':
+          description: Credit card invoice settlements listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditCardInvoiceSettlementCollection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/credit_cards/{id}:
+    get:
+      tags:
+        - Credit Cards
+      summary: Show credit card
+      description: Returns a single credit card owned by the authenticated user.
+      operationId: showCreditCard
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Credit card found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditCardSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags:
+        - Credit Cards
+      summary: Update credit card
+      description: |
+        Updates an existing credit card owned by the authenticated user.
+        Changing `total_limit` adjusts `available_limit` by the same delta and
+        is rejected when that would make `available_limit` negative.
+        `closing_day` and `due_day` cannot be changed after create.
+      operationId: updateCreditCard
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditCardUpdateRequest'
+            example:
+              credit_card:
+                name: Nubank Ultravioleta
+                total_limit: 7000
+                allow_negative_available_limit: true
+                active: false
+      responses:
+        '200':
+          description: Credit card updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditCardSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+        - Credit Cards
+      summary: Delete credit card
+      description: |
+        Deletes a credit card owned by the authenticated user.
+        Credit cards already used by transactions cannot be deleted; inactivate them instead.
+      operationId: deleteCreditCard
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Credit card deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/monthly_statements:
+    get:
+      tags:
+        - Monthly Statements
+      summary: List monthly statement items
+      description: |
+        Returns the authenticated user's transactions that belong to the given calendar month.
+        Credit card items use the card billing cycle for that month (`opening_date`, `closing_date`, `due_date`).
+        `opening_date` is the day after the previous cycle's closing date (clamped when the closing day
+        does not exist in that month). Account items use the first and last days of the month and have no `due_date`.
+        `payment_method` is `credit_card` or `account`. `value` and `starts_on` come from the latest recurrence
+        whose `starts_on` is on or before the period closing date. `first_recurrence_on` is the earliest
+        `starts_on` across all recurrences of the transaction. `current_recurrence_on` is that first
+        recurrence day projected onto the period opening month. If that date is before `opening_date`,
+        it advances one month. If that date is after `closing_date` and the previous month is shorter
+        than the cycle closing day, it moves to the day after that previous month's last day so it
+        falls in the current cycle. It never precedes `first_recurrence_on`. Recurring and installment items
+        are included when `current_recurrence_on` falls in the period and `ends_on` is null or
+        `current_recurrence_on` is on or before `ends_on`. If that date was shifted to `opening_date`
+        because the projected day falls after `closing_date`, the item is still included when
+        `opening_date` is the day after `ends_on`.
+        Transfers between accounts are not included.
+        Pending, active, and completed transactions are included. Transactions canceled before
+        `current_recurrence_on` are not included. Included canceled transactions expose `canceled_on`.
+        Missing or out-of-range `month`/`year` return **422**.
+      operationId: listMonthlyStatements
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+          description: Calendar month of the statement (1-12)
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9999
+          description: Calendar year of the statement
+      responses:
+        '200':
+          description: Monthly statement items listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyStatementCollection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/monthly_statements/transfers:
+    get:
+      tags:
+        - Monthly Statements
+      summary: List monthly statement transfers
+      description: |
+        Returns the authenticated user's transfers between accounts that belong to the given calendar month.
+        Items use the first and last days of the month as `opening_date` and `closing_date`.
+        Each item exposes the source and destination accounts (`id`, `name`, and `brand`).
+        `brand` is the institution `logo_key` for bank accounts (falls back to the account color when the
+        institution has no logo). Cash accounts use the account color.
+        `value` and `starts_on` come from the latest recurrence whose `starts_on` is on or before the
+        period closing date. `first_recurrence_on` is the earliest `starts_on` across all recurrences of
+        the transfer. `current_recurrence_on` is that first recurrence day projected onto the period
+        opening month. If that date is before `opening_date`, it advances one month. If that date is
+        after `closing_date` and the previous month is shorter than the period closing day, it moves to
+        the day after that previous month's last day so it falls in the current period. It never
+        precedes `first_recurrence_on`. Recurring and installment items are included when
+        `current_recurrence_on` falls in the period and `ends_on` is null or `current_recurrence_on` is
+        on or before `ends_on`. If that date was shifted to `opening_date` because the projected day
+        falls after `closing_date`, the item is still included when `opening_date` is the day after
+        `ends_on`.
+        Income, expense, and credit card transactions are not included.
+        Pending, active, and completed transfers are included. Transfers canceled before
+        `current_recurrence_on` are not included. Included canceled transfers expose `canceled_on`.
+        Missing or out-of-range `month`/`year` return **422**.
+      operationId: listMonthlyStatementTransfers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+          description: Calendar month of the statement (1-12)
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9999
+          description: Calendar year of the statement
+      responses:
+        '200':
+          description: Monthly statement transfers listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyStatementTransferCollection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/monthly_statuses:
+    get:
+      tags:
+        - Monthly Statuses
+      summary: Show monthly status
+      description: |
+        Returns the authenticated user's monthly status for the given calendar month.
+        Identity is `(user, month, year)`, not a UUID. `user` is always the current user.
+        If no row exists, the API returns 404 without creating a record.
+        Missing or out-of-range `month`/`year` return **422**.
+
+        Processing updates (`processing` and `last_processed_at`) are also pushed over Action Cable
+        on `MonthlyStatusChannel`. See the WebSockets section in the API description.
+      operationId: showMonthlyStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+          description: Calendar month (1-12)
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9999
+          description: Calendar year
+      responses:
+        '200':
+          description: Monthly status found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyStatusSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags:
+        - Monthly Statuses
+      summary: Update monthly status
+      description: |
+        Closes or reopens the authenticated user's month. Identity is `(user, month, year)`,
+        not a UUID. `user` is always the current user.
+        If no row exists, one is created and then updated, so a missing month can be closed
+        in a single request. A missing month that precedes an already closed month is rejected
+        with 422 (`later_month_closed` on `base`) and is not created.
+        Sending the already persisted `status` is idempotent (200).
+      operationId: updateMonthlyStatus
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonthlyStatusUpdateRequest'
+            example:
+              monthly_status:
+                month: 8
+                year: 2026
+                status: closed
+      responses:
+        '200':
+          description: Monthly status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyStatusSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/settlements/processing:
+    post:
+      tags:
+        - Settlements
+      summary: Enqueue settlement processing
+      description: |
+        Accepts a settlement request and returns **202** immediately. HTTP does not validate `month`,
+        `year`, or `reference_date` beyond requiring the `settlement` wrapper (missing wrapper → 400).
+
+        A background job is enqueued unless that calendar month is already `processing`. In that case
+        the response is still 202 with the same queued message, and no new job is enqueued.
+
+        The job processes due occurrences, transfers, and credit-card invoices for the authenticated
+        user in the given calendar month.
+
+        For the current month, `reference_date` must be today or yesterday. For a past month, `reference_date`
+        is ignored and the last day of that month is used. Future months are rejected by the job.
+
+        The job also rejects a month when the previous calendar month still has an open `monthly_status`.
+        If that previous month has no open row (missing or already closed), processing may start.
+
+        A month that precedes a closed `monthly_status` is also rejected. Later open or missing months
+        do not block processing.
+
+        Those domain rules and item failures (insufficient balance or limit) run asynchronously.
+        They become notifications; they do not appear on this HTTP response.
+      operationId: processSettlements
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettlementProcessingRequest'
+            example:
+              settlement:
+                month: 8
+                year: 2026
+                reference_date: '2026-08-28'
+      responses:
+        '202':
+          description: |
+            Accepted. A job is enqueued unless the month is already processing.
+            The message is the same in both cases.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+              example:
+                status: success
+                message: Settlement processing has been queued
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/notifications:
+    get:
+      tags:
+        - Notifications
+      summary: List notifications
+      description: |
+        Returns the authenticated user's notifications in infinite-scroll order (`id` descending, UUID v7).
+        Pagination is keyset-based: pass `meta.next_cursor` from the previous response as `after`.
+        Unread count is exposed in `meta.unread_count`. Pass `unread=true` to return only unread notifications.
+        There is no `sort` parameter.
+      operationId: listNotifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: after
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Opaque cursor from `meta.next_cursor`. Omit to fetch the newest page.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: unread
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: When true, returns only unread notifications. `meta.unread_count` remains the total unread count.
+      responses:
+        '200':
+          description: Notifications listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationCollection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/notifications/{id}:
+    get:
+      tags:
+        - Notifications
+      summary: Show notification
+      description: Returns a single notification owned by the authenticated user.
+      operationId: showNotification
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Notification found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/notifications/{id}/read:
+    post:
+      tags:
+        - Notifications
+      summary: Mark notification as read
+      description: |
+        Marks a notification owned by the authenticated user as read.
+        Already-read notifications succeed without changing the original `read_at`.
+      operationId: readNotification
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Notification marked as read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/notifications/read_all:
+    post:
+      tags:
+        - Notifications
+      summary: Mark all notifications as read
+      description: |
+        Marks all unread notifications of the authenticated user as read.
+        Succeeds with `meta.count` even when there are no unread notifications.
+      operationId: readAllNotifications
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Notifications marked as read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationReadAllResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/transactions:
+    get:
+      tags:
+        - Transactions
+      summary: List transactions
+      description: |
+        Returns a paginated list of transactions for the authenticated user. Supports Ransack filters via `q`.
+        List items include recurrences and `current_value`.
+        Payment targets that apply to the item are present as `null`; targets that do not apply are omitted.
+        `tag_ids` is always `null` on list. Use show to read populated payment targets and tags.
+      operationId: listTransactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q[id_eq]
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter by transaction id
+        - name: q[description_cont]
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter transactions whose description contains the given value
+        - name: q[kind_eq]
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - income
+              - expense
+              - transfer_between_accounts
+          description: Filter by kind
+        - name: q[status_eq]
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - active
+              - completed
+              - canceled
+          description: Filter by status
+        - name: q[payment_method_eq]
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pix
+              - debit
+              - credit_card
+              - ted
+              - doc
+              - deposit
+              - cash
+              - boleto
+          description: Filter by payment method
+        - name: q[recurrence_type_eq]
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - one_time
+              - installment
+              - recurring
+          description: Filter by recurrence type
+        - name: q[category_id_eq]
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+          description: Filter by category id
+        - name: q[installments_count_eq]
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Filter by installments count
+        - name: q[created_at_gteq]
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filter transactions created on or after the given datetime
+        - name: q[created_at_lteq]
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filter transactions created on or before the given datetime
+        - name: q[ends_on_gteq]
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Filter transactions whose ends_on is on or after the given date
+        - name: q[ends_on_lteq]
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Filter transactions whose ends_on is on or before the given date
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            example: status, created_at desc
+          description: Sort expression (default `status, created_at desc`)
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Transactions listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionCollection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+        - Transactions
+      summary: Create transaction
+      description: |
+        Creates a new transaction for the authenticated user.
+        `installments_count` is calculated from `recurrence_type`, `starts_on`, and `ends_on`.
+        `status` is always set to `pending` and cannot be provided.
+        `starts_on` is write-only on the request; the response exposes it on each item in `recurrences`.
+        Category, tags, account, and credit card must belong to the authenticated user and be active.
+        A date that belongs to a closed month is rejected with 422 (`monthly_status_closed` on `base`).
+        A date in a missing month that precedes an already closed month is rejected with 422 (`later_month_closed` on `base`).
+        Credit card transactions use the card billing cycle month, not the civil month of `starts_on`.
+        A credit card expense whose dates overlap a paid invoice is rejected with 422 (`invoice_already_paid` on `base`).
+      operationId: createTransaction
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionRequest'
+            example:
+              transaction:
+                description: Grocery shopping
+                kind: expense
+                payment_method: pix
+                recurrence_type: one_time
+                starts_on: '2026-08-11'
+                value: 100
+                account_id: 018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b
+                category_id: 018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6c
+                tag_ids:
+                  - 018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6d
+      responses:
+        '201':
+          description: Transaction created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/transactions/settled:
+    get:
+      tags:
+        - Transactions
+      summary: List settled transactions
+      description: |
+        Returns the authenticated user's transaction occurrences that were settled in the given calendar month.
+        An item is included when it has a settlement whose `occurred_on` falls in that month.
+        Pending transactions without a settlement are not included.
+        Recurring and installment transactions appear once per settled occurrence in the month.
+        Each item exposes the settlement amount and dates (`occurred_on`, `settled_on`, `value`, `installment_number`)
+        together with the transaction identity and payment target.
+        Income, expense, and transfers between accounts are included.
+        Optional `type` limits the list to one payment target (`account`, `credit_card`, or `transfer_between_accounts`).
+        Missing or out-of-range `month`/`year` return **422**.
+      operationId: listSettledTransactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+          description: Calendar month of the settlement occurrence (1-12)
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9999
+          description: Calendar year of the settlement occurrence
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - account
+              - credit_card
+              - transfer_between_accounts
+          description: |
+            Filter by payment target. When omitted, account, credit card, and transfer settlements are all included.
+      responses:
+        '200':
+          description: Settled transactions listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettledTransactionCollection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/transactions/{id}:
+    get:
+      tags:
+        - Transactions
+      summary: Show transaction
+      description: Returns a single transaction owned by the authenticated user, including payment targets, tags, and recurrences.
+      operationId: showTransaction
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Transaction found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags:
+        - Transactions
+      summary: Update transaction
+      description: |
+        Updates an existing transaction owned by the authenticated user.
+        Editable fields depend on `status` (see `TransactionUpdateRequest`).
+        When pending, `starts_on` and `value` update the existing recurrence in place.
+        `starts_on` is write-only on the request; the response exposes it on each item in `recurrences`.
+        `status` cannot be changed.
+        Moving a credit card expense onto a paid invoice (via `starts_on`, `ends_on`, `credit_card_id`, `payment_method`, or `recurrence_type`) is rejected with 422 (`invoice_already_paid` on `base`).
+      operationId: updateTransaction
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionUpdateRequest'
+            example:
+              transaction:
+                description: Grocery shopping (updated)
+                value: 120
+                starts_on: '2026-10-11'
+      responses:
+        '200':
+          description: Transaction updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+        - Transactions
+      summary: Delete transaction
+      description: |
+        Deletes a pending transaction owned by the authenticated user, including dependents.
+        Active, completed, and canceled transactions are rejected.
+        To cancel an active transaction, use `POST /api/v1/transactions/{id}/cancel`.
+      operationId: deleteTransaction
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Transaction deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/transactions/{id}/cancel:
+    post:
+      tags:
+        - Transactions
+      summary: Cancel transaction
+      description: |
+        Cancels an active transaction owned by the authenticated user by setting `status` to `canceled`
+        and `canceled_on` to the current date.
+        Pending, completed, and already canceled transactions are rejected.
+        To delete a pending transaction, use `DELETE /api/v1/transactions/{id}`.
+      operationId: cancelTransaction
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Transaction canceled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/transactions/{transaction_id}/recurrences:
+    post:
+      tags:
+        - Transactions
+      summary: Create or split a transaction recurrence
+      description: |
+        Adds a value change to a recurring or installment transaction owned by the authenticated user.
+
+        Recurrences apply from `starts_on` until the next recurrence, and the response lists them ordered by `starts_on`.
+        If a recurrence already exists in the same year-month as `starts_on`, it is updated in place
+        (including the day of `starts_on`); otherwise a new recurrence is created.
+
+        Allowed only when `status` is `active`. `starts_on` cannot be after the transaction `ends_on`.
+        `value` must be different from the amount already applied by the previous recurrence.
+        Pending, completed, and canceled transactions are rejected. One-time transactions are rejected.
+        Credit card installments with `limit_consumption_type` `upfront` cannot change recurrence values.
+
+        When `change_for_next_months` is omitted or `false`, only the given month is changed.
+        If the next month already has a recurrence, it is kept; otherwise a recurrence is created
+        for the next month with the previous amount, unless that next month would be after `ends_on`.
+        All other recurrences are left unchanged.
+
+        When `change_for_next_months` is `true`, the given month is updated and every later
+        recurrence is removed so the new amount applies from that month onward.
+      operationId: createTransactionRecurrence
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Transaction UUID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionRecurrenceRequest'
+            examples:
+              currentMonthOnly:
+                summary: Change only the given month
+                value:
+                  transaction_recurrence:
+                    value: 120
+                    starts_on: '2026-01-01'
+              currentAndNextMonths:
+                summary: Change the given month and all following months
+                value:
+                  transaction_recurrence:
+                    value: 120
+                    starts_on: '2026-01-01'
+                    change_for_next_months: true
+      responses:
+        '200':
+          description: Recurrence created or updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/user/authentications:
+    post:
+      tags:
+        - Authentication
+      summary: Sign in
+      description: |
+        Authenticates with email and password.
+        The user must be **verified** and **active**.
+        Returns a short-lived session `token` in the JSON body and sets an encrypted
+        httpOnly `refresh_token` cookie (`SameSite=Lax`; `Secure` in production). The refresh token is never
+        returned in the JSON body. Optional `remember_me` controls cookie and refresh lifetime.
+        When a valid `locale` cookie is present and differs from `configs.locale`, the user's
+        locale is updated to match the cookie. Other config keys are kept.
+        Sign in **revokes every previous refresh session** for that user, so only the new refresh
+        cookie is valid. An older Bearer token remains valid until it expires (15 minutes).
+      operationId: createAuthentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthenticationRequest'
+            examples:
+              default:
+                summary: Session cookie (1 day server-side)
+                value:
+                  email: john.doe@example.com
+                  password: password123
+              rememberMe:
+                summary: Persistent refresh cookie (30 days)
+                value:
+                  email: john.doe@example.com
+                  password: password123
+                  remember_me: true
+      responses:
+        '200':
+          description: Authenticated. Sets the encrypted httpOnly `refresh_token` cookie.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: |
+                Encrypted httpOnly `refresh_token` cookie (`SameSite=Lax`; `Secure` in production).
+                Session cookie by default. Persistent (30 days) when `remember_me` is true.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokensSuccessResponse'
+              example:
+                status: success
+                type: object
+                data:
+                  token: eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaEpJaWs9IiwiZXhwIjpudWxsLCJwdXIiOiJzZXNzaW9uX3Rva2VuIn19--abc
+                  user:
+                    data:
+                      id: 019abc...
+                      type: user
+                      attributes:
+                        id: 019abc...
+                        first_name: John
+                        last_name: Doe
+                        email: john.doe@example.com
+                        configs: {}
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/user/session/refreshes:
+    patch:
+      tags:
+        - Authentication
+      summary: Refresh session
+      description: |
+        Reads the encrypted httpOnly `refresh_token` cookie and returns a new session `token`.
+        Rotates the refresh cookie. Does not require the Bearer header.
+        Optional `remember_me` in the body controls the rotated cookie lifetime.
+      operationId: refreshSession
+      parameters:
+        - name: refresh_token
+          in: cookie
+          required: true
+          schema:
+            type: string
+          description: Encrypted httpOnly refresh token cookie set on sign in
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshSessionRequest'
+            example:
+              remember_me: true
+      responses:
+        '200':
+          description: Session token rotated. Sets a new encrypted httpOnly `refresh_token` cookie.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: |
+                Rotated encrypted httpOnly `refresh_token` cookie (`SameSite=Lax`; `Secure` in production).
+                Session cookie by default. Persistent (30 days) when `remember_me` is true.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokensSuccessResponse'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/user/session/revokes:
+    delete:
+      tags:
+        - Authentication
+      summary: Revoke all sessions
+      description: |
+        Invalidates all active refresh sessions for the authenticated user.
+        The current Bearer token remains valid until it expires (15 minutes).
+        The `refresh_token` cookie is not deleted; the next refresh attempt fails until the user signs in again.
+      operationId: revokeSessions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Sessions revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/user/registrations:
+    post:
+      tags:
+        - User
+      summary: Register a new user
+      description: |
+        Creates a user (unverified) and enqueues an email confirmation message.
+        After registration, confirm the email before signing in.
+      operationId: createRegistration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationRequest'
+            example:
+              first_name: John
+              last_name: Doe
+              email: john.doe@example.com
+              password: password123
+              password_confirmation: password123
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationSuccessResponse'
+              example:
+                status: success
+                type: object
+                data:
+                  user:
+                    data:
+                      id: 019abc...
+                      type: user
+                      attributes:
+                        id: 019abc...
+                        first_name: John
+                        last_name: Doe
+                        email: john.doe@example.com
+                        configs: {}
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/user/profiles:
+    patch:
+      tags:
+        - User
+      summary: Update profile
+      description: |
+        Partially updates the authenticated user's profile. Send any combination of `first_name`, `last_name`, and `configs`.
+        `configs` is merged into the stored JSON: sent keys overwrite existing ones, and other keys are kept.
+      operationId: updateProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdateRequest'
+            examples:
+              names:
+                summary: Update names
+                value:
+                  first_name: Jane
+                  last_name: Smith
+              configs:
+                summary: Merge configs without changing names
+                value:
+                  configs:
+                    locale: pt-BR
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/user/accounts:
+    delete:
+      tags:
+        - User
+      summary: Delete account
+      description: Permanently deletes the authenticated user. Requires the current password.
+      operationId: deleteUserAccount
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountDeletionRequest'
+            example:
+              password: password123
+      responses:
+        '200':
+          description: Account deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/user/email/confirmations:
+    post:
+      tags:
+        - User
+      summary: Confirm email
+      description: Confirms the user email with the token received by email. Public endpoint.
+      operationId: confirmEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailConfirmationRequest'
+            example:
+              token: confirmation-token-from-email
+      responses:
+        '200':
+          description: Email confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/user/email/changes:
+    patch:
+      tags:
+        - User
+      summary: Change email
+      description: |
+        Changes the email of the authenticated user.
+        Requires the current password. Marks the user as unverified and sends a new confirmation email.
+        Revokes all refresh sessions. The current Bearer token remains valid until it expires
+        (the user stays authenticated on this request). The `refresh_token` cookie is not deleted.
+        Sign in with the new email is blocked until the user confirms it.
+      operationId: changeEmail
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailChangeRequest'
+            example:
+              current_password: password123
+              new_email: new.email@example.com
+      responses:
+        '200':
+          description: Email change initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/user/password/changes:
+    patch:
+      tags:
+        - User
+      summary: Change password
+      description: |
+        Changes the password of the authenticated user. Requires the current password.
+        Revokes all refresh sessions. The current Bearer token remains valid until it expires.
+        The `refresh_token` cookie is not deleted.
+      operationId: changePassword
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+            example:
+              current_password: password123
+              password: new-password123
+              password_confirmation: new-password123
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/user/password/resets:
+    post:
+      tags:
+        - User
+      summary: Request password reset
+      description: |
+        Sends password reset instructions to the given email.
+        The user must exist, be **active**, and have a verified email. Public endpoint.
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+            example:
+              email: john.doe@example.com
+      responses:
+        '200':
+          description: Reset instructions sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags:
+        - User
+      summary: Reset password
+      description: |
+        Sets a new password using the token from the reset email. Public endpoint.
+        Revokes all refresh sessions. Any Bearer token already issued remains valid until it expires.
+        The `refresh_token` cookie is not deleted.
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetUpdateRequest'
+            example:
+              token: reset-token-from-email
+              password: new-password123
+              password_confirmation: new-password123
+      responses:
+        '200':
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: signed session token
+      description: |
+        Session token returned in the JSON body by `POST /api/v1/user/authentications`
+        or `PATCH /api/v1/user/session/refreshes`. The refresh token is an encrypted
+        httpOnly cookie (`SameSite=Lax`; `Secure` in production), not a Bearer header.
+
+        ```http
+        Authorization: Bearer <token>
+        ```
+  responses:
+    BadRequest:
+      description: Invalid request parameters or filters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            message: Invalid request
+            details: {}
+    Unauthorized:
+      description: Missing or invalid Bearer token, or a valid token for an inactive user
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            message: Unauthorized
+            details: {}
+    UnprocessableContent:
+      description: Validation or business rule failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            message: Email has already been taken
+            details:
+              email:
+                - has already been taken
+    TooManyRequests:
+      description: |
+        Rate limit exceeded. Body is Rack::Attack's default `text/plain` (`Retry later`),
+        not the JSON error envelope. See the Rate limiting section in the API description.
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: |
+              Retry later
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            message: Not found
+            details: {}
+    InternalServerError:
+      description: |
+        Unexpected failure. Uses the JSON error envelope.
+        In production the message is a generic internal-server-error string;
+        outside production it is the exception message.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            message: Internal Server Error
+            details: {}
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Resource UUID
+  schemas:
+    TagAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: string
+          pattern: ^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$
+          description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+          example: '#3B82F6'
+        active:
+          type: boolean
+    TagResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: tag
+        attributes:
+          $ref: '#/components/schemas/TagAttributes'
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        count:
+          type: integer
+        pages:
+          type: integer
+        next_page:
+          type:
+            - integer
+            - 'null'
+        prev_page:
+          type:
+            - integer
+            - 'null'
+    TagCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+        - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagResource'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    ErrorResponse:
+      type: object
+      required:
+        - status
+        - message
+        - details
+      properties:
+        status:
+          type: string
+          const: error
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    TagRequest:
+      type: object
+      required:
+        - tag
+      properties:
+        tag:
+          type: object
+          required:
+            - name
+            - color
+          properties:
+            name:
+              type: string
+            color:
+              type: string
+              pattern: ^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$
+              description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+              example: '#3B82F6'
+            active:
+              type: boolean
+              default: true
+              description: Defaults to `true` when omitted
+    TagSuccessResponse:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/TagResource'
+    MessageSuccessResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          const: success
+        message:
+          type: string
+    TagUpdateRequest:
+      type: object
+      required:
+        - tag
+      properties:
+        tag:
+          type: object
+          minProperties: 1
+          properties:
+            name:
+              type: string
+            color:
+              type: string
+              pattern: ^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$
+              description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+              example: '#3B82F6'
+            active:
+              type: boolean
+          description: Partial update — only provided fields are changed
+    CategoryAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: string
+          pattern: ^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$
+          description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+          example: '#3B82F6'
+        active:
+          type: boolean
+    CategoryResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: category
+        attributes:
+          $ref: '#/components/schemas/CategoryAttributes'
+    CategoryCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+        - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryResource'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    CategoryRequest:
+      type: object
+      required:
+        - category
+      properties:
+        category:
+          type: object
+          required:
+            - name
+            - color
+          properties:
+            name:
+              type: string
+            color:
+              type: string
+              pattern: ^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$
+              description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+              example: '#3B82F6'
+            active:
+              type: boolean
+              default: true
+              description: Defaults to `true` when omitted
+    CategorySuccessResponse:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/CategoryResource'
+    CategoryUpdateRequest:
+      type: object
+      required:
+        - category
+      properties:
+        category:
+          type: object
+          minProperties: 1
+          properties:
+            name:
+              type: string
+            color:
+              type: string
+              pattern: ^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$
+              description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+              example: '#3B82F6'
+            active:
+              type: boolean
+          description: Partial update — only provided fields are changed
+    InstitutionAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        logo_key:
+          type: string
+          description: Storage key for the institution logo. Always present; never null.
+          example: institutions/nubank.png
+        active:
+          type: boolean
+    InstitutionResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: institution
+        attributes:
+          $ref: '#/components/schemas/InstitutionAttributes'
+    InstitutionCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+        - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/InstitutionResource'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    InstitutionRequest:
+      type: object
+      required:
+        - institution
+      properties:
+        institution:
+          type: object
+          required:
+            - name
+            - logo_key
+          properties:
+            name:
+              type: string
+            logo_key:
+              type: string
+              description: Storage key for the institution logo. Required on create.
+              example: institutions/nubank.png
+            active:
+              type: boolean
+              default: true
+              description: Defaults to `true` when omitted
+    InstitutionSuccessResponse:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/InstitutionResource'
+    InstitutionUpdateRequest:
+      type: object
+      required:
+        - institution
+      properties:
+        institution:
+          type: object
+          minProperties: 1
+          properties:
+            name:
+              type: string
+            logo_key:
+              type: string
+              description: Storage key for the institution logo
+              example: institutions/nubank.png
+            active:
+              type: boolean
+          description: Partial update — only provided fields are changed
+    BankAccountType:
+      type: string
+      enum:
+        - checking
+        - savings
+        - investment
+        - salary
+    AccountKind:
+      type: string
+      enum:
+        - bank_account
+        - cash
+    AccountAttributes:
+      type: object
+      description: |
+        Common attributes are always present. `institution_id` and `bank_account_type`
+        are only included when `kind` is `bank_account`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          $ref: '#/components/schemas/AccountKind'
+        institution_id:
+          type: string
+          format: uuid
+          description: Present only when `kind` is `bank_account`
+        bank_account_type:
+          $ref: '#/components/schemas/BankAccountType'
+          description: Present only when `kind` is `bank_account`
+        current_balance:
+          type: string
+          description: Decimal amount as string (precision 15, scale 2)
+          example: '0.0'
+        color:
+          type: string
+          pattern: ^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$
+          description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+          example: '#3B82F6'
+        allow_negative_balance:
+          type: boolean
+          description: When true, settlement may leave `current_balance` negative
+        active:
+          type: boolean
+    AccountResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: account
+        attributes:
+          $ref: '#/components/schemas/AccountAttributes'
+    AccountCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+        - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountResource'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    AccountRequest:
+      type: object
+      required:
+        - account
+      properties:
+        account:
+          type: object
+          required:
+            - name
+            - kind
+            - color
+          properties:
+            name:
+              type: string
+            kind:
+              $ref: '#/components/schemas/AccountKind'
+            institution_id:
+              type: string
+              format: uuid
+              description: Required when `kind` is `bank_account`; not permitted for `cash`
+            bank_account_type:
+              $ref: '#/components/schemas/BankAccountType'
+              description: Required when `kind` is `bank_account`; not permitted for `cash`
+            current_balance:
+              type: number
+              default: 0
+              description: Defaults to `0` when omitted
+            color:
+              type: string
+              pattern: ^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$
+              description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+              example: '#3B82F6'
+            allow_negative_balance:
+              type: boolean
+              default: false
+              description: Defaults to `false` when omitted. When true, settlement may leave `current_balance` negative.
+            active:
+              type: boolean
+              default: true
+              description: Defaults to `true` when omitted
+    AccountSuccessResponse:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/AccountResource'
+    AccountUpdateRequest:
+      type: object
+      required:
+        - account
+      properties:
+        account:
+          type: object
+          minProperties: 1
+          properties:
+            name:
+              type: string
+            kind:
+              $ref: '#/components/schemas/AccountKind'
+            institution_id:
+              type: string
+              format: uuid
+              description: Permitted only when resulting `kind` is `bank_account`
+            bank_account_type:
+              $ref: '#/components/schemas/BankAccountType'
+              description: Permitted only when resulting `kind` is `bank_account`
+            current_balance:
+              type: number
+            color:
+              type: string
+              pattern: ^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$
+              description: Hex color (`#RRGGBB` or `#RRGGBBAA`)
+              example: '#3B82F6'
+            allow_negative_balance:
+              type: boolean
+            active:
+              type: boolean
+          description: Partial update — only provided fields are changed
+    CreditCardAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        institution_id:
+          type: string
+          format: uuid
+        default_payment_account_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        total_limit:
+          type: string
+          description: Decimal amount as string (precision 15, scale 2)
+          example: '5000.0'
+        available_limit:
+          type: string
+          description: |
+            Decimal amount as string (precision 15, scale 2).
+            Settlement keeps it between 0 and `total_limit` unless `allow_negative_available_limit` is true,
+            in which case it may go below 0. Updating `total_limit` still rejects a resulting negative
+            `available_limit`, even when that flag is true.
+          example: '5000.0'
+        closing_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        due_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        network:
+          type: string
+          example: mastercard
+        allow_negative_available_limit:
+          type: boolean
+          description: When true, settlement may leave `available_limit` negative
+        active:
+          type: boolean
+    CreditCardResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: credit_card
+        attributes:
+          $ref: '#/components/schemas/CreditCardAttributes'
+    CreditCardCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+        - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditCardResource'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    CreditCardRequest:
+      type: object
+      required:
+        - credit_card
+      properties:
+        credit_card:
+          type: object
+          required:
+            - institution_id
+            - default_payment_account_id
+            - name
+            - closing_day
+            - due_day
+            - network
+          properties:
+            institution_id:
+              type: string
+              format: uuid
+            default_payment_account_id:
+              type: string
+              format: uuid
+              description: Must reference an account owned by the authenticated user
+            name:
+              type: string
+            total_limit:
+              type: number
+              minimum: 0
+              default: 0
+              description: Defaults to `0` when omitted. `available_limit` is initialized with the same value.
+            closing_day:
+              type: integer
+              minimum: 1
+              maximum: 31
+            due_day:
+              type: integer
+              minimum: 1
+              maximum: 31
+            network:
+              type: string
+            allow_negative_available_limit:
+              type: boolean
+              default: false
+              description: Defaults to `false` when omitted. When true, settlement may leave `available_limit` negative.
+            active:
+              type: boolean
+              default: true
+              description: Defaults to `true` when omitted
+    CreditCardSuccessResponse:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/CreditCardResource'
+    CreditCardInvoiceSettlementAttributes:
+      type: object
+      description: |
+        One paid credit-card invoice whose `due_date` falls in the requested calendar month.
+        `id` is the invoice settlement id. `total_value` is the amount debited from the payment account.
+        `released_limit` is the amount added back to the card's available limit.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Invoice settlement id
+        credit_card_id:
+          type: string
+          format: uuid
+        payment_account_id:
+          type: string
+          format: uuid
+          description: Account that paid the invoice
+        opening_date:
+          type: string
+          format: date
+          description: First day of the invoice cycle
+        closing_date:
+          type: string
+          format: date
+          description: Last day of the invoice cycle
+        due_date:
+          type: string
+          format: date
+          description: Invoice due date. Used to select the calendar month.
+        total_value:
+          type: string
+          description: Decimal amount as string (precision 15, scale 2)
+          example: '100.0'
+        released_limit:
+          type: string
+          description: Decimal amount as string (precision 15, scale 2)
+          example: '100.0'
+        settled_on:
+          type: string
+          format: date
+          description: Date the invoice was processed
+    CreditCardInvoiceSettlementResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: credit_card_invoice_settlement
+        attributes:
+          $ref: '#/components/schemas/CreditCardInvoiceSettlementAttributes'
+    CreditCardInvoiceSettlementCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditCardInvoiceSettlementResource'
+    CreditCardUpdateRequest:
+      type: object
+      required:
+        - credit_card
+      properties:
+        credit_card:
+          type: object
+          minProperties: 1
+          properties:
+            institution_id:
+              type: string
+              format: uuid
+            default_payment_account_id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            total_limit:
+              type: number
+              minimum: 0
+              description: |
+                When changed, `available_limit` is adjusted by the same delta
+                (`new_total_limit - old_total_limit`). Rejected if the resulting
+                `available_limit` would be negative.
+            network:
+              type: string
+            allow_negative_available_limit:
+              type: boolean
+            active:
+              type: boolean
+          description: |
+            Partial update — only provided fields are changed.
+            `closing_day` and `due_day` cannot be changed after create.
+    MonthlyStatementAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Transaction id
+        kind:
+          type: string
+          enum:
+            - income
+            - expense
+          description: Transfer between accounts is never included in the statement
+        description:
+          type: string
+        recurrence_type:
+          type: string
+          enum:
+            - one_time
+            - installment
+            - recurring
+        payment_method:
+          type: string
+          enum:
+            - credit_card
+            - account
+          description: Statement grouping. `account` covers all account-based payment methods.
+        resource_id:
+          type: string
+          format: uuid
+          description: Credit card id or account id
+        resource_name:
+          type: string
+          description: Credit card name or account name
+        resource_brand:
+          type: string
+          description: |
+            Credit card network, or institution `logo_key` for bank accounts
+            (falls back to the account color when the institution has no logo).
+            Cash accounts use the account color.
+        opening_date:
+          type: string
+          format: date
+        closing_date:
+          type: string
+          format: date
+        due_date:
+          type:
+            - string
+            - 'null'
+          format: date
+          description: Present for credit cards. Always `null` for accounts.
+        value:
+          type: string
+          description: Decimal amount as string (precision 15, scale 2) from the current recurrence
+          example: '100.0'
+        first_recurrence_on:
+          type: string
+          format: date
+          description: Earliest `starts_on` across all recurrences of the transaction
+        current_recurrence_on:
+          type: string
+          format: date
+          description: |
+            First recurrence day projected onto the period opening month. If that date is before
+            `opening_date`, it advances one month. If that date is after `closing_date` and the previous
+            month is shorter than the cycle closing day, it moves to the day after that previous
+            month's last day. The day is clamped to the last day of the month when needed. Never
+            precedes `first_recurrence_on`. Recurring items are omitted when this date is outside the
+            period.
+        starts_on:
+          type: string
+          format: date
+          description: '`starts_on` of the current recurrence'
+        ends_on:
+          type:
+            - string
+            - 'null'
+          format: date
+        canceled_on:
+          type:
+            - string
+            - 'null'
+          format: date
+          description: Set when the transaction is canceled. Null otherwise.
+    MonthlyStatementResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: monthly_statement
+        attributes:
+          $ref: '#/components/schemas/MonthlyStatementAttributes'
+    MonthlyStatementCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthlyStatementResource'
+    MonthlyStatementTransferAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Transaction id
+        kind:
+          type: string
+          const: transfer_between_accounts
+        description:
+          type: string
+        recurrence_type:
+          type: string
+          enum:
+            - one_time
+            - installment
+            - recurring
+        source_account_id:
+          type: string
+          format: uuid
+        source_account_name:
+          type: string
+        source_account_brand:
+          type: string
+          description: |
+            Institution `logo_key` for bank accounts (falls back to the account color when the
+            institution has no logo). Cash accounts use the account color.
+        destination_account_id:
+          type: string
+          format: uuid
+        destination_account_name:
+          type: string
+        destination_account_brand:
+          type: string
+          description: |
+            Institution `logo_key` for bank accounts (falls back to the account color when the
+            institution has no logo). Cash accounts use the account color.
+        opening_date:
+          type: string
+          format: date
+          description: First day of the calendar month
+        closing_date:
+          type: string
+          format: date
+          description: Last day of the calendar month
+        value:
+          type: string
+          description: Decimal amount as string (precision 15, scale 2) from the current recurrence
+          example: '100.0'
+        first_recurrence_on:
+          type: string
+          format: date
+          description: Earliest `starts_on` across all recurrences of the transfer
+        current_recurrence_on:
+          type: string
+          format: date
+          description: |
+            First recurrence day projected onto the period opening month. If that date is before
+            `opening_date`, it advances one month. If that date is after `closing_date` and the previous
+            month is shorter than the period closing day, it moves to the day after that previous
+            month's last day. The day is clamped to the last day of the month when needed. Never
+            precedes `first_recurrence_on`. Recurring items are omitted when this date is outside the
+            period.
+        starts_on:
+          type: string
+          format: date
+          description: '`starts_on` of the current recurrence'
+        ends_on:
+          type:
+            - string
+            - 'null'
+          format: date
+        canceled_on:
+          type:
+            - string
+            - 'null'
+          format: date
+          description: Set when the transfer is canceled. Null otherwise.
+    MonthlyStatementTransferResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: monthly_statement_transfer
+        attributes:
+          $ref: '#/components/schemas/MonthlyStatementTransferAttributes'
+    MonthlyStatementTransferCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthlyStatementTransferResource'
+    MonthlyStatusAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        year:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        status:
+          type: string
+          enum:
+            - open
+            - closed
+        processing:
+          type: boolean
+        last_processed_at:
+          type: string
+          format: date-time
+          nullable: true
+    MonthlyStatusResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: monthly_status
+        attributes:
+          $ref: '#/components/schemas/MonthlyStatusAttributes'
+    MonthlyStatusSuccessResponse:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/MonthlyStatusResource'
+    MonthlyStatusUpdateRequest:
+      type: object
+      required:
+        - monthly_status
+      properties:
+        monthly_status:
+          type: object
+          required:
+            - month
+            - year
+            - status
+          properties:
+            month:
+              type: integer
+              minimum: 1
+              maximum: 12
+            year:
+              type: integer
+              minimum: 1
+              maximum: 9999
+            status:
+              type: string
+              enum:
+                - open
+                - closed
+              description: Closes or reopens the month
+    SettlementProcessingRequest:
+      type: object
+      required:
+        - settlement
+      properties:
+        settlement:
+          type: object
+          description: |
+            The job expects `month`, `year`, and `reference_date`. HTTP does not require or validate
+            these fields; missing or invalid values fail asynchronously and become notifications.
+          properties:
+            month:
+              type: integer
+              minimum: 1
+              maximum: 12
+            year:
+              type: integer
+              minimum: 1
+              maximum: 9999
+            reference_date:
+              type: string
+              format: date
+              description: |
+                Inclusive cutoff date. The job requires today or yesterday for the current month.
+                Ignored for past months (the last day of the given month is used instead).
+                Future months are rejected by the job, not by HTTP.
+    NotificationAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          description: |
+            Notification type generated by the system. Known values:
+
+            - `transaction.validation.errors` — a transaction or transfer failed during settlement
+            - `credit_card_invoice.validation.errors` — a credit card invoice failed during settlement
+            - `settlement.errors` — settlement process failed as a whole, or an unexpected error occurred
+            - `monthly_status.closing.errors` — a month could not be closed (pending items or closing failure)
+            - `monthly_status.errors` — unexpected error in monthly closing
+        title:
+          type: string
+        body:
+          type:
+            - string
+            - 'null'
+        read:
+          type: boolean
+        read_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        notifiable_type:
+          type:
+            - string
+            - 'null'
+          description: Weak reference type of the related resource, when any
+        notifiable_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        data:
+          type: object
+          additionalProperties: true
+          description: |
+            Kind-specific payload. Shape varies by `kind`:
+
+            - `transaction.validation.errors`: `type`, `item_kind`, `month`, `year`, `occurred_on`
+            - `credit_card_invoice.validation.errors`: `type`, `month`, `year`, `due_date`
+            - `settlement.errors`: `type`, `month`, `year`, and optional `error` (exception class name)
+            - `monthly_status.closing.errors`: `month`, `year`, `pending_occurrences`, `pending_invoices`, `failure`
+            - `monthly_status.errors`: `type`, optional `error`, and optional `month`/`year` when the competence is known
+        created_at:
+          type: string
+          format: date-time
+    NotificationResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: notification
+        attributes:
+          $ref: '#/components/schemas/NotificationAttributes'
+    NotificationCursorMeta:
+      type: object
+      properties:
+        limit:
+          type: integer
+        next_cursor:
+          type:
+            - string
+            - 'null'
+          description: Opaque cursor to fetch the next page; null when there are no more notifications
+        has_more:
+          type: boolean
+        unread_count:
+          type: integer
+          description: Total unread notifications for the authenticated user
+    NotificationCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+        - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationResource'
+        meta:
+          $ref: '#/components/schemas/NotificationCursorMeta'
+    NotificationSuccessResponse:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/NotificationResource'
+    NotificationReadAllResponse:
+      type: object
+      required:
+        - status
+        - message
+        - meta
+      properties:
+        status:
+          type: string
+          const: success
+        message:
+          type: string
+        meta:
+          type: object
+          properties:
+            count:
+              type: integer
+              description: Number of notifications marked as read in this request
+    TransactionRecurrenceAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        starts_on:
+          type: string
+          format: date
+        value:
+          type: string
+          description: Decimal amount as string (precision 15, scale 2)
+          example: '100.0'
+    TransactionRecurrenceResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: transaction_recurrence
+        attributes:
+          $ref: '#/components/schemas/TransactionRecurrenceAttributes'
+    TransactionAttributes:
+      type: object
+      description: |
+        Common attributes, recurrences, and `current_value` are present on list and show.
+        `account_id`, `credit_card_id`, `limit_consumption_type`, `source_account_id`, `destination_account_id`, and `tag_ids` are populated on show, create, update, and cancel.
+        On list, `tag_ids` is always `null`. Payment targets that apply to the item
+        (`account_id` for account-based methods, `credit_card_id` and `limit_consumption_type` for credit card,
+        `source_account_id` and `destination_account_id` for transfers) are present as `null`.
+        Fields that do not apply to the item are omitted, not sent as `null`.
+        `account_id` is only included for account-based payment methods.
+        `credit_card_id` and `limit_consumption_type` are only included when `payment_method` is `credit_card`.
+        `source_account_id` and `destination_account_id` are only included when `kind` is `transfer_between_accounts`.
+        `starts_on` is not a top-level attribute; it is returned on each item in `recurrences`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        category_id:
+          type: string
+          format: uuid
+          nullable: true
+        description:
+          type: string
+        kind:
+          type: string
+          enum:
+            - income
+            - expense
+            - transfer_between_accounts
+        status:
+          type: string
+          enum:
+            - pending
+            - active
+            - completed
+            - canceled
+          description: Always `pending` on create. Not writable via update.
+        payment_method:
+          type: string
+          nullable: true
+          enum:
+            - pix
+            - debit
+            - credit_card
+            - ted
+            - doc
+            - deposit
+            - cash
+            - boleto
+        recurrence_type:
+          type: string
+          enum:
+            - one_time
+            - installment
+            - recurring
+        installments_count:
+          type: integer
+          nullable: true
+        ends_on:
+          type: string
+          format: date
+          nullable: true
+        canceled_on:
+          type: string
+          format: date
+          nullable: true
+          description: Set to the current date when the transaction is canceled. Null otherwise. Not writable.
+        account_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Present only for account-based payment methods. `null` on list; omitted otherwise.
+        credit_card_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Present only when `payment_method` is `credit_card`. `null` on list; omitted otherwise.
+        limit_consumption_type:
+          type: string
+          nullable: true
+          enum:
+            - upfront
+            - monthly
+          description: |
+            Present only when `payment_method` is `credit_card`. `null` on list; omitted otherwise.
+            Always `upfront` for `one_time` and `monthly` for `recurring`.
+            `installment` may be `upfront` or `monthly`.
+        source_account_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Present only when `kind` is `transfer_between_accounts`. `null` on list; omitted otherwise.
+        destination_account_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Present only when `kind` is `transfer_between_accounts`. `null` on list; omitted otherwise.
+        tag_ids:
+          type: array
+          nullable: true
+          items:
+            type: string
+            format: uuid
+          description: Always `null` on list. Populated on show, create, update, and cancel.
+        current_value:
+          type: string
+          nullable: true
+          description: |
+            Applicable amount for the current month: the latest recurrence whose year-month is on or before the current month.
+            If every recurrence starts in a future month, the earliest recurrence value is used.
+          example: '100.0'
+        recurrences:
+          type: array
+          description: Value history ordered by `starts_on`
+          items:
+            $ref: '#/components/schemas/TransactionRecurrenceResource'
+    TransactionResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: transaction
+        attributes:
+          $ref: '#/components/schemas/TransactionAttributes'
+    TransactionCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+        - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionResource'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    TransactionRequest:
+      type: object
+      required:
+        - transaction
+      properties:
+        transaction:
+          type: object
+          description: |
+            Category, tags, account, and credit card must belong to the authenticated user and be active.
+            `starts_on` is write-only; the response returns it on each item in `recurrences`.
+          required:
+            - category_id
+            - description
+            - kind
+            - recurrence_type
+            - starts_on
+            - value
+          properties:
+            category_id:
+              type: string
+              format: uuid
+              description: Must belong to the authenticated user and be active
+            description:
+              type: string
+            kind:
+              type: string
+              enum:
+                - income
+                - expense
+                - transfer_between_accounts
+            payment_method:
+              type: string
+              nullable: true
+              enum:
+                - pix
+                - debit
+                - credit_card
+                - ted
+                - doc
+                - deposit
+                - cash
+                - boleto
+              description: |
+                Required for income/expense. Must be null for transfer_between_accounts.
+                Income allows pix|ted|doc|deposit|cash|boleto.
+                Expense allows pix|debit|credit_card|ted|doc|deposit|cash|boleto.
+            recurrence_type:
+              type: string
+              enum:
+                - one_time
+                - installment
+                - recurring
+            starts_on:
+              type: string
+              format: date
+              description: First recurrence date. Write-only; the response exposes it on `recurrences`.
+            ends_on:
+              type: string
+              format: date
+              nullable: true
+              description: |
+                Required for installment. Optional for recurring. Must be null for one_time.
+                Must be on or after `starts_on`.
+                For installment, must fall in a later month than `starts_on` so `installments_count` is greater than 1.
+            value:
+              type: number
+              minimum: 0
+            limit_consumption_type:
+              type: string
+              nullable: true
+              enum:
+                - upfront
+                - monthly
+              description: |
+                Used when payment_method is credit_card.
+                Ignored for one_time (always upfront) and recurring (always monthly).
+                Required for installment, which may choose upfront or monthly.
+            account_id:
+              type: string
+              format: uuid
+              description: |
+                Required when payment_method is account-based (pix, debit, ted, doc, deposit, cash, boleto).
+                Must belong to the authenticated user and be active.
+            credit_card_id:
+              type: string
+              format: uuid
+              description: Required when payment_method is credit_card. Must belong to the authenticated user and be active.
+            source_account_id:
+              type: string
+              format: uuid
+              description: Required when kind is transfer_between_accounts. Must belong to the authenticated user and be active.
+            destination_account_id:
+              type: string
+              format: uuid
+              description: |
+                Required when kind is transfer_between_accounts. Must differ from source_account_id.
+                Must belong to the authenticated user and be active.
+            tag_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+              description: Each tag must belong to the authenticated user and be active
+    TransactionSuccessResponse:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/TransactionResource'
+    SettledTransactionAttributes:
+      type: object
+      description: |
+        One settled occurrence in the requested month.
+        `id` is the settlement id. `transaction_id` is the parent transaction.
+        `value` is the settled amount, not the transaction `current_value`.
+        `account_id` is only included for account-based payment methods.
+        `credit_card_id` and `limit_consumption_type` are only included when `payment_method` is `credit_card`.
+        `source_account_id` and `destination_account_id` are only included when `kind` is `transfer_between_accounts`.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Settlement id
+        transaction_id:
+          type: string
+          format: uuid
+        category_id:
+          type: string
+          format: uuid
+          nullable: true
+        description:
+          type: string
+        kind:
+          type: string
+          enum:
+            - income
+            - expense
+            - transfer_between_accounts
+        status:
+          type: string
+          enum:
+            - pending
+            - active
+            - completed
+            - canceled
+        payment_method:
+          type: string
+          nullable: true
+          enum:
+            - pix
+            - debit
+            - credit_card
+            - ted
+            - doc
+            - deposit
+            - cash
+            - boleto
+        recurrence_type:
+          type: string
+          enum:
+            - one_time
+            - installment
+            - recurring
+        installments_count:
+          type: integer
+          nullable: true
+        ends_on:
+          type:
+            - string
+            - 'null'
+          format: date
+        canceled_on:
+          type:
+            - string
+            - 'null'
+          format: date
+        occurred_on:
+          type: string
+          format: date
+          description: Business date of the settled occurrence. Used to select the calendar month.
+        settled_on:
+          type: string
+          format: date
+          description: Date the occurrence was processed.
+        value:
+          type: string
+          description: Decimal amount as string (precision 15, scale 2) from the settlement
+          example: '100.0'
+        installment_number:
+          type:
+            - integer
+            - 'null'
+          description: Present for installment and recurring occurrences. Null for one-time.
+        account_id:
+          type: string
+          format: uuid
+          description: Present only for account-based payment methods.
+        credit_card_id:
+          type: string
+          format: uuid
+          description: Present only when `payment_method` is `credit_card`.
+        limit_consumption_type:
+          type: string
+          enum:
+            - upfront
+            - monthly
+          description: Present only when `payment_method` is `credit_card`.
+        source_account_id:
+          type: string
+          format: uuid
+          description: Present only when `kind` is `transfer_between_accounts`.
+        destination_account_id:
+          type: string
+          format: uuid
+          description: Present only when `kind` is `transfer_between_accounts`.
+    SettledTransactionResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: settled_transaction
+        attributes:
+          $ref: '#/components/schemas/SettledTransactionAttributes'
+    SettledTransactionCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettledTransactionResource'
+    TransactionUpdateRequest:
+      type: object
+      required:
+        - transaction
+      properties:
+        transaction:
+          type: object
+          minProperties: 1
+          properties:
+            category_id:
+              type: string
+              format: uuid
+            description:
+              type: string
+            kind:
+              type: string
+              enum:
+                - income
+                - expense
+                - transfer_between_accounts
+              description: Writable only when status is pending
+            payment_method:
+              type: string
+              nullable: true
+              enum:
+                - pix
+                - debit
+                - credit_card
+                - ted
+                - doc
+                - deposit
+                - cash
+                - boleto
+              description: Writable only when status is pending
+            recurrence_type:
+              type: string
+              enum:
+                - one_time
+                - installment
+                - recurring
+              description: Writable only when status is pending
+            ends_on:
+              type: string
+              format: date
+              nullable: true
+              description: |
+                Writable when status is pending, or when status is active and recurrence_type is recurring.
+                Cleared automatically when recurrence_type is one_time.
+                Must be on or after `starts_on`.
+                For installment, must fall in a later month than `starts_on` so `installments_count` is greater than 1.
+                When active, cannot be before the latest existing recurrence `starts_on`.
+            starts_on:
+              type: string
+              format: date
+              description: |
+                Writable only when status is pending. Updates the existing recurrence in place.
+                Write-only; the response exposes it on `recurrences`.
+                Must be on or before `ends_on` when `ends_on` is present.
+            value:
+              type: number
+              minimum: 0
+              description: Writable only when status is pending. Updates the existing recurrence in place.
+            limit_consumption_type:
+              type: string
+              nullable: true
+              enum:
+                - upfront
+                - monthly
+              description: |
+                Writable only when status is pending.
+                Ignored for one_time (always upfront) and recurring (always monthly).
+                Required for installment unless the transaction already has a credit card limit consumption type.
+            account_id:
+              type: string
+              format: uuid
+              description: Writable when status is pending or active
+            credit_card_id:
+              type: string
+              format: uuid
+              description: Writable when status is pending or active
+            source_account_id:
+              type: string
+              format: uuid
+              description: Writable when status is pending or active
+            destination_account_id:
+              type: string
+              format: uuid
+              description: Writable when status is pending or active
+            tag_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+          description: |
+            Partial update. Description, category, and tags are always writable.
+            Account, card, source, destination, and recurring ends_on are writable unless status is completed or canceled.
+            Kind, payment method, recurrence type, starts_on, value, and limit consumption are writable only when pending.
+            `installments_count` is calculated and is not a request field.
+            Completed and canceled accept only description, category_id, and tag_ids.
+            Mutually exclusive payment fields are cleared to match the resulting kind and payment method.
+            An already linked inactive category, account, card, or tag may be kept; a newly selected inactive one is rejected.
+    TransactionRecurrenceRequest:
+      type: object
+      required:
+        - transaction_recurrence
+      properties:
+        transaction_recurrence:
+          type: object
+          required:
+            - starts_on
+            - value
+          properties:
+            starts_on:
+              type: string
+              format: date
+              description: |
+                Month that should receive the new value.
+                If a recurrence already exists in the same year-month, it is updated in place
+                (including the day of `starts_on`).
+                Otherwise a new recurrence is created for this date.
+                Cannot be after the transaction `ends_on`.
+            value:
+              type: number
+              minimum: 0
+              description: |
+                New amount for the given month.
+                Must be different from the amount already applied by the previous recurrence.
+                Cannot be changed when the transaction `limit_consumption_type` is `upfront`.
+            change_for_next_months:
+              type: boolean
+              default: false
+              description: |
+                When `false` or omitted, only the given month is changed.
+                If the next month already has a recurrence, it is kept; otherwise one is created
+                with the previous amount, unless that next month would be after `ends_on`.
+                Later recurrences are left unchanged.
+                When `true`, the new amount applies from the given month onward and every later
+                recurrence is removed.
+                Allowed only when the transaction `status` is `active`.
+    AuthenticationRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          description: Presence is required. Minimum length is not enforced on sign-in.
+        remember_me:
+          type: boolean
+          default: false
+          description: |
+            When `true`, the refresh cookie is persistent and the server-side refresh token lasts 30 days.
+            When omitted or `false`, the cookie is a session cookie and the server-side token lasts 1 day.
+            The cookie is httpOnly, `SameSite=Lax`, and `Secure` in production.
+    UserAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        configs:
+          type: object
+          additionalProperties: true
+          description: 'User preferences stored as JSON. Defaults to an empty object. Known key: `locale` (`en` or `pt-BR`).'
+    UserResource:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            type:
+              type: string
+              const: user
+            attributes:
+              $ref: '#/components/schemas/UserAttributes'
+    TokensData:
+      type: object
+      required:
+        - token
+        - user
+      properties:
+        token:
+          type: string
+          description: Session token (Bearer). Expires in 15 minutes.
+        user:
+          $ref: '#/components/schemas/UserResource'
+    TokensSuccessResponse:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        data:
+          $ref: '#/components/schemas/TokensData'
+    RefreshSessionRequest:
+      type: object
+      properties:
+        remember_me:
+          type: boolean
+          default: false
+          description: |
+            When `true`, the rotated refresh cookie is persistent and the server-side token lasts 30 days.
+            When omitted or `false`, the cookie is a session cookie and the server-side token lasts 1 day.
+            The `refresh_token` is read from the encrypted httpOnly cookie (`SameSite=Lax`; `Secure` in production), not from this body.
+    RegistrationRequest:
+      type: object
+      required:
+        - first_name
+        - last_name
+        - email
+        - password
+        - password_confirmation
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        password_confirmation:
+          type: string
+          format: password
+    RegistrationSuccessResponse:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/UserResource'
+    ProfileUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        configs:
+          type: object
+          additionalProperties: true
+          description: |
+            Merged into the stored configs. Sent keys overwrite existing ones; keys that are not sent are kept.
+            Can be sent alone, without `first_name` or `last_name`.
+            Known key: `locale` (`en` or `pt-BR`). Other keys are stored as-is.
+    AccountDeletionRequest:
+      type: object
+      required:
+        - password
+      properties:
+        password:
+          type: string
+          format: password
+    EmailConfirmationRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+    EmailChangeRequest:
+      type: object
+      required:
+        - current_password
+        - new_email
+      properties:
+        current_password:
+          type: string
+          format: password
+        new_email:
+          type: string
+          format: email
+    PasswordChangeRequest:
+      type: object
+      required:
+        - current_password
+        - password
+        - password_confirmation
+      properties:
+        current_password:
+          type: string
+          format: password
+        password:
+          type: string
+          format: password
+          minLength: 8
+        password_confirmation:
+          type: string
+          format: password
+    PasswordResetRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+    PasswordResetUpdateRequest:
+      type: object
+      required:
+        - token
+        - password
+        - password_confirmation
+      properties:
+        token:
+          type: string
+        password:
+          type: string
+          format: password
+          minLength: 8
+        password_confirmation:
+          type: string
+          format: password

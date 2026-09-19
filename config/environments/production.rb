@@ -12,8 +12,9 @@ Rails.application.configure do
   # Full error reports are disabled.
   config.consider_all_requests_local = false
 
-  # Cache assets for far-future expiry since they are all digest stamped.
-  config.public_file_server.headers = { "cache-control" => "public, max-age=#{1.year.to_i}" }
+  # public/ is docs + OpenAPI YAML (no digested assets). Do not cache for a year or
+  # Redoc keeps stale $ref targets after a spec change.
+  config.public_file_server.headers = { "cache-control" => "no-cache, no-store, must-revalidate" }
 
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
   # config.asset_host = "http://assets.example.com"

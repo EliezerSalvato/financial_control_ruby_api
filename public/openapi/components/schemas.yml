@@ -175,7 +175,7 @@ UserAttributes:
     configs:
       type: object
       additionalProperties: true
-      description: User preferences stored as JSON. Defaults to an empty object. Known key: `locale` (`en` or `pt-BR`).
+      description: "User preferences stored as JSON. Defaults to an empty object. Known key: `locale` (`en` or `pt-BR`)."
 
 UserResource:
   type: object
