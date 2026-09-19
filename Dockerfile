@@ -49,7 +49,10 @@ RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
 
 FROM base
 
-RUN groupadd --system --gid 1000 rails && \
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd --system --gid 1000 rails && \
     useradd rails --uid 1000 \
     --gid 1000 \
     --create-home \
@@ -66,7 +69,7 @@ COPY --chown=rails:rails --from=build \
 ENTRYPOINT ["/rails/bin/docker-entrypoint"]
 
 HEALTHCHECK --interval=30s --timeout=5s \
-CMD ["curl", "-f", "http://localhost/up"]
+  CMD curl -f http://127.0.0.1:3000/up || exit 1
 
 EXPOSE 3000
 
