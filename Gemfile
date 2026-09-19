@@ -33,6 +33,10 @@ gem "solid-adapters", "~> 1.1"
 gem "solid_queue", "~> 1.6"
 gem "mission_control-jobs", "~> 1.1"
 
+# Mail (SES v2 API; credentials under aws: in credentials.yml.enc)
+gem "aws-sdk-rails", "~> 5"
+gem "aws-actionmailer-ses", "~> 1"
+
 group :development do
   gem "rubocop-rails-omakase", "~> 1.1", require: false
   gem "i18n-tasks", "~> 1.1"
