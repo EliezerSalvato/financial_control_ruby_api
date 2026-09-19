@@ -30,7 +30,7 @@ gem "solid-process", "~> 0.6"
 gem "solid-adapters", "~> 1.1"
 
 # Jobs
-gem "solid_queue", "~> 1.6"
+gem "solid_queue", "~> 1.7"
 gem "mission_control-jobs", "~> 1.1"
 
 # Mail (SES v2 API; credentials under aws: in credentials.yml.enc)
