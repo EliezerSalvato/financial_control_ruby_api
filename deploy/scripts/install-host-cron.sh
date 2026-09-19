@@ -6,6 +6,8 @@ DUMP_JOB="/bin/bash ${ROOT_DIR}/deploy/scripts/pg-dump-to-bucket.sh"
 RENEW_JOB="/bin/bash ${ROOT_DIR}/deploy/scripts/renew-cert.sh"
 MARKER="financial-control-ops"
 LOG_DIR="${ROOT_DIR}/log"
+CRON_PATH="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+CRON_SHELL="SHELL=/bin/bash"
 
 mkdir -p "${LOG_DIR}"
 
@@ -31,9 +33,20 @@ write_crontab() {
   fi
 }
 
-filtered="$(read_crontab | grep -v -F "deploy/scripts/pg-dump-to-bucket.sh" | grep -v -F "deploy/scripts/renew-cert.sh" | grep -v "${MARKER}" || true)"
+filtered="$(
+  read_crontab \
+    | grep -v -F "deploy/scripts/pg-dump-to-bucket.sh" \
+    | grep -v -F "deploy/scripts/renew-cert.sh" \
+    | grep -v -F -- "--profile ops run --rm certbot" \
+    | grep -v -E '^PATH=' \
+    | grep -v -E '^SHELL=' \
+    | grep -v "${MARKER}" \
+    || true
+)"
 
 {
+  echo "${CRON_PATH}"
+  echo "${CRON_SHELL}"
   if [[ -n "${filtered}" ]]; then
     printf '%s\n' "${filtered}"
   fi
