@@ -1,0 +1,61 @@
+# Copy to terraform.tfvars and replace CHANGE_ME values before `terraform apply`.
+# terraform.tfvars is gitignored. This file must not contain secrets or private keys.
+#
+# Bundle: aws lightsail get-bundles --region us-east-1 (2026-09-18) has no small_3_1.
+# The current 2 GB / 2 vCPU dual-stack bundle is small_3_0 (~US$ 12/month).
+
+lightsail = {
+  region             = "us-east-1"
+  availability_zone  = "us-east-1a"
+  bundle_id          = "small_3_0"
+  blueprint_id       = "ubuntu_24_04"
+  # Lightsail names are unique across all resource types in the region.
+  instance_name      = "financial-control-api"
+  key_pair_name      = "financial-control-api-key"
+  static_ip_name     = "financial-control-api-ip"
+  ip_address_type    = "dualstack"
+  auto_snapshot_time = "08:00"
+  bucket_name        = "financial-control-ruby-api-dumps"
+  bucket_bundle_id   = "small_1_0"
+  public_ports = [
+    {
+      from_port  = 22
+      to_port    = 22
+      protocol   = "tcp"
+      cidrs      = ["203.0.113.1/32"] # CHANGE_ME: operator IPv4 /32
+      ipv6_cidrs = []
+    },
+    {
+      from_port  = 80
+      to_port    = 80
+      protocol   = "tcp"
+      cidrs      = ["0.0.0.0/0"]
+      ipv6_cidrs = ["::/0"]
+    },
+    {
+      from_port  = 443
+      to_port    = 443
+      protocol   = "tcp"
+      cidrs      = ["0.0.0.0/0"]
+      ipv6_cidrs = ["::/0"]
+    },
+  ]
+}
+
+access = {
+  # Paste the full contents of your existing public key, or set ssh_public_key_path
+  # to a local .pub file (for example ~/.ssh/id_ed25519.pub) and leave this as CHANGE_ME.
+  ssh_public_key      = "CHANGE_ME"
+  ssh_public_key_path = ""
+}
+
+ses = {
+  domain           = "financialcontrol.app.br"
+  mail_from_domain = "bounce.financialcontrol.app.br"
+  iam_user_name    = "financial-control-api-ses-send"
+}
+
+tags = {
+  project     = "financial-control-ruby-api"
+  environment = "production"
+}
