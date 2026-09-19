@@ -10,6 +10,7 @@
 # Ignore all environment files.
 /.env*
 !.env.example
+!.env.production.example
 
 # Ignore all logfiles and tempfiles.
 /log/*
@@ -31,13 +32,28 @@
 
 # Ignore key files for decrypting credentials and more.
 /config/*.key
-
+/config/credentials/*.key
 
 # Local Compose override (keep sample tracked)
-docker-compose.yml
+/docker-compose.yml
 
 # Ignore test coverage reports.
 /coverage
 
 # Local tool version manager pin (optional).
 .tool-versions
+
+# Terraform local state, tfvars with operator values, and plugin cache.
+# Keep .terraform.lock.hcl and *.tfvars.example tracked.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.tfstate.lock.info
