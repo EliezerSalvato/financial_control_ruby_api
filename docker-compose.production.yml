@@ -1,0 +1,95 @@
+name: financial-control
+
+x-api: &api
+  image: ghcr.io/eliezersalvato/financial_control_ruby_api:${IMAGE_TAG:-latest}
+  env_file:
+    - .env
+  environment:
+    RAILS_ENV: production
+    RAILS_MAX_THREADS: ${RAILS_MAX_THREADS:-3}
+    JOB_CONCURRENCY: ${JOB_CONCURRENCY:-1}
+  depends_on:
+    db:
+      condition: service_healthy
+  networks:
+    - app
+  restart: unless-stopped
+  init: true
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_HOSTNAME: ${API_HOSTNAME:-api.financialcontrol.app.br}
+    volumes:
+      - ./deploy/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./deploy/nginx/start.sh:/etc/nginx/start.sh:ro
+      - certbot_www:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    command: ["/bin/sh", "/etc/nginx/start.sh"]
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - app
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:v3.3.0
+    profiles: ["ops"]
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    networks:
+      - app
+
+  api:
+    <<: *api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  jobs:
+    <<: *api
+    command: ["bin/jobs"]
+    healthcheck:
+      disable: true
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    command: ["postgres", "-c", "shared_buffers=128MB"]
+    shm_size: "256mb"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  certbot_www:
+  certbot_certs:
+
+networks:
+  app:
+    driver: bridge
