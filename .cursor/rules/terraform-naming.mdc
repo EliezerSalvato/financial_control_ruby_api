@@ -1,0 +1,170 @@
+---
+description: Naming, file layout, and variable modeling conventions for Terraform. Apply when writing or reviewing .tf/.tfvars — resources, data sources, variables, outputs, modules, and locals.
+globs:
+  - "**/*.tf"
+  - "**/*.tfvars"
+alwaysApply: false
+---
+
+# Terraform Naming and Layout
+
+All Terraform authoring and review **must** follow these conventions.
+Canonical reference: https://www.terraform-best-practices.com/naming
+
+These rules apply to **Terraform identifiers** (resource, data, variable, output, module, and local names). Cloud-provider constraints (S3 bucket names, DNS labels, and similar) belong in **argument values**, not in block names.
+
+## 1. General conventions
+
+- Use `_` (underscore), never `-` (dash), in Terraform identifiers.
+- Prefer lowercase letters and numbers.
+- File names are the exception: use `-` inside a path segment (see section 6).
+- Local names follow the same identifier rules as variables.
+
+## 2. Resources and data sources
+
+- Do **not** repeat the resource type in the name (partially or fully):
+  - ✅ `resource "aws_route_table" "public" {}`
+  - ❌ `resource "aws_route_table" "public_route_table" {}`
+  - ❌ `resource "aws_route_table" "public_aws_route_table" {}`
+- Use `this` when no descriptive name exists, or when the module creates a single resource of that type.
+- Always use **singular** nouns for names.
+- Use `-` **inside argument values** that humans will see (for example an RDS DNS name).
+- Put `count` / `for_each` first in the block, then a blank line.
+- Prefer `for_each` over `count` for collections, keyed by a stable identity (name, id).
+- For create/skip toggles, use `count` with a **boolean** (`var.enabled ? 1 : 0`). Do not feed a boolean to `for_each` — it expects a map or set. Prefer that boolean over `length(...)` or similar.
+- Put `tags` last among real arguments (when the resource supports them). After that: `depends_on`, then `lifecycle`, each separated by a blank line.
+
+```hcl
+resource "aws_nat_gateway" "this" {
+  count = var.enabled ? 1 : 0
+
+  allocation_id = ...
+  subnet_id     = ...
+
+  tags = {
+    Name = ...
+  }
+
+  depends_on = [aws_internet_gateway.this]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+```
+
+## 3. Variables
+
+- In resource-wrapping modules, reuse upstream argument names (`name`, `description`, `default`) from the provider "Argument Reference".
+- Use the **plural** form when the type is `list(...)` or `map(...)` (including object attributes such as `public_subnets`).
+- Order keys in a `variable` block as: `description`, `type`, `nullable`, `default`, `validation`, `sensitive`.
+- **Always** set `description`, even when it seems obvious. Match upstream wording when it exists.
+- Use positive names; avoid double negatives (`encryption_enabled`, not `encryption_disabled`).
+- Set `nullable = false` when `null` must not override the default. Omit it (or set `true`) when `null` is a valid value.
+- Prefer `object(...)` when attributes belong together (see section 4). Use scalar/`list`/`map` types for standalone values.
+- Use a tighter type such as `map(map(string))` when every element shares that type.
+- Use `any` only to stop type-checking at a given depth, or when several types must be accepted.
+- `{}` is an object; use `tomap(...)` when a map is required.
+
+## 4. Variable modeling (no hard-coding, keep context)
+
+This section is mandatory when creating or changing Terraform files. It wins over "use the simplest type" when they conflict: prefer **cohesive, contextual data**.
+
+- Always drive configurable values from a `variable` (or from `locals` derived from variables). Do **not** hard-code strings such as CIDRs, names, AZs, instance sizes, feature flags, or counts in `resource` / `data` blocks.
+- Model variables as **contextual objects with attributes**, not as isolated scalars. Example: one `variable "vpc"` that owns `public_subnets` / `private_subnets` as lists of objects (`name`, `cidr`, …) — never a separate variable per subnet or per CIDR.
+- Provider enumerations and fixed protocol details may stay inline when they are inherent to the resource (`protocol = "tcp"`), not environment-specific.
+- For a collection of the same kind (subnets, listeners), use a **list of objects**, each item carrying its own attributes, and iterate with `for_each`.
+
+❌ Avoid disconnected scalars:
+
+```hcl
+variable "public_subnet_cidr_a"  { type = string }
+variable "public_subnet_cidr_b"  { type = string }
+variable "private_subnet_cidr_a" { type = string }
+variable "vpc_cidr"              { type = string }
+```
+
+✅ Prefer a contextual object and typed collections:
+
+```hcl
+variable "vpc" {
+  description = "VPC definition, including subnet collections with per-subnet attributes."
+  type = object({
+    name = string
+    cidr = string
+    public_subnets = list(object({
+      name              = string
+      cidr              = string
+      availability_zone = string
+    }))
+    private_subnets = list(object({
+      name              = string
+      cidr              = string
+      availability_zone = string
+    }))
+  })
+  nullable = false
+}
+
+resource "aws_subnet" "public" {
+  for_each = { for s in var.vpc.public_subnets : s.name => s }
+
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = each.value.cidr
+  availability_zone = each.value.availability_zone
+
+  tags = {
+    Name = each.value.name
+  }
+}
+```
+
+Concrete values live in `*.tfvars` (or in `default`), **never** inline on the resource.
+
+## 5. Outputs
+
+Make outputs obvious to module consumers.
+
+- Name structure: `{name}_{type}_{attribute}`
+  - `{name}` — resource or data source name (`private` from `aws_subnet.private`)
+  - `{type}` — resource type **without** the provider prefix (`subnet`)
+  - `{attribute}` — returned attribute (`id`, `arn`)
+- If the resource is named `this`, omit `{name}` (`vpc_id`, not `this_vpc_id`).
+- If the value interpolates several resources, keep `{name}` and `{type}` as generic as possible.
+- If the value is a list, use a **plural** name (`public_subnet_ids`).
+- **Always** set `description`.
+- Set `sensitive = true` only when the value is a secret or credential. The flag taints every downstream reference — do not spread it.
+- Use `try(...)` for optional or indexed resources instead of `element(concat(...))`.
+
+## 6. File layout
+
+Split resources **by component**. One resource (or a cohesive group with the same purpose) per file.
+
+**Pattern:** `<domain>.<component>.tf`
+
+- `<domain>` groups related resources (for example `vpc`).
+- `<component>` is kebab-case and describes that file.
+- The domain root file with no suffix (`vpc.tf`) holds the central resource of that domain.
+
+Example:
+
+```
+vpc.tf                        # the VPC itself (aws_vpc)
+vpc.public-subnets.tf         # public subnets
+vpc.private-subnets.tf        # private subnets
+vpc.public-route-table.tf     # public route table + associations
+vpc.private-route-table.tf    # private route table + associations
+vpc.internet-gateway.tf       # internet gateway
+vpc.nat-gateway.tf            # NAT gateway + EIP
+```
+
+- Always use this pattern for new resources — do not dump everything into a single `main.tf`.
+- Keep the `<domain>` prefix consistent across files in the same domain.
+- In **file names**, use `-` inside a segment (`public-route-table`). That dash rule applies only to files; Terraform identifiers still use `_`.
+- Keep `variables.tf`, `outputs.tf`, and `versions.tf` / `providers.tf` as the conventional module-root files.
+
+## 7. Modules
+
+- Name module blocks with `_`, never `-`: `module "public_subnets"`, not `module "public-subnets"`.
+- Do not repeat the module source in the name (`module "vpc"`, not `module "vpc_vpc"`).
+- Use `this` when the root module instantiates a single instance of that module with no better name.
