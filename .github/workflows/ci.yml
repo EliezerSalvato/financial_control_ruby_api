@@ -154,6 +154,30 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.LIGHTSAIL_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.LIGHTSAIL_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Allow this runner through Lightsail SSH
+        env:
+          LIGHTSAIL_INSTANCE_NAME: financial-control-api
+        run: |
+          set -euo pipefail
+          runner_ip="$(curl -fsS --max-time 10 https://checkip.amazonaws.com | tr -d '[:space:]')"
+          if ! printf '%s\n' "${runner_ip}" | grep -Eq '^[0-9]+(\.[0-9]+){3}$'; then
+            echo "Could not determine a valid IPv4 address for this runner."
+            exit 1
+          fi
+          echo "RUNNER_CIDR=${runner_ip}/32" >> "${GITHUB_ENV}"
+          aws lightsail open-instance-public-ports \
+            --region us-east-1 \
+            --instance-name "${LIGHTSAIL_INSTANCE_NAME}" \
+            --port-info "{\"fromPort\":22,\"toPort\":22,\"protocol\":\"tcp\",\"cidrs\":[\"${runner_ip}/32\"]}"
+          sleep 3
+
       - name: Sync compose files and restart app containers
         env:
           SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
@@ -171,9 +195,13 @@ jobs:
           if [ -n "${SSH_KNOWN_HOSTS}" ]; then
             printf '%s\n' "${SSH_KNOWN_HOSTS}" >> "${HOME}/.ssh/known_hosts"
           else
-            ssh-keyscan -H "${SSH_HOST}" >> "${HOME}/.ssh/known_hosts"
+            ssh-keyscan -T 10 -H "${SSH_HOST}" >> "${HOME}/.ssh/known_hosts" || true
           fi
-          SSH_OPTS="-i ${HOME}/.ssh/deploy -o IdentitiesOnly=yes"
+          if [ ! -s "${HOME}/.ssh/known_hosts" ]; then
+            echo "Could not fetch the SSH host key. Port 22 is IP-restricted and this runner cannot connect."
+            exit 1
+          fi
+          SSH_OPTS="-i ${HOME}/.ssh/deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10"
           rsync -az -e "ssh ${SSH_OPTS}" \
             docker-compose.production.yml \
             "${SSH_USER}@${SSH_HOST}:/opt/financial-control/"
@@ -186,3 +214,13 @@ jobs:
             "bash /opt/financial-control/deploy/scripts/install-host-cron.sh"
           ssh ${SSH_OPTS} "${SSH_USER}@${SSH_HOST}" \
             "cd /opt/financial-control && IMAGE_TAG=${IMAGE_TAG} docker compose -f docker-compose.production.yml pull api jobs && IMAGE_TAG=${IMAGE_TAG} docker compose -f docker-compose.production.yml up -d --no-deps api jobs nginx"
+
+      - name: Revoke this runner from Lightsail SSH
+        if: always() && env.RUNNER_CIDR != ''
+        env:
+          LIGHTSAIL_INSTANCE_NAME: financial-control-api
+        run: |
+          aws lightsail close-instance-public-ports \
+            --region us-east-1 \
+            --instance-name "${LIGHTSAIL_INSTANCE_NAME}" \
+            --port-info "{\"fromPort\":22,\"toPort\":22,\"protocol\":\"tcp\",\"cidrs\":[\"${RUNNER_CIDR}\"]}"

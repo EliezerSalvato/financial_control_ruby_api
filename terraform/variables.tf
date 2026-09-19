@@ -105,6 +105,19 @@ variable "ses" {
   }
 }
 
+variable "github_deploy" {
+  description = "IAM user used by GitHub Actions to temporarily allowlist the runner IPv4 on Lightsail SSH. Create the access key out of band so the secret never enters Terraform state."
+  type = object({
+    iam_user_name = string
+  })
+  nullable = false
+
+  validation {
+    condition     = length(trimspace(var.github_deploy.iam_user_name)) > 0 && !strcontains(var.github_deploy.iam_user_name, "CHANGE_ME")
+    error_message = "Set github_deploy.iam_user_name to a non-empty IAM user name."
+  }
+}
+
 variable "tags" {
   description = "Resource tags merged into the provider default_tags block (managed_by is fixed in providers.tf)."
   type = object({

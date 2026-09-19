@@ -38,6 +38,11 @@ output "send_iam_user_name" {
   value       = aws_iam_user.send.name
 }
 
+output "github_deploy_iam_user_name" {
+  description = "IAM user used by GitHub Actions to temporarily allowlist the runner IPv4 on Lightsail SSH. Create the access key out of band so the secret never enters Terraform state."
+  value       = aws_iam_user.github_deploy.name
+}
+
 output "dns_records" {
   description = "Copy-paste DNS records for the current DNS provider. Terraform does not create a hosted zone."
   value       = <<-EOT

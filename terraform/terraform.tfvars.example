@@ -55,6 +55,10 @@ ses = {
   iam_user_name    = "financial-control-api-ses-send"
 }
 
+github_deploy = {
+  iam_user_name = "financial-control-github-deploy"
+}
+
 tags = {
   project     = "financial-control-ruby-api"
   environment = "production"
