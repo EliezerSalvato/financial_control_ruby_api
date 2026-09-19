@@ -109,3 +109,78 @@ jobs:
         run: |
           echo "lint=$LINT security=$SECURITY test=$TEST"
           [ "$LINT" = success ] && [ "$SECURITY" = success ] && [ "$TEST" = success ]
+
+  deploy:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      vars.ENABLE_LIGHTSAIL_DEPLOY == 'true'
+    needs: [ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set image name
+        run: echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Sync compose files and restart app containers
+        env:
+          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          SSH_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          SSH_KNOWN_HOSTS: ${{ secrets.LIGHTSAIL_SSH_KNOWN_HOSTS }}
+          SSH_USER: ubuntu
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${HOME}/.ssh"
+          install -m 600 /dev/null "${HOME}/.ssh/deploy"
+          printf '%s\n' "${SSH_KEY}" > "${HOME}/.ssh/deploy"
+          if [ -n "${SSH_KNOWN_HOSTS}" ]; then
+            printf '%s\n' "${SSH_KNOWN_HOSTS}" >> "${HOME}/.ssh/known_hosts"
+          else
+            ssh-keyscan -H "${SSH_HOST}" >> "${HOME}/.ssh/known_hosts"
+          fi
+          SSH_OPTS="-i ${HOME}/.ssh/deploy -o IdentitiesOnly=yes"
+          rsync -az -e "ssh ${SSH_OPTS}" \
+            docker-compose.production.yml \
+            "${SSH_USER}@${SSH_HOST}:/opt/financial-control/"
+          rsync -az --delete -e "ssh ${SSH_OPTS}" \
+            deploy/ \
+            "${SSH_USER}@${SSH_HOST}:/opt/financial-control/deploy/"
+          printf '%s' "${GHCR_TOKEN}" | ssh ${SSH_OPTS} "${SSH_USER}@${SSH_HOST}" \
+            "docker login ghcr.io -u ${GHCR_USER} --password-stdin"
+          ssh ${SSH_OPTS} "${SSH_USER}@${SSH_HOST}" \
+            "bash /opt/financial-control/deploy/scripts/install-host-cron.sh"
+          ssh ${SSH_OPTS} "${SSH_USER}@${SSH_HOST}" \
+            "cd /opt/financial-control && IMAGE_TAG=${IMAGE_TAG} docker compose -f docker-compose.production.yml pull api jobs && IMAGE_TAG=${IMAGE_TAG} docker compose -f docker-compose.production.yml up -d --no-deps api jobs nginx"
