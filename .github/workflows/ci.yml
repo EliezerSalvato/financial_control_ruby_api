@@ -192,16 +192,13 @@ jobs:
           mkdir -p "${HOME}/.ssh"
           install -m 600 /dev/null "${HOME}/.ssh/deploy"
           printf '%s\n' "${SSH_KEY}" > "${HOME}/.ssh/deploy"
-          if [ -n "${SSH_KNOWN_HOSTS}" ]; then
-            printf '%s\n' "${SSH_KNOWN_HOSTS}" >> "${HOME}/.ssh/known_hosts"
-          else
-            ssh-keyscan -T 10 -H "${SSH_HOST}" >> "${HOME}/.ssh/known_hosts" || true
-          fi
-          if [ ! -s "${HOME}/.ssh/known_hosts" ]; then
-            echo "Could not fetch the SSH host key. Port 22 is IP-restricted and this runner cannot connect."
+          if [ -z "${SSH_KNOWN_HOSTS}" ]; then
+            echo "LIGHTSAIL_SSH_KNOWN_HOSTS is empty. Refusing to trust the host key from the network."
             exit 1
           fi
-          SSH_OPTS="-i ${HOME}/.ssh/deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10"
+          printf '%s\n' "${SSH_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 600 "${HOME}/.ssh/known_hosts"
+          SSH_OPTS="-i ${HOME}/.ssh/deploy -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${HOME}/.ssh/known_hosts"
           rsync -az -e "ssh ${SSH_OPTS}" \
             docker-compose.production.yml \
             "${SSH_USER}@${SSH_HOST}:/opt/financial-control/"
