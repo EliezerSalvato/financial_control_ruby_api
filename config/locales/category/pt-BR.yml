@@ -7,17 +7,49 @@ pt-BR:
           attributes:
             base:
               category_creation_failed: Falha ao criar a categoria
+              later_month_closed: Não é possível criar metas nesta data, pois um mês posterior já está fechado
+              monthly_status_closed: Não é possível criar metas nesta data, pois o mês já está fechado
+            goal_ends_on:
+              before_starts_on: deve ser igual ou posterior a goal_starts_on
         core/category/deletion/input:
           attributes:
             base:
               category_destruction_failed: Falha ao excluir a categoria
               category_not_found: Categoria não encontrada
               used_by_transactions: Esta categoria não pode ser excluída porque já está em uso em transações. Para deixar de utilizá-la, inative a categoria.
+        core/category/goal/change/input:
+          attributes:
+            base:
+              goal_change_failed: Falha ao alterar a meta
+              later_month_closed: Não é possível alterar metas nesta data, pois um mês posterior já está fechado
+              monthly_status_closed: Não é possível alterar metas nesta data, pois o mês já está fechado
+            starts_on:
+              after_ends_on: deve ser igual ou anterior a goal_ends_on
+            value:
+              same_as_previous: deve ser diferente da meta anterior
+        core/category/goal/update/input:
+          attributes:
+            goal_ends_on:
+              before_existing_goal: deve ser posterior a uma meta já existente
+              before_starts_on: deve ser igual ou posterior a goal_starts_on
+            goal_starts_on:
+              cannot_be_changed: não pode ser alterado quando já existe uma meta
+            goal_value:
+              cannot_be_changed: não pode ser alterado quando já existe uma meta
         core/category/update/input:
           attributes:
             base:
               category_not_found: Categoria não encontrada
               category_update_failed: Falha ao atualizar a categoria
+              later_month_closed: Não é possível alterar metas nesta data, pois um mês posterior já está fechado
+              monthly_status_closed: Não é possível alterar metas nesta data, pois o mês já está fechado
+            goal_ends_on:
+              before_existing_goal: deve ser posterior a uma meta já existente
+              before_starts_on: deve ser igual ou posterior a goal_starts_on
+            goal_starts_on:
+              cannot_be_changed: não pode ser alterado quando já existe uma meta
+            goal_value:
+              cannot_be_changed: não pode ser alterado quando já existe uma meta
   category:
     creation:
       failure: Falha ao criar a categoria
@@ -28,6 +60,10 @@ pt-BR:
     errors:
       invalid_filters: Filtro inválido
       not_found: Categoria não encontrada
+    goal:
+      change:
+        failure: Falha ao alterar a meta
+        success: Meta criada ou atualizada com sucesso
     update:
       failure: Falha ao atualizar a categoria
       success: Categoria atualizada com sucesso

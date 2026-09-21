@@ -117,6 +117,18 @@ RSpec.describe "API facade fallback branches", type: :request do
 
       expect(response).to have_http_status(:unprocessable_content)
     end
+
+    it "returns unprocessable content when changing a goal fails unexpectedly" do
+      allow(Category).to receive(:change_goal).and_return(unexpected_failure)
+
+      patch "/api/v1/categories/#{id}/goals",
+            params: { category_goal: { starts_on: "2026-08-11", value: 50 } },
+            headers: headers,
+            as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body["message"]).to eq(I18n.t("category.goal.change.failure"))
+    end
   end
 
   describe "institutions" do

@@ -59,7 +59,7 @@ get:
 post:
   tags: [Categories]
   summary: Create category
-  description: Creates a new category for the authenticated user.
+  description: Creates a new category for the authenticated user. Optional `goal_starts_on` and `goal_value` start a goal; `goal_ends_on` is optional.
   operationId: createCategory
   security:
     - bearerAuth: []

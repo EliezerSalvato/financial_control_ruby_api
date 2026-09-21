@@ -11,6 +11,9 @@ class Core::Category::Update < ApplicationSolidProcess
     attribute :name, :string
     attribute :color, :string
     attribute :active, :boolean
+    attribute :goal_starts_on, :date
+    attribute :goal_value, :decimal
+    attribute :goal_ends_on, :date
 
     normalizes :name, with: ->(value) { value&.strip }
     normalizes :color, with: ->(value) { value&.strip }
@@ -19,14 +22,20 @@ class Core::Category::Update < ApplicationSolidProcess
     validates :user, kind_of: Core::User::Entity
     validates :name, presence: true, allow_nil: true
     validates :color, presence: true, format: { with: Core::Color::FORMAT }, allow_nil: true
+    validates :goal_value, numericality: { greater_than_or_equal_to: 0 }, allow_nil: true
   end
 
 
   def call(attributes)
-    Given(attributes)
-      .and_then(:find_category)
-      .and_then(:check_if_name_is_taken)
-      .and_then(:update_category)
+    rollback_on_failure {
+      Given(attributes)
+        .and_then(:find_category)
+        .and_then(:check_if_name_is_taken)
+        .and_then(:ensure_goal_months_are_open)
+        .and_then(:update_goal)
+        .and_then(:update_category)
+        .and_then(:reload_category)
+    }
   end
 
   private
@@ -49,9 +58,27 @@ class Core::Category::Update < ApplicationSolidProcess
     Continue()
   end
 
-  def update_category(category:, name:, color:, active:, **)
-    attributes = { name:, color:, active: }.compact
+  def ensure_goal_months_are_open(user:, category:, goal_starts_on:, goal_ends_on:, **)
+    if category.goals.empty? && goal_starts_on.present?
+      result = with_nested_process(Core::MonthlyStatus::EnsureOpen.call(user:, date: goal_starts_on))
+      return result unless result.success?
+    end
 
+    return Continue() if goal_ends_on.blank?
+    return Continue() if goal_starts_on.present? && same_month?(goal_starts_on, goal_ends_on)
+
+    with_nested_process(Core::MonthlyStatus::EnsureOpen.call(user:, date: goal_ends_on))
+  end
+
+  def update_goal(category:, goal_starts_on:, goal_value:, goal_ends_on:, **)
+    with_nested_process(
+      Core::Category::Goal::Update.call(category:, goal_starts_on:, goal_value:, goal_ends_on:),
+      persist_failure: :category_update_failed
+    )
+  end
+
+  def update_category(category:, name:, color:, active:, goal_ends_on:, **)
+    attributes = { name:, color:, active:, goal_ends_on: goal_ends_on&.beginning_of_month }.compact
 
     case deps.category_repository.update(category:, attributes:)
     in Solid::Success(category:) then Continue(category:)
@@ -61,5 +88,18 @@ class Core::Category::Update < ApplicationSolidProcess
 
       Failure(:category_update_failed, input:)
     end
+  end
+
+  def reload_category(user:, category:, **)
+    case deps.category_repository.find_by_id(user:, id: category.id)
+    in Solid::Success(category:) then Continue(category:)
+    in Solid::Failure
+      input.errors.add(:base, :category_update_failed)
+      Failure(:category_update_failed, input:)
+    end
+  end
+
+  def same_month?(left, right)
+    left.month == right.month && left.year == right.year
   end
 end

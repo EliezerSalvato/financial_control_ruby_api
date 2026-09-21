@@ -21,6 +21,8 @@ paths:
     $ref: "./paths/categories.yml"
   /api/v1/categories/{id}:
     $ref: "./paths/category.yml"
+  /api/v1/categories/{category_id}/goals:
+    $ref: "./paths/category_goals.yml"
   /api/v1/institutions:
     $ref: "./paths/institutions.yml"
   /api/v1/institutions/{id}:

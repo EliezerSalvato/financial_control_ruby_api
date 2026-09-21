@@ -24,7 +24,7 @@ get:
 patch:
   tags: [Categories]
   summary: Update category
-  description: Updates an existing category owned by the authenticated user.
+  description: Updates an existing category owned by the authenticated user. `goal_ends_on` ends an existing goal. `goal_starts_on` and `goal_value` start a goal only when none exists.
   operationId: updateCategory
   security:
     - bearerAuth: []

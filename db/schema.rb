@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_21_174500) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_21_174501) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -151,12 +151,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_174500) do
     t.boolean "active", default: true, null: false
     t.string "color", limit: 9, null: false
     t.datetime "created_at", null: false
+    t.date "goal_ends_on"
     t.string "name", null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index "user_id, lower((name)::text)", name: "index_categories_on_user_id_and_lower_name", unique: true
     t.index ["user_id", "active"], name: "index_categories_on_user_id_and_active"
     t.index ["user_id"], name: "index_categories_on_user_id"
+  end
+
+  create_table "category_goals", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.uuid "category_id", null: false
+    t.datetime "created_at", null: false
+    t.integer "month", null: false
+    t.datetime "updated_at", null: false
+    t.decimal "value", precision: 15, scale: 2, null: false
+    t.integer "year", null: false
+    t.index ["category_id", "month", "year"], name: "index_category_goals_on_category_id_and_month_and_year", unique: true
+    t.check_constraint "month >= 1 AND month <= 12", name: "category_goals_month_range"
+    t.check_constraint "value >= 0::numeric", name: "category_goals_value_non_negative"
+    t.check_constraint "year >= 1 AND year <= 9999", name: "category_goals_year_range"
   end
 
   create_table "credit_card_invoice_settlements", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
@@ -462,6 +476,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_174500) do
   add_foreign_key "accounts", "institutions"
   add_foreign_key "accounts", "users"
   add_foreign_key "categories", "users"
+  add_foreign_key "category_goals", "categories"
   add_foreign_key "credit_card_invoice_settlements", "accounts", column: "payment_account_id"
   add_foreign_key "credit_card_invoice_settlements", "credit_cards"
   add_foreign_key "credit_cards", "accounts", column: "default_payment_account_id"

@@ -80,6 +80,6 @@ class API::V1::CategoriesController < API::V1::BaseController
   end
 
   def permitted_params
-    params.require(:category).permit(:name, :color, :active)
+    params.require(:category).permit(:name, :color, :active, :goal_starts_on, :goal_value, :goal_ends_on)
   end
 end

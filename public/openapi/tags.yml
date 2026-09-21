@@ -5,7 +5,7 @@
 - name: Tags
   description: User-owned labels for categorizing transactions, with optional monthly goals
 - name: Categories
-  description: User-owned categories for organizing transactions
+  description: User-owned categories for organizing transactions, with optional monthly goals
 - name: Institutions
   description: User-owned financial institutions
 - name: Accounts

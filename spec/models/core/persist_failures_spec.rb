@@ -101,7 +101,7 @@ RSpec.describe "core process persist and not-found failures" do
       expect(Core::Tag::Deletion.call(user: user_entity, id: tag.id).type).to eq(:tag_destruction_failed)
     end
 
-    it "fails tag goal persistence" do
+    it "fails tag and category goal persistence" do
       tag = create(:tag, :with_goal, user:, goal_starts_on: Date.new(2026, 8, 1), goal_value: 100)
       allow(Tag::Adapters.goal_repository).to receive(:create).and_return(failure(:goal_creation_failed, errors:))
       expect(
@@ -121,6 +121,40 @@ RSpec.describe "core process persist and not-found failures" do
           tag_id: tag.id,
           starts_on: Date.new(2026, 8, 1),
           value: 50
+        ).type
+      ).to eq(:goal_change_failed)
+
+      category = create(:category, :with_goal, user:, goal_starts_on: Date.new(2026, 8, 1), goal_value: 100)
+      allow(Category::Adapters.goal_repository).to receive(:create).and_return(failure(:goal_creation_failed, errors:))
+      expect(
+        Core::Category::Goal::Change.call(
+          user: user_entity,
+          category_id: category.id,
+          starts_on: Date.new(2026, 9, 11),
+          value: 50
+        ).type
+      ).to eq(:goal_change_failed)
+
+      allow(Category::Adapters.goal_repository).to receive(:create).and_call_original
+      allow(Category::Adapters.goal_repository).to receive(:update).and_return(failure(:goal_update_failed, errors:))
+      expect(
+        Core::Category::Goal::Change.call(
+          user: user_entity,
+          category_id: category.id,
+          starts_on: Date.new(2026, 8, 1),
+          value: 50
+        ).type
+      ).to eq(:goal_change_failed)
+
+      allow(Category::Adapters.goal_repository).to receive(:update).and_call_original
+      allow(Category::Adapters.goal_repository).to receive(:destroy_after).and_return(failure(:goal_destruction_failed, errors:))
+      expect(
+        Core::Category::Goal::Change.call(
+          user: user_entity,
+          category_id: category.id,
+          starts_on: Date.new(2026, 9, 11),
+          value: 50,
+          change_for_next_months: true
         ).type
       ).to eq(:goal_change_failed)
 
@@ -152,7 +186,9 @@ RSpec.describe "core process persist and not-found failures" do
       ).to eq(:goal_change_failed)
 
       expect(Tag::Goal::Mapper.to_entity(nil)).to be_nil
+      expect(Category::Goal::Mapper.to_entity(nil)).to be_nil
       expect(Tag::Goal::Mapper.to_record(Tag::Mapper.to_entity(tag).goals.first)).to eq(tag.goals.first)
+      expect(Category::Goal::Mapper.to_record(Category::Mapper.to_entity(category).goals.first)).to eq(category.goals.first)
     end
 
     it "fails nested goal creation and parent goal updates" do
@@ -183,11 +219,47 @@ RSpec.describe "core process persist and not-found failures" do
       expect(
         Core::Tag::Creation.call(user: user_entity, name: "Goal tag", color: "#3B82F6").type
       ).to eq(:tag_creation_failed)
+
+      category_entity = Category::Mapper.to_entity(create(:category, user:))
+      allow(Category::Adapters.goal_repository).to receive(:create).and_return(failure(:goal_creation_failed, errors:))
+      expect(
+        Core::Category::Goal::Creation.call(category: category_entity, starts_on: Date.new(2026, 8, 1), value: 10).type
+      ).to eq(:goal_creation_failed)
+      expect(
+        Core::Category::Goal::Update.call(category: category_entity, goal_starts_on: Date.new(2026, 8, 1), goal_value: 10).type
+      ).to eq(:goal_creation_failed)
+      expect(
+        Core::Category::Goal::Update.call(category: category_entity, goal_starts_on: Date.new(2026, 8, 1)).type
+      ).to eq(:invalid_input)
+
+      existing_category = Category::Mapper.to_entity(create(:category, :with_goal, user:, goal_starts_on: Date.new(2026, 8, 1), goal_value: 100))
+      expect(
+        Core::Category::Goal::Update.call(category: existing_category, goal_starts_on: Date.new(2026, 9, 1), goal_value: 20).type
+      ).to eq(:invalid_input)
+      expect(
+        Core::Category::Goal::Update.call(category: existing_category, goal_ends_on: Date.new(2026, 7, 1)).type
+      ).to eq(:invalid_input)
+
+      allow(Category::Adapters.repository).to receive(:find_by_id).and_return(failure(:category_not_found))
+      expect(
+        Core::Category::Creation.call(user: user_entity, name: "Goal category", color: "#3B82F6").type
+      ).to eq(:category_creation_failed)
     end
 
     it "covers remaining goal window and nested persist paths" do
       expect(
         Core::Tag::Creation.call(
+          user: user_entity,
+          name: "Window",
+          color: "#3B82F6",
+          goal_starts_on: Date.new(2026, 8, 1),
+          goal_value: 10,
+          goal_ends_on: Date.new(2026, 7, 1)
+        ).type
+      ).to eq(:invalid_input)
+
+      expect(
+        Core::Category::Creation.call(
           user: user_entity,
           name: "Window",
           color: "#3B82F6",
@@ -217,8 +289,26 @@ RSpec.describe "core process persist and not-found failures" do
       end
       expect(Core::Tag::Update.call(user: user_entity, id: tag.id, name: "Reloaded").type).to eq(:tag_update_failed)
 
+      category = create(:category, :with_goal, user:, goal_starts_on: Date.new(2026, 8, 1), goal_value: 100)
+      find_category_calls = 0
+      allow(Category::Adapters.repository).to receive(:find_by_id).and_wrap_original do |original, **kwargs|
+        find_category_calls += 1
+        find_category_calls > 1 ? failure(:category_not_found) : original.call(**kwargs)
+      end
+      expect(
+        Core::Category::Goal::Change.call(
+          user: user_entity,
+          category_id: category.id,
+          starts_on: Date.new(2026, 9, 11),
+          value: 50
+        ).type
+      ).to eq(:goal_change_failed)
+
       empty_tag = Tag::Mapper.to_entity(create(:tag, user:))
       expect(Core::Tag::Goal::Update.call(tag: empty_tag)).to be_a(Solid::Success)
+
+      empty_category = Category::Mapper.to_entity(create(:category, user:))
+      expect(Core::Category::Goal::Update.call(category: empty_category)).to be_a(Solid::Success)
 
       expect(
         Core::Tag::Goal::Update.call(
@@ -230,6 +320,7 @@ RSpec.describe "core process persist and not-found failures" do
       ).to eq(:invalid_input)
 
       allow(Tag::Adapters.repository).to receive(:find_by_id).and_call_original
+      allow(Category::Adapters.repository).to receive(:find_by_id).and_call_original
 
       tag_for_same_month = create(:tag, user:)
       expect(
@@ -241,6 +332,25 @@ RSpec.describe "core process persist and not-found failures" do
           goal_ends_on: Date.new(2026, 8, 20)
         )
       ).to be_a(Solid::Success)
+
+      category_for_same_month = create(:category, user:)
+      expect(
+        Core::Category::Update.call(
+          user: user_entity,
+          id: category_for_same_month.id,
+          goal_starts_on: Date.new(2026, 8, 1),
+          goal_value: 10,
+          goal_ends_on: Date.new(2026, 8, 20)
+        )
+      ).to be_a(Solid::Success)
+
+      category_for_reload = create(:category, user:)
+      category_find_calls = 0
+      allow(Category::Adapters.repository).to receive(:find_by_id).and_wrap_original do |original, **kwargs|
+        category_find_calls += 1
+        category_find_calls > 1 ? failure(:category_not_found) : original.call(**kwargs)
+      end
+      expect(Core::Category::Update.call(user: user_entity, id: category_for_reload.id, name: "Reloaded").type).to eq(:category_update_failed)
     end
 
     it "fails credit card creation and update persistence and unknown associations" do

@@ -7,17 +7,49 @@ en:
           attributes:
             base:
               category_creation_failed: Category creation failed
+              later_month_closed: Goals cannot be created for this date because a later month is already closed
+              monthly_status_closed: Goals cannot be created for this date because the month is already closed
+            goal_ends_on:
+              before_starts_on: must be on or after goal_starts_on
         core/category/deletion/input:
           attributes:
             base:
               category_destruction_failed: Category deletion failed
               category_not_found: Category not found
               used_by_transactions: This category cannot be deleted because it is already used by transactions. To stop using it, inactivate the category.
+        core/category/goal/change/input:
+          attributes:
+            base:
+              goal_change_failed: Goal change failed
+              later_month_closed: Goals cannot be changed for this date because a later month is already closed
+              monthly_status_closed: Goals cannot be changed for this date because the month is already closed
+            starts_on:
+              after_ends_on: must be on or before goal_ends_on
+            value:
+              same_as_previous: must be different from the previous goal
+        core/category/goal/update/input:
+          attributes:
+            goal_ends_on:
+              before_existing_goal: must be after an existing goal
+              before_starts_on: must be on or after goal_starts_on
+            goal_starts_on:
+              cannot_be_changed: cannot be changed when a goal already exists
+            goal_value:
+              cannot_be_changed: cannot be changed when a goal already exists
         core/category/update/input:
           attributes:
             base:
               category_not_found: Category not found
               category_update_failed: Category update failed
+              later_month_closed: Goals cannot be changed for this date because a later month is already closed
+              monthly_status_closed: Goals cannot be changed for this date because the month is already closed
+            goal_ends_on:
+              before_existing_goal: must be after an existing goal
+              before_starts_on: must be on or after goal_starts_on
+            goal_starts_on:
+              cannot_be_changed: cannot be changed when a goal already exists
+            goal_value:
+              cannot_be_changed: cannot be changed when a goal already exists
   category:
     creation:
       failure: Category creation failed
@@ -28,6 +60,10 @@ en:
     errors:
       invalid_filters: Invalid filter
       not_found: Category not found
+    goal:
+      change:
+        failure: Goal change failed
+        success: Goal created or updated successfully
     update:
       failure: Category update failed
       success: Category updated successfully

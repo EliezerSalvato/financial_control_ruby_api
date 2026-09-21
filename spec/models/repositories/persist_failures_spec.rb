@@ -99,6 +99,36 @@ RSpec.describe "repository persist failures" do
     end
   end
 
+  describe Category::Goal::Repository::Adapters::ActiveRecord do
+    let(:category_record) { create(:category, :with_goal, user:, goal_starts_on: Date.new(2026, 8, 1), goal_value: 100) }
+    let(:category) { Category::Mapper.to_entity(category_record) }
+
+    it "returns Failure when create does not persist" do
+      fail_save(Category::Goal::Record)
+
+      expect(described_class.create(category:, starts_on: Date.new(2026, 9, 1), value: 10).type).to eq(:goal_creation_failed)
+    end
+
+    it "returns Failure when no goal exists for find_latest" do
+      orphan = Category::Mapper.to_entity(create(:category, user:))
+
+      expect(described_class.find_latest(category: orphan).type).to eq(:goal_not_found)
+    end
+
+    it "returns Failure when update does not persist" do
+      fail_update(Category::Goal::Record)
+
+      expect(described_class.update(goal: category.goals.first, attributes: { value: 20 }).type).to eq(:goal_update_failed)
+    end
+
+    it "returns Failure when destroy_after cannot destroy a record" do
+      create(:category_goal, category: category_record, starts_on: Date.new(2026, 9, 1), value: 10)
+      fail_destroy(Category::Goal::Record)
+
+      expect(described_class.destroy_after(category:, starts_on: Date.new(2026, 8, 1)).type).to eq(:goal_destruction_failed)
+    end
+  end
+
   describe Institution::Repository::Adapters::ActiveRecord do
     it "returns invalid_filters when pagination raises" do
       allow(Pagination).to receive(:paginate).and_raise(ArgumentError)

@@ -9,7 +9,9 @@ module Category::Mapper
       user_id: record.user_id,
       name: record.name,
       color: record.color,
-      active: record.active
+      active: record.active,
+      goal_ends_on: record.goal_ends_on,
+      goals: Array(record.goals).sort_by { |goal| [ goal.year, goal.month ] }.map { |goal| Category::Goal::Mapper.to_entity(goal) }
     )
   end
 

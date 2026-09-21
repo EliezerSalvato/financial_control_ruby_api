@@ -10,7 +10,9 @@ Rails.application.routes.draw do
       resources :tags, only: %i[index show create update destroy] do
         resource :goals, only: %i[update], module: :tag
       end
-      resources :categories, only: %i[index show create update destroy]
+      resources :categories, only: %i[index show create update destroy] do
+        resource :goals, only: %i[update], module: :category
+      end
       resources :institutions, only: %i[index show create update destroy]
       resources :accounts, only: %i[index show create update destroy]
       resources :credit_cards, only: %i[index show create update destroy] do

@@ -57,6 +57,6 @@ module Category::Repository::Adapters::ActiveRecord
   private
 
   def user_categories(user)
-    Category::Record.where(user_id: user.id)
+    Category::Record.where(user_id: user.id).includes(:goals)
   end
 end
