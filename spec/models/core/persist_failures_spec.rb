@@ -101,6 +101,148 @@ RSpec.describe "core process persist and not-found failures" do
       expect(Core::Tag::Deletion.call(user: user_entity, id: tag.id).type).to eq(:tag_destruction_failed)
     end
 
+    it "fails tag goal persistence" do
+      tag = create(:tag, :with_goal, user:, goal_starts_on: Date.new(2026, 8, 1), goal_value: 100)
+      allow(Tag::Adapters.goal_repository).to receive(:create).and_return(failure(:goal_creation_failed, errors:))
+      expect(
+        Core::Tag::Goal::Change.call(
+          user: user_entity,
+          tag_id: tag.id,
+          starts_on: Date.new(2026, 9, 11),
+          value: 50
+        ).type
+      ).to eq(:goal_change_failed)
+
+      allow(Tag::Adapters.goal_repository).to receive(:create).and_call_original
+      allow(Tag::Adapters.goal_repository).to receive(:update).and_return(failure(:goal_update_failed, errors:))
+      expect(
+        Core::Tag::Goal::Change.call(
+          user: user_entity,
+          tag_id: tag.id,
+          starts_on: Date.new(2026, 8, 1),
+          value: 50
+        ).type
+      ).to eq(:goal_change_failed)
+
+      allow(Tag::Adapters.goal_repository).to receive(:update).and_call_original
+      allow(Tag::Adapters.goal_repository).to receive(:destroy_after).and_return(failure(:goal_destruction_failed, errors:))
+      expect(
+        Core::Tag::Goal::Change.call(
+          user: user_entity,
+          tag_id: tag.id,
+          starts_on: Date.new(2026, 9, 11),
+          value: 50,
+          change_for_next_months: true
+        ).type
+      ).to eq(:goal_change_failed)
+
+      allow(Tag::Adapters.goal_repository).to receive(:destroy_after).and_call_original
+      find_calls = 0
+      allow(Tag::Adapters.repository).to receive(:find_by_id).and_wrap_original do |original, **kwargs|
+        find_calls += 1
+        find_calls > 1 ? failure(:tag_not_found) : original.call(**kwargs)
+      end
+      expect(
+        Core::Tag::Goal::Change.call(
+          user: user_entity,
+          tag_id: tag.id,
+          starts_on: Date.new(2026, 9, 11),
+          value: 50
+        ).type
+      ).to eq(:goal_change_failed)
+
+      expect(Tag::Goal::Mapper.to_entity(nil)).to be_nil
+      expect(Tag::Goal::Mapper.to_record(Tag::Mapper.to_entity(tag).goals.first)).to eq(tag.goals.first)
+    end
+
+    it "fails nested goal creation and parent goal updates" do
+      tag_entity = Tag::Mapper.to_entity(create(:tag, user:))
+      allow(Tag::Adapters.goal_repository).to receive(:create).and_return(failure(:goal_creation_failed, errors:))
+      expect(
+        Core::Tag::Goal::Creation.call(tag: tag_entity, starts_on: Date.new(2026, 8, 1), value: 10).type
+      ).to eq(:goal_creation_failed)
+
+      expect(
+        Core::Tag::Goal::Update.call(tag: tag_entity, goal_starts_on: Date.new(2026, 8, 1), goal_value: 10).type
+      ).to eq(:goal_creation_failed)
+
+      expect(
+        Core::Tag::Goal::Update.call(tag: tag_entity, goal_starts_on: Date.new(2026, 8, 1)).type
+      ).to eq(:invalid_input)
+
+      existing = Tag::Mapper.to_entity(create(:tag, :with_goal, user:, goal_starts_on: Date.new(2026, 8, 1), goal_value: 100))
+      expect(
+        Core::Tag::Goal::Update.call(tag: existing, goal_starts_on: Date.new(2026, 9, 1), goal_value: 20).type
+      ).to eq(:invalid_input)
+      expect(
+        Core::Tag::Goal::Update.call(tag: existing, goal_ends_on: Date.new(2026, 7, 1)).type
+      ).to eq(:invalid_input)
+
+      allow(Tag::Adapters.goal_repository).to receive(:create).and_call_original
+      allow(Tag::Adapters.repository).to receive(:find_by_id).and_return(failure(:tag_not_found))
+      expect(
+        Core::Tag::Creation.call(user: user_entity, name: "Goal tag", color: "#3B82F6").type
+      ).to eq(:tag_creation_failed)
+    end
+
+    it "covers remaining goal window and nested persist paths" do
+      expect(
+        Core::Tag::Creation.call(
+          user: user_entity,
+          name: "Window",
+          color: "#3B82F6",
+          goal_starts_on: Date.new(2026, 8, 1),
+          goal_value: 10,
+          goal_ends_on: Date.new(2026, 7, 1)
+        ).type
+      ).to eq(:invalid_input)
+
+      tag = create(:tag, user:)
+      allow(Tag::Adapters.goal_repository).to receive(:create).and_return(failure(:goal_creation_failed, errors:))
+      expect(
+        Core::Tag::Creation.call(
+          user: user_entity,
+          name: "Nested goal",
+          color: "#3B82F6",
+          goal_starts_on: Date.new(2026, 8, 1),
+          goal_value: 10
+        ).type
+      ).to eq(:tag_creation_failed)
+
+      allow(Tag::Adapters.goal_repository).to receive(:create).and_call_original
+      find_calls = 0
+      allow(Tag::Adapters.repository).to receive(:find_by_id).and_wrap_original do |original, **kwargs|
+        find_calls += 1
+        find_calls > 1 ? failure(:tag_not_found) : original.call(**kwargs)
+      end
+      expect(Core::Tag::Update.call(user: user_entity, id: tag.id, name: "Reloaded").type).to eq(:tag_update_failed)
+
+      empty_tag = Tag::Mapper.to_entity(create(:tag, user:))
+      expect(Core::Tag::Goal::Update.call(tag: empty_tag)).to be_a(Solid::Success)
+
+      expect(
+        Core::Tag::Goal::Update.call(
+          tag: empty_tag,
+          goal_starts_on: Date.new(2026, 8, 1),
+          goal_value: 10,
+          goal_ends_on: Date.new(2026, 7, 1)
+        ).type
+      ).to eq(:invalid_input)
+
+      allow(Tag::Adapters.repository).to receive(:find_by_id).and_call_original
+
+      tag_for_same_month = create(:tag, user:)
+      expect(
+        Core::Tag::Update.call(
+          user: user_entity,
+          id: tag_for_same_month.id,
+          goal_starts_on: Date.new(2026, 8, 1),
+          goal_value: 10,
+          goal_ends_on: Date.new(2026, 8, 20)
+        )
+      ).to be_a(Solid::Success)
+    end
+
     it "fails credit card creation and update persistence and unknown associations" do
       institution = create(:institution, user:)
       account = create(:account, :bank_account, user:, institution:)

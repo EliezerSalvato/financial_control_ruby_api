@@ -155,6 +155,36 @@ RSpec.describe "repository persist failures" do
     end
   end
 
+  describe Tag::Goal::Repository::Adapters::ActiveRecord do
+    let(:tag_record) { create(:tag, :with_goal, user:, goal_starts_on: Date.new(2026, 8, 1), goal_value: 100) }
+    let(:tag) { Tag::Mapper.to_entity(tag_record) }
+
+    it "returns Failure when create does not persist" do
+      fail_save(Tag::Goal::Record)
+
+      expect(described_class.create(tag:, starts_on: Date.new(2026, 9, 1), value: 10).type).to eq(:goal_creation_failed)
+    end
+
+    it "returns Failure when no goal exists for find_latest" do
+      orphan = Tag::Mapper.to_entity(create(:tag, user:))
+
+      expect(described_class.find_latest(tag: orphan).type).to eq(:goal_not_found)
+    end
+
+    it "returns Failure when update does not persist" do
+      fail_update(Tag::Goal::Record)
+
+      expect(described_class.update(goal: tag.goals.first, attributes: { value: 20 }).type).to eq(:goal_update_failed)
+    end
+
+    it "returns Failure when destroy_after cannot destroy a record" do
+      create(:tag_goal, tag: tag_record, starts_on: Date.new(2026, 9, 1), value: 10)
+      fail_destroy(Tag::Goal::Record)
+
+      expect(described_class.destroy_after(tag:, starts_on: Date.new(2026, 8, 1)).type).to eq(:goal_destruction_failed)
+    end
+  end
+
   describe CreditCard::Repository::Adapters::ActiveRecord do
     let(:institution) { create(:institution, user:) }
     let(:account) { create(:account, :bank_account, user:, institution:) }

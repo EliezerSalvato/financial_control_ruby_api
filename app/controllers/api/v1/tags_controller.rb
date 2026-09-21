@@ -80,6 +80,6 @@ class API::V1::TagsController < API::V1::BaseController
   end
 
   def permitted_params
-    params.require(:tag).permit(:name, :color, :active)
+    params.require(:tag).permit(:name, :color, :active, :goal_starts_on, :goal_value, :goal_ends_on)
   end
 end

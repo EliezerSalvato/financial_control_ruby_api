@@ -6,17 +6,49 @@ en:
         core/tag/creation/input:
           attributes:
             base:
+              later_month_closed: Goals cannot be created for this date because a later month is already closed
+              monthly_status_closed: Goals cannot be created for this date because the month is already closed
               tag_creation_failed: Tag creation failed
+            goal_ends_on:
+              before_starts_on: must be on or after goal_starts_on
         core/tag/deletion/input:
           attributes:
             base:
               tag_destruction_failed: Tag deletion failed
               tag_not_found: Tag not found
+        core/tag/goal/change/input:
+          attributes:
+            base:
+              goal_change_failed: Goal change failed
+              later_month_closed: Goals cannot be changed for this date because a later month is already closed
+              monthly_status_closed: Goals cannot be changed for this date because the month is already closed
+            starts_on:
+              after_ends_on: must be on or before goal_ends_on
+            value:
+              same_as_previous: must be different from the previous goal
+        core/tag/goal/update/input:
+          attributes:
+            goal_ends_on:
+              before_existing_goal: must be after an existing goal
+              before_starts_on: must be on or after goal_starts_on
+            goal_starts_on:
+              cannot_be_changed: cannot be changed when a goal already exists
+            goal_value:
+              cannot_be_changed: cannot be changed when a goal already exists
         core/tag/update/input:
           attributes:
             base:
+              later_month_closed: Goals cannot be changed for this date because a later month is already closed
+              monthly_status_closed: Goals cannot be changed for this date because the month is already closed
               tag_not_found: Tag not found
               tag_update_failed: Tag update failed
+            goal_ends_on:
+              before_existing_goal: must be after an existing goal
+              before_starts_on: must be on or after goal_starts_on
+            goal_starts_on:
+              cannot_be_changed: cannot be changed when a goal already exists
+            goal_value:
+              cannot_be_changed: cannot be changed when a goal already exists
   tag:
     creation:
       failure: Tag creation failed
@@ -27,6 +59,10 @@ en:
     errors:
       invalid_filters: Invalid filter
       not_found: Tag not found
+    goal:
+      change:
+        failure: Goal change failed
+        success: Goal created or updated successfully
     update:
       failure: Tag update failed
       success: Tag updated successfully

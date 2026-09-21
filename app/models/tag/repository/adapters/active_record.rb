@@ -65,6 +65,6 @@ module Tag::Repository::Adapters::ActiveRecord
   private
 
   def user_tags(user)
-    Tag::Record.where(user_id: user.id)
+    Tag::Record.where(user_id: user.id).includes(:goals)
   end
 end

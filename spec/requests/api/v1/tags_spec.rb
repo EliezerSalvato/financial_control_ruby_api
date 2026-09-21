@@ -146,7 +146,55 @@ RSpec.describe "API::V1::Tags", type: :request do
         expect(attributes).to include(
           "name" => "Vacation",
           "color" => "#3B82F6",
-          "active" => true
+          "active" => true,
+          "goal_ends_on" => nil,
+          "current_goal" => nil,
+          "goals" => []
+        )
+      end
+
+      it "creates a tag with a goal" do
+        expect {
+          create_tag(
+            tag: {
+              name: "Food",
+              color: "#3B82F6",
+              goal_starts_on: "2026-01-15",
+              goal_value: 500,
+              goal_ends_on: "2026-12-31"
+            }
+          )
+        }.to change(Tag::Record, :count).by(1)
+          .and change(Tag::Goal::Record, :count).by(1)
+
+        attributes = tag_attributes(response.parsed_body)
+
+        expect(response).to have_http_status(:created)
+        expect(attributes["goal_ends_on"]).to eq("2026-12-01")
+        expect(attributes["current_goal"]).to be_present
+        expect(attributes["goals"].map { |item| item.fetch("attributes") }).to eq(
+          [ { "id" => attributes.dig("goals", 0, "attributes", "id"), "month" => 1, "year" => 2026, "value" => "500.0" } ]
+        )
+        expect(attributes.dig("goals", 0, "type")).to eq("tag_goal")
+      end
+
+      it "rejects an incomplete goal pair" do
+        create_tag(tag: { name: "Food", color: "#3B82F6", goal_starts_on: "2026-01-15" })
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "goal_value")).to be_present
+      end
+
+      it "rejects a closed month when creating a goal" do
+        create(:monthly_status, :closed, user:, month: 1, year: 2026)
+
+        expect {
+          create_tag(tag: { name: "Food", color: "#3B82F6", goal_starts_on: "2026-01-15", goal_value: 500 })
+        }.not_to change(Tag::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq(
+          [ "Goals cannot be created for this date because the month is already closed" ]
         )
       end
 
@@ -236,6 +284,76 @@ RSpec.describe "API::V1::Tags", type: :request do
         expect(tag.reload).to have_attributes(name: "Vacation", color: "#3B82F6", active: false)
       end
 
+      it "starts a goal when the tag has none" do
+        expect {
+          update_tag(tag.id, tag: { goal_starts_on: "2026-03-01", goal_value: 400 })
+        }.to change(Tag::Goal::Record, :count).by(1)
+
+        attributes = tag_attributes(response.parsed_body)
+
+        expect(response).to have_http_status(:ok)
+        expect(attributes["goals"].map { |item| item.fetch("attributes").values_at("year", "month", "value") }).to eq(
+          [ [ 2026, 3, "400.0" ] ]
+        )
+      end
+
+      it "ends an existing goal without changing its history" do
+        create(:tag_goal, tag:, starts_on: Date.new(2026, 1, 15), value: 500)
+        create(:tag_goal, tag:, starts_on: Date.new(2026, 3, 1), value: 600)
+
+        expect {
+          update_tag(tag.id, tag: { goal_ends_on: "2026-06-30" })
+        }.not_to change(Tag::Goal::Record, :count)
+
+        expect(response).to have_http_status(:ok)
+        expect(tag_attributes(response.parsed_body)["goal_ends_on"]).to eq("2026-06-01")
+        expect(tag.reload.goal_ends_on).to eq(Date.new(2026, 6, 1))
+      end
+
+      it "rejects goal value changes on the parent when a goal already exists" do
+        create(:tag_goal, tag:, starts_on: Date.new(2026, 1, 15), value: 500)
+
+        update_tag(tag.id, tag: { goal_starts_on: "2026-03-01", goal_value: 600 })
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "goal_starts_on")).to be_present
+        expect(response.parsed_body.dig("details", "goal_value")).to be_present
+      end
+
+      it "rejects goal_ends_on before the latest goal" do
+        create(:tag_goal, tag:, starts_on: Date.new(2026, 3, 1), value: 500)
+
+        update_tag(tag.id, tag: { goal_ends_on: "2026-02-01" })
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "goal_ends_on")).to eq(
+          [ "must be after an existing goal" ]
+        )
+      end
+
+      it "rejects goal_ends_on on a month that already has a goal" do
+        create(:tag_goal, tag:, starts_on: Date.new(2026, 1, 15), value: 500)
+
+        update_tag(tag.id, tag: { goal_ends_on: "2026-01-31" })
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "goal_ends_on")).to eq(
+          [ "must be after an existing goal" ]
+        )
+      end
+
+      it "rejects ending a goal in a closed month" do
+        create(:tag_goal, tag:, starts_on: Date.new(2026, 1, 15), value: 500)
+        create(:monthly_status, :closed, user:, month: 6, year: 2026)
+
+        update_tag(tag.id, tag: { goal_ends_on: "2026-06-30" })
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "base")).to eq(
+          [ "Goals cannot be changed for this date because the month is already closed" ]
+        )
+      end
+
       it "rejects an invalid color" do
         update_tag(tag.id, tag: { color: "red" })
 
@@ -279,6 +397,15 @@ RSpec.describe "API::V1::Tags", type: :request do
 
         expect(response).to have_http_status(:ok)
         expect(response.parsed_body["message"]).to eq("Tag deleted successfully")
+      end
+
+      it "deletes goals with the tag" do
+        create(:tag_goal, tag:, starts_on: Date.new(2026, 1, 15), value: 500)
+
+        expect {
+          destroy_tag(tag.id)
+        }.to change(Tag::Record, :count).by(-1)
+          .and change(Tag::Goal::Record, :count).by(-1)
       end
 
       it "returns 404 for another user's tag" do

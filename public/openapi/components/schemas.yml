@@ -223,6 +223,35 @@ ErrorResponse:
         items:
           type: string
 
+TagGoalAttributes:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    month:
+      type: integer
+      minimum: 1
+      maximum: 12
+    year:
+      type: integer
+    value:
+      type: string
+      description: Decimal amount as string (precision 15, scale 2)
+      example: "500.0"
+
+TagGoalResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: tag_goal
+    attributes:
+      $ref: "#/TagGoalAttributes"
+
 TagAttributes:
   type: object
   properties:
@@ -238,6 +267,20 @@ TagAttributes:
       example: "#3B82F6"
     active:
       type: boolean
+    goal_ends_on:
+      type: [string, "null"]
+      format: date
+      description: Optional end month of the goal, always stored as the first day of that month. Null means the goal continues. Write this on create/update of the tag; value history is in `goals`.
+    current_goal:
+      oneOf:
+        - $ref: "#/TagGoalResource"
+        - type: "null"
+      description: Goal applicable to the current month, or null when there is no goal or the current month is after `goal_ends_on`.
+    goals:
+      type: array
+      description: Goal value history ordered by `year` and `month`
+      items:
+        $ref: "#/TagGoalResource"
 
 TagResource:
   type: object
@@ -270,6 +313,21 @@ TagRequest:
           type: boolean
           default: true
           description: Defaults to `true` when omitted
+        goal_starts_on:
+          type: string
+          format: date
+          description: |
+            Write-only. Together with `goal_value`, creates the first goal line.
+            Omit both to create a tag without a goal. Sending only one of the two is rejected.
+            The month of this date must be open (or still missing, with no later month closed).
+        goal_value:
+          type: number
+          minimum: 0
+          description: Write-only. Required with `goal_starts_on` to start a goal.
+        goal_ends_on:
+          type: string
+          format: date
+          description: Optional. Must be on or after the month of `goal_starts_on`. Stored as the first day of the month. The month must be open.
 
 TagUpdateRequest:
   type: object
@@ -288,7 +346,53 @@ TagUpdateRequest:
           example: "#3B82F6"
         active:
           type: boolean
+        goal_starts_on:
+          type: string
+          format: date
+          description: |
+            Write-only. Starts a goal when the tag has none, together with `goal_value`.
+            Rejected when a goal already exists — use `PATCH /api/v1/tags/{tag_id}/goals` to change a month's value.
+        goal_value:
+          type: number
+          minimum: 0
+          description: Write-only. Required with `goal_starts_on` to start a goal. Rejected when a goal already exists.
+        goal_ends_on:
+          type: string
+          format: date
+          description: |
+            Ends the goal. Stored as the first day of the month. Must be after the latest goal month.
+            The month must be open. Does not delete history.
       description: Partial update — only provided fields are changed
+
+TagGoalRequest:
+  type: object
+  required: [tag_goal]
+  properties:
+    tag_goal:
+      type: object
+      required:
+        - starts_on
+        - value
+      properties:
+        starts_on:
+          type: string
+          format: date
+          description: |
+            Write-only. Only the year and month are persisted. Upserts by year-month when a line already exists.
+            Must be an open month (or still missing, with no later month closed).
+            Cannot be after the month of `goal_ends_on`.
+        value:
+          type: number
+          minimum: 0
+          description: New amount for the given month. Must differ from the amount already applied by the previous goal.
+        change_for_next_months:
+          type: boolean
+          default: false
+          description: |
+            When `false` or omitted, only the given month is changed.
+            If the next month already has a goal, it is kept; otherwise one is created with the previous amount,
+            unless that next month would be after `goal_ends_on` or is closed.
+            When `true`, later **open** months are removed. Closed-month lines are never destroyed or updated.
 
 TagSuccessResponse:
   type: object

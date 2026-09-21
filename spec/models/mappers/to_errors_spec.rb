@@ -14,6 +14,7 @@ RSpec.describe "Mapper#to_errors" do
     Transaction::ForCreditCard::Mapper,
     Transaction::ForTransferBetweenAccounts::Mapper,
     Transaction::Recurrence::Mapper,
+    Tag::Goal::Mapper,
     Transaction::Settlement::Mapper,
     Transaction::Settlement::ForAccount::Mapper,
     Transaction::Settlement::ForCreditCard::Mapper,

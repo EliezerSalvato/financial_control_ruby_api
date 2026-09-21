@@ -3,7 +3,7 @@
 - name: User
   description: Registration, profile, account, email, and password
 - name: Tags
-  description: User-owned labels for categorizing transactions
+  description: User-owned labels for categorizing transactions, with optional monthly goals
 - name: Categories
   description: User-owned categories for organizing transactions
 - name: Institutions

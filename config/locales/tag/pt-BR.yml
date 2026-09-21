@@ -6,17 +6,49 @@ pt-BR:
         core/tag/creation/input:
           attributes:
             base:
+              later_month_closed: Não é possível criar metas nesta data, pois um mês posterior já está fechado
+              monthly_status_closed: Não é possível criar metas nesta data, pois o mês já está fechado
               tag_creation_failed: Falha ao criar a tag
+            goal_ends_on:
+              before_starts_on: deve ser igual ou posterior a goal_starts_on
         core/tag/deletion/input:
           attributes:
             base:
               tag_destruction_failed: Falha ao excluir a tag
               tag_not_found: Tag não encontrada
+        core/tag/goal/change/input:
+          attributes:
+            base:
+              goal_change_failed: Falha ao alterar a meta
+              later_month_closed: Não é possível alterar metas nesta data, pois um mês posterior já está fechado
+              monthly_status_closed: Não é possível alterar metas nesta data, pois o mês já está fechado
+            starts_on:
+              after_ends_on: deve ser igual ou anterior a goal_ends_on
+            value:
+              same_as_previous: deve ser diferente da meta anterior
+        core/tag/goal/update/input:
+          attributes:
+            goal_ends_on:
+              before_existing_goal: deve ser posterior a uma meta já existente
+              before_starts_on: deve ser igual ou posterior a goal_starts_on
+            goal_starts_on:
+              cannot_be_changed: não pode ser alterado quando já existe uma meta
+            goal_value:
+              cannot_be_changed: não pode ser alterado quando já existe uma meta
         core/tag/update/input:
           attributes:
             base:
+              later_month_closed: Não é possível alterar metas nesta data, pois um mês posterior já está fechado
+              monthly_status_closed: Não é possível alterar metas nesta data, pois o mês já está fechado
               tag_not_found: Tag não encontrada
               tag_update_failed: Falha ao atualizar a tag
+            goal_ends_on:
+              before_existing_goal: deve ser posterior a uma meta já existente
+              before_starts_on: deve ser igual ou posterior a goal_starts_on
+            goal_starts_on:
+              cannot_be_changed: não pode ser alterado quando já existe uma meta
+            goal_value:
+              cannot_be_changed: não pode ser alterado quando já existe uma meta
   tag:
     creation:
       failure: Falha ao criar a tag
@@ -27,6 +59,10 @@ pt-BR:
     errors:
       invalid_filters: Filtro inválido
       not_found: Tag não encontrada
+    goal:
+      change:
+        failure: Falha ao alterar a meta
+        success: Meta criada ou atualizada com sucesso
     update:
       failure: Falha ao atualizar a tag
       success: Tag atualizada com sucesso

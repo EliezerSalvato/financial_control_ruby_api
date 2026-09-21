@@ -24,7 +24,7 @@ get:
 patch:
   tags: [Tags]
   summary: Update tag
-  description: Updates an existing tag owned by the authenticated user.
+  description: Updates an existing tag owned by the authenticated user. `goal_ends_on` ends an existing goal. `goal_starts_on` and `goal_value` start a goal only when none exists.
   operationId: updateTag
   security:
     - bearerAuth: []

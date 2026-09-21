@@ -196,7 +196,7 @@ tags:
   - name: User
     description: Registration, profile, account, email, and password
   - name: Tags
-    description: User-owned labels for categorizing transactions
+    description: User-owned labels for categorizing transactions, with optional monthly goals
   - name: Categories
     description: User-owned categories for organizing transactions
   - name: Institutions
@@ -279,7 +279,7 @@ paths:
       tags:
         - Tags
       summary: Create tag
-      description: Creates a new tag for the authenticated user.
+      description: Creates a new tag for the authenticated user. Optional `goal_starts_on` and `goal_value` start a goal; `goal_ends_on` is optional.
       operationId: createTag
       security:
         - bearerAuth: []
@@ -337,7 +337,7 @@ paths:
       tags:
         - Tags
       summary: Update tag
-      description: Updates an existing tag owned by the authenticated user.
+      description: Updates an existing tag owned by the authenticated user. `goal_ends_on` ends an existing goal. `goal_starts_on` and `goal_value` start a goal only when none exists.
       operationId: updateTag
       security:
         - bearerAuth: []
@@ -388,6 +388,79 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageSuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/tags/{tag_id}/goals:
+    patch:
+      tags:
+        - Tags
+      summary: Update or split a tag goal
+      description: |
+        Adds a value change to a tag goal owned by the authenticated user.
+
+        Goals apply from the month of `starts_on` until the next goal, and the response lists them ordered by year and month.
+        Only year and month are persisted from `starts_on`. If a goal already exists in that year-month, it is updated;
+        otherwise a new goal is created.
+        This is also how the first goal is started when the tag has none.
+
+        `starts_on` cannot be after `goal_ends_on`. `value` must be different from the amount already
+        applied by the previous goal. The civil month of `starts_on` must be open (or still missing,
+        with no later month closed). Closed months return **422** `monthly_status_closed`.
+        A month before a later closed month, without its own monthly status, returns **422** `later_month_closed`.
+
+        When `change_for_next_months` is omitted or `false`, only the given month is changed.
+        If the next month already has a goal, it is kept; otherwise a goal is created
+        for the next month with the previous amount, unless that next month would be after `goal_ends_on`
+        or is closed.
+
+        When `change_for_next_months` is `true`, the given month is updated and later **open**
+        months are removed. Closed-month lines are never destroyed or updated.
+      operationId: updateTagGoal
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tag_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Tag UUID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagGoalRequest'
+            examples:
+              currentMonthOnly:
+                summary: Change only the given month
+                value:
+                  tag_goal:
+                    value: 600
+                    starts_on: '2026-03-01'
+              currentAndNextMonths:
+                summary: Change the given month and all following open months
+                value:
+                  tag_goal:
+                    value: 600
+                    starts_on: '2026-03-01'
+                    change_for_next_months: true
+      responses:
+        '200':
+          description: Goal created or updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagSuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -2641,6 +2714,33 @@ components:
         format: uuid
       description: Resource UUID
   schemas:
+    TagGoalAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        year:
+          type: integer
+        value:
+          type: string
+          description: Decimal amount as string (precision 15, scale 2)
+          example: '500.0'
+    TagGoalResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: tag_goal
+        attributes:
+          $ref: '#/components/schemas/TagGoalAttributes'
     TagAttributes:
       type: object
       properties:
@@ -2656,6 +2756,22 @@ components:
           example: '#3B82F6'
         active:
           type: boolean
+        goal_ends_on:
+          type:
+            - string
+            - 'null'
+          format: date
+          description: Optional end month of the goal, always stored as the first day of that month. Null means the goal continues. Write this on create/update of the tag; value history is in `goals`.
+        current_goal:
+          oneOf:
+            - $ref: '#/components/schemas/TagGoalResource'
+            - type: 'null'
+          description: Goal applicable to the current month, or null when there is no goal or the current month is after `goal_ends_on`.
+        goals:
+          type: array
+          description: Goal value history ordered by `year` and `month`
+          items:
+            $ref: '#/components/schemas/TagGoalResource'
     TagResource:
       type: object
       properties:
@@ -2746,6 +2862,21 @@ components:
               type: boolean
               default: true
               description: Defaults to `true` when omitted
+            goal_starts_on:
+              type: string
+              format: date
+              description: |
+                Write-only. Together with `goal_value`, creates the first goal line.
+                Omit both to create a tag without a goal. Sending only one of the two is rejected.
+                The month of this date must be open (or still missing, with no later month closed).
+            goal_value:
+              type: number
+              minimum: 0
+              description: Write-only. Required with `goal_starts_on` to start a goal.
+            goal_ends_on:
+              type: string
+              format: date
+              description: Optional. Must be on or after `goal_starts_on`. The month must be open.
     TagSuccessResponse:
       type: object
       required:
@@ -2791,7 +2922,53 @@ components:
               example: '#3B82F6'
             active:
               type: boolean
+            goal_starts_on:
+              type: string
+              format: date
+              description: |
+                Write-only. Starts a goal when the tag has none, together with `goal_value`.
+                Rejected when a goal already exists — use `PATCH /api/v1/tags/{tag_id}/goals` to change a month's value.
+            goal_value:
+              type: number
+              minimum: 0
+              description: Write-only. Required with `goal_starts_on` to start a goal. Rejected when a goal already exists.
+            goal_ends_on:
+              type: string
+              format: date
+              description: |
+                Ends the goal. Stored as the first day of the month. Must be after the latest goal month.
+                The month must be open. Does not delete history.
           description: Partial update — only provided fields are changed
+    TagGoalRequest:
+      type: object
+      required:
+        - tag_goal
+      properties:
+        tag_goal:
+          type: object
+          required:
+            - starts_on
+            - value
+          properties:
+            starts_on:
+              type: string
+              format: date
+              description: |
+                Write-only. Only the year and month are persisted. Upserts by year-month when a line already exists.
+                Must be an open month (or still missing, with no later month closed).
+                Cannot be after the month of `goal_ends_on`.
+            value:
+              type: number
+              minimum: 0
+              description: New amount for the given month. Must differ from the amount already applied by the previous goal.
+            change_for_next_months:
+              type: boolean
+              default: false
+              description: |
+                When `false` or omitted, only the given month is changed.
+                If the next month already has a goal, it is kept; otherwise one is created with the previous amount,
+                unless that next month would be after `goal_ends_on` or is closed.
+                When `true`, later **open** months are removed. Closed-month lines are never destroyed or updated.
     CategoryAttributes:
       type: object
       properties:

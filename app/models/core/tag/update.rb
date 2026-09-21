@@ -11,6 +11,9 @@ class Core::Tag::Update < ApplicationSolidProcess
     attribute :name, :string
     attribute :color, :string
     attribute :active, :boolean
+    attribute :goal_starts_on, :date
+    attribute :goal_value, :decimal
+    attribute :goal_ends_on, :date
 
     normalizes :name, with: ->(value) { value&.strip }
     normalizes :color, with: ->(value) { value&.strip }
@@ -19,14 +22,20 @@ class Core::Tag::Update < ApplicationSolidProcess
     validates :user, kind_of: Core::User::Entity
     validates :name, presence: true, allow_nil: true
     validates :color, presence: true, format: { with: Core::Color::FORMAT }, allow_nil: true
+    validates :goal_value, numericality: { greater_than_or_equal_to: 0 }, allow_nil: true
   end
 
 
   def call(attributes)
-    Given(attributes)
-      .and_then(:find_tag)
-      .and_then(:check_if_name_is_taken)
-      .and_then(:update_tag)
+    rollback_on_failure {
+      Given(attributes)
+        .and_then(:find_tag)
+        .and_then(:check_if_name_is_taken)
+        .and_then(:ensure_goal_months_are_open)
+        .and_then(:update_goal)
+        .and_then(:update_tag)
+        .and_then(:reload_tag)
+    }
   end
 
   private
@@ -49,9 +58,27 @@ class Core::Tag::Update < ApplicationSolidProcess
     Continue()
   end
 
-  def update_tag(tag:, name:, color:, active:, **)
-    attributes = { name:, color:, active: }.compact
+  def ensure_goal_months_are_open(user:, tag:, goal_starts_on:, goal_ends_on:, **)
+    if tag.goals.empty? && goal_starts_on.present?
+      result = with_nested_process(Core::MonthlyStatus::EnsureOpen.call(user:, date: goal_starts_on))
+      return result unless result.success?
+    end
 
+    return Continue() if goal_ends_on.blank?
+    return Continue() if goal_starts_on.present? && same_month?(goal_starts_on, goal_ends_on)
+
+    with_nested_process(Core::MonthlyStatus::EnsureOpen.call(user:, date: goal_ends_on))
+  end
+
+  def update_goal(tag:, goal_starts_on:, goal_value:, goal_ends_on:, **)
+    with_nested_process(
+      Core::Tag::Goal::Update.call(tag:, goal_starts_on:, goal_value:, goal_ends_on:),
+      persist_failure: :tag_update_failed
+    )
+  end
+
+  def update_tag(tag:, name:, color:, active:, goal_ends_on:, **)
+    attributes = { name:, color:, active:, goal_ends_on: goal_ends_on&.beginning_of_month }.compact
 
     case deps.tag_repository.update(tag:, attributes:)
     in Solid::Success(tag:) then Continue(tag:)
@@ -61,5 +88,18 @@ class Core::Tag::Update < ApplicationSolidProcess
 
       Failure(:tag_update_failed, input:)
     end
+  end
+
+  def reload_tag(user:, tag:, **)
+    case deps.tag_repository.find_by_id(user:, id: tag.id)
+    in Solid::Success(tag:) then Continue(tag:)
+    in Solid::Failure
+      input.errors.add(:base, :tag_update_failed)
+      Failure(:tag_update_failed, input:)
+    end
+  end
+
+  def same_month?(left, right)
+    left.month == right.month && left.year == right.year
   end
 end

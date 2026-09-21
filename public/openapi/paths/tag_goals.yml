@@ -1,0 +1,71 @@
+patch:
+  tags: [Tags]
+  summary: Update or split a tag goal
+  description: |
+    Adds a value change to a tag goal owned by the authenticated user.
+
+    Goals apply from the month of `starts_on` until the next goal, and the response lists them ordered by year and month.
+    Only year and month are persisted from `starts_on`. If a goal already exists in that year-month, it is updated;
+    otherwise a new goal is created.
+    This is also how the first goal is started when the tag has none.
+
+    `starts_on` cannot be after `goal_ends_on`. `value` must be different from the amount already
+    applied by the previous goal. The civil month of `starts_on` must be open (or still missing,
+    with no later month closed). Closed months return **422** `monthly_status_closed`.
+    A month before a later closed month, without its own monthly status, returns **422** `later_month_closed`.
+
+    When `change_for_next_months` is omitted or `false`, only the given month is changed.
+    If the next month already has a goal, it is kept; otherwise a goal is created
+    for the next month with the previous amount, unless that next month would be after `goal_ends_on`
+    or is closed.
+
+    When `change_for_next_months` is `true`, the given month is updated and later **open**
+    months are removed. Closed-month lines are never destroyed or updated.
+  operationId: updateTagGoal
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: tag_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Tag UUID
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/TagGoalRequest"
+        examples:
+          currentMonthOnly:
+            summary: Change only the given month
+            value:
+              tag_goal:
+                value: 600
+                starts_on: "2026-03-01"
+          currentAndNextMonths:
+            summary: Change the given month and all following open months
+            value:
+              tag_goal:
+                value: 600
+                starts_on: "2026-03-01"
+                change_for_next_months: true
+  responses:
+    "200":
+      description: Goal created or updated
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TagSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"
