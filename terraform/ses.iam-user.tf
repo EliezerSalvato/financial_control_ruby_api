@@ -1,6 +1,10 @@
 # Intentionally no aws_iam_access_key: the access key is created out of band
 # so secret never enters Terraform state.
 
+# SES sandbox (and SendRawEmail) authorizes sender AND recipient identities as
+# IAM resources. Pinning Resource to the domain ARN therefore denies any To:
+# address that is not that domain (for example a verified Gmail in sandbox).
+# Restrict the From address instead; recipients stay unrestricted here.
 data "aws_iam_policy_document" "ses_send" {
   statement {
     sid    = "SendFromVerifiedDomain"
@@ -9,9 +13,13 @@ data "aws_iam_policy_document" "ses_send" {
       "ses:SendEmail",
       "ses:SendRawEmail",
     ]
-    resources = [
-      aws_sesv2_email_identity.this.arn,
-    ]
+    resources = ["*"]
+
+    condition {
+      test     = "StringLike"
+      variable = "ses:FromAddress"
+      values   = ["*@${var.ses.domain}"]
+    }
   }
 }
 
