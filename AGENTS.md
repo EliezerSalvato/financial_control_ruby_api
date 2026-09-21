@@ -208,6 +208,8 @@ Prefer the existing style:
 - Thin **Record specs** only when persistence behavior needs unit coverage (`spec/models/.../record_spec.rb`)
 - Reuse helpers in `spec/support/` (e.g. auth helpers)
 
+**Line coverage must stay at 100%.** SimpleCov enforces `minimum_coverage line: 100` in `spec/spec_helper.rb`. After adding or changing code, run the full suite in Docker (`docker compose exec api bin/rspec`) and cover every missed line before finishing. Do not lower the line threshold. Prefer request specs first; add a focused process/model example only when SimpleCov still reports a missed line.
+
 Do not invent a parallel test stack. Mirror an existing request spec when adding an endpoint.
 
 ---
@@ -237,7 +239,8 @@ Ask yourself:
 4. Are there security concerns (auth, tokens, cookies)?
 5. Are there performance concerns?
 6. Does this require request specs / factories?
-7. Does this require OpenAPI / I18n updates? If OpenAPI changed, was the docs version bumped (`public/docs/index.html` `?v=...`)?
-8. Did the user ask for a commit?
+7. Will the full suite still report 100% line coverage?
+8. Does this require OpenAPI / I18n updates? If OpenAPI changed, was the docs version bumped (`public/docs/index.html` `?v=...`)?
+9. Did the user ask for a commit?
 
 Only then implement.

@@ -319,6 +319,15 @@ RSpec.describe "core process persist and not-found failures" do
         ).type
       ).to eq(:invalid_input)
 
+      expect(
+        Core::Category::Goal::Update.call(
+          category: empty_category,
+          goal_starts_on: Date.new(2026, 8, 1),
+          goal_value: 10,
+          goal_ends_on: Date.new(2026, 7, 1)
+        ).type
+      ).to eq(:invalid_input)
+
       allow(Tag::Adapters.repository).to receive(:find_by_id).and_call_original
       allow(Category::Adapters.repository).to receive(:find_by_id).and_call_original
 

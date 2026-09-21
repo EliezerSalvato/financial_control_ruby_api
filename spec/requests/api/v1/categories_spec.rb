@@ -295,6 +295,20 @@ RSpec.describe "API::V1::Categories", type: :request do
         )
       end
 
+      it "rejects starting a goal with goal_ends_on before goal_starts_on" do
+        expect {
+          update_category(
+            category.id,
+            category: { goal_starts_on: "2026-08-01", goal_value: 10, goal_ends_on: "2026-07-01" }
+          )
+        }.not_to change(Category::Goal::Record, :count)
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.parsed_body.dig("details", "goal_ends_on")).to eq(
+          [ "must be on or after goal_starts_on" ]
+        )
+      end
+
       it "ends an existing goal without changing its history" do
         create(:category_goal, category:, starts_on: Date.new(2026, 1, 15), value: 500)
         create(:category_goal, category:, starts_on: Date.new(2026, 3, 1), value: 600)
