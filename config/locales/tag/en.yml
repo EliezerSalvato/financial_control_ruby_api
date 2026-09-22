@@ -6,8 +6,6 @@ en:
         core/tag/creation/input:
           attributes:
             base:
-              later_month_closed: Goals cannot be created for this date because a later month is already closed
-              monthly_status_closed: Goals cannot be created for this date because the month is already closed
               tag_creation_failed: Tag creation failed
             goal_ends_on:
               before_starts_on: must be on or after goal_starts_on
@@ -20,8 +18,6 @@ en:
           attributes:
             base:
               goal_change_failed: Goal change failed
-              later_month_closed: Goals cannot be changed for this date because a later month is already closed
-              monthly_status_closed: Goals cannot be changed for this date because the month is already closed
             starts_on:
               after_ends_on: must be on or before goal_ends_on
             value:
@@ -38,8 +34,6 @@ en:
         core/tag/update/input:
           attributes:
             base:
-              later_month_closed: Goals cannot be changed for this date because a later month is already closed
-              monthly_status_closed: Goals cannot be changed for this date because the month is already closed
               tag_not_found: Tag not found
               tag_update_failed: Tag update failed
             goal_ends_on:

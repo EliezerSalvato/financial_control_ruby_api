@@ -30,7 +30,6 @@ class Core::Tag::Creation < ApplicationSolidProcess
         .and_then(:check_if_name_is_taken)
         .and_then(:validate_goal_pair)
         .and_then(:validate_goal_window)
-        .and_then(:ensure_goal_months_are_open)
         .and_then(:create_tag)
         .and_then(:create_goal)
         .and_then(:reload_tag)
@@ -66,16 +65,6 @@ class Core::Tag::Creation < ApplicationSolidProcess
     Failure(:invalid_input, input:)
   end
 
-  def ensure_goal_months_are_open(user:, goal_starts_on:, goal_ends_on:, **)
-    return Continue() if goal_starts_on.blank?
-
-    result = with_nested_process(Core::MonthlyStatus::EnsureOpen.call(user:, date: goal_starts_on))
-    return result unless result.success?
-    return Continue() if goal_ends_on.blank? || same_month?(goal_starts_on, goal_ends_on)
-
-    with_nested_process(Core::MonthlyStatus::EnsureOpen.call(user:, date: goal_ends_on))
-  end
-
   def create_tag(user:, name:, color:, active:, goal_ends_on:, **)
     case deps.tag_repository.create(user:, attributes: { name:, color:, active:, goal_ends_on: goal_ends_on&.beginning_of_month }.compact)
 
@@ -104,9 +93,5 @@ class Core::Tag::Creation < ApplicationSolidProcess
       input.errors.add(:base, :tag_creation_failed)
       Failure(:tag_creation_failed, input:)
     end
-  end
-
-  def same_month?(left, right)
-    left.month == right.month && left.year == right.year
   end
 end

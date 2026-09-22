@@ -412,9 +412,7 @@ paths:
         This is also how the first goal is started when the tag has none.
 
         `starts_on` cannot be after `goal_ends_on`. `value` must be different from the amount already
-        applied by the previous goal. The civil month of `starts_on` must be open (or still missing,
-        with no later month closed). Closed months return **422** `monthly_status_closed`.
-        A month before a later closed month, without its own monthly status, returns **422** `later_month_closed`.
+        applied by the previous goal. Past and closed months are allowed.
 
         When `change_for_next_months` is omitted or `false`, only the given month is changed.
         If the next month already has a goal, it is kept; otherwise a goal is created
@@ -422,7 +420,7 @@ paths:
         or is closed.
 
         When `change_for_next_months` is `true`, the given month is updated and later **open**
-        months are removed. Closed-month lines are never destroyed or updated.
+        months are removed. Later closed-month lines are never destroyed.
       operationId: updateTagGoal
       security:
         - bearerAuth: []
@@ -667,9 +665,7 @@ paths:
         This is also how the first goal is started when the category has none.
 
         `starts_on` cannot be after `goal_ends_on`. `value` must be different from the amount already
-        applied by the previous goal. The civil month of `starts_on` must be open (or still missing,
-        with no later month closed). Closed months return **422** `monthly_status_closed`.
-        A month before a later closed month, without its own monthly status, returns **422** `later_month_closed`.
+        applied by the previous goal. Past and closed months are allowed.
 
         When `change_for_next_months` is omitted or `false`, only the given month is changed.
         If the next month already has a goal, it is kept; otherwise a goal is created
@@ -677,7 +673,7 @@ paths:
         or is closed.
 
         When `change_for_next_months` is `true`, the given month is updated and later **open**
-        months are removed. Closed-month lines are never destroyed or updated.
+        months are removed. Later closed-month lines are never destroyed.
       operationId: updateCategoryGoal
       security:
         - bearerAuth: []
@@ -3038,7 +3034,7 @@ components:
               description: |
                 Write-only. Together with `goal_value`, creates the first goal line.
                 Omit both to create a tag without a goal. Sending only one of the two is rejected.
-                The month of this date must be open (or still missing, with no later month closed).
+                Past and closed months are allowed.
             goal_value:
               type: number
               minimum: 0
@@ -3046,7 +3042,7 @@ components:
             goal_ends_on:
               type: string
               format: date
-              description: Optional. Must be on or after `goal_starts_on`. The month must be open.
+              description: Optional. Must be on or after the month of `goal_starts_on`. Stored as the first day of the month. Past and closed months are allowed.
     TagSuccessResponse:
       type: object
       required:
@@ -3107,7 +3103,7 @@ components:
               format: date
               description: |
                 Ends the goal. Stored as the first day of the month. Must be after the latest goal month.
-                The month must be open. Does not delete history.
+                Past and closed months are allowed. Does not delete history.
           description: Partial update — only provided fields are changed
     TagGoalRequest:
       type: object
@@ -3125,7 +3121,7 @@ components:
               format: date
               description: |
                 Write-only. Only the year and month are persisted. Upserts by year-month when a line already exists.
-                Must be an open month (or still missing, with no later month closed).
+                Past and closed months are allowed.
                 Cannot be after the month of `goal_ends_on`.
             value:
               type: number
@@ -3138,7 +3134,7 @@ components:
                 When `false` or omitted, only the given month is changed.
                 If the next month already has a goal, it is kept; otherwise one is created with the previous amount,
                 unless that next month would be after `goal_ends_on` or is closed.
-                When `true`, later **open** months are removed. Closed-month lines are never destroyed or updated.
+                When `true`, later **open** months are removed. Later closed-month lines are never destroyed.
     CategoryGoalAttributes:
       type: object
       properties:
@@ -3256,7 +3252,7 @@ components:
               description: |
                 Write-only. Together with `goal_value`, creates the first goal line.
                 Omit both to create a category without a goal. Sending only one of the two is rejected.
-                The month of this date must be open (or still missing, with no later month closed).
+                Past and closed months are allowed.
             goal_value:
               type: number
               minimum: 0
@@ -3264,7 +3260,7 @@ components:
             goal_ends_on:
               type: string
               format: date
-              description: Optional. Must be on or after `goal_starts_on`. The month must be open.
+              description: Optional. Must be on or after the month of `goal_starts_on`. Stored as the first day of the month. Past and closed months are allowed.
     CategorySuccessResponse:
       type: object
       required:
@@ -3315,7 +3311,7 @@ components:
               format: date
               description: |
                 Ends the goal. Stored as the first day of the month. Must be after the latest goal month.
-                The month must be open. Does not delete history.
+                Past and closed months are allowed. Does not delete history.
           description: Partial update — only provided fields are changed
     CategoryGoalRequest:
       type: object
@@ -3332,9 +3328,9 @@ components:
               type: string
               format: date
               description: |
-                Month that should receive the new value. Upserts by year-month when a line already exists.
-                Must be an open month (or still missing, with no later month closed).
-                Cannot be after `goal_ends_on`.
+                Write-only. Only the year and month are persisted. Upserts by year-month when a line already exists.
+                Past and closed months are allowed.
+                Cannot be after the month of `goal_ends_on`.
             value:
               type: number
               minimum: 0
@@ -3346,7 +3342,7 @@ components:
                 When `false` or omitted, only the given month is changed.
                 If the next month already has a goal, it is kept; otherwise one is created with the previous amount,
                 unless that next month would be after `goal_ends_on` or is closed.
-                When `true`, later **open** months are removed. Closed-month lines are never destroyed or updated.
+                When `true`, later **open** months are removed. Later closed-month lines are never destroyed.
     InstitutionAttributes:
       type: object
       properties:
@@ -4169,7 +4165,7 @@ components:
           description: Category or tag name
         color:
           type: string
-          pattern: '^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$'
+          pattern: ^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$
           description: Hex color of the category or tag (`#RRGGBB` or `#RRGGBBAA`)
           example: '#3B82F6'
         value:

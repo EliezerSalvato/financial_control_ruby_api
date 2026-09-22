@@ -25,7 +25,6 @@ class Core::Category::Goal::Change < ApplicationSolidProcess
     rollback_on_failure {
       Given(attributes)
         .and_then(:find_category)
-        .and_then(:ensure_month_is_open)
         .and_then(:validate_starts_on_window)
         .and_then(:resolve_existing_goal)
         .and_then(:reject_same_value)
@@ -43,12 +42,6 @@ class Core::Category::Goal::Change < ApplicationSolidProcess
     in Solid::Failure(type: :category_not_found)
       Failure(:category_not_found)
     end
-  end
-
-  def ensure_month_is_open(user:, starts_on:, **)
-    with_nested_process(
-      Core::MonthlyStatus::EnsureOpen.call(user:, date: starts_on)
-    )
   end
 
   def validate_starts_on_window(category:, starts_on:, **)

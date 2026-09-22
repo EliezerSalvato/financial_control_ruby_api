@@ -210,31 +210,31 @@ RSpec.describe "API::V1::Tag::Goals", type: :request do
         expect(goal_pairs(response.parsed_body)).to eq([ [ 2026, 8, "500.0" ] ])
       end
 
-      it "rejects a closed month" do
+      it "allows changing a goal in a closed month" do
         tag
         create(:monthly_status, :closed, user:, month: 8, year: 2026)
 
         expect {
           update_goal(tag.id, { value: 120, starts_on: "2026-08-01" })
-        }.not_to change(Tag::Goal::Record, :count)
+        }.to change(Tag::Goal::Record, :count).by(1)
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.parsed_body.dig("details", "base")).to eq(
-          [ "Goals cannot be changed for this date because the month is already closed" ]
+        expect(response).to have_http_status(:ok)
+        expect(goal_pairs(response.parsed_body)).to eq(
+          [ [ 2026, 8, "120.0" ], [ 2026, 9, "100.0" ] ]
         )
       end
 
-      it "rejects a month before a later closed month" do
+      it "allows changing a goal in a month before a later closed month" do
         tag
         create(:monthly_status, :closed, user:, month: 10, year: 2026)
 
         expect {
           update_goal(tag.id, { value: 120, starts_on: "2026-08-01" })
-        }.not_to change(Tag::Goal::Record, :count)
+        }.to change(Tag::Goal::Record, :count).by(1)
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.parsed_body.dig("details", "base")).to eq(
-          [ "Goals cannot be changed for this date because a later month is already closed" ]
+        expect(response).to have_http_status(:ok)
+        expect(goal_pairs(response.parsed_body)).to eq(
+          [ [ 2026, 8, "120.0" ], [ 2026, 9, "100.0" ] ]
         )
       end
 

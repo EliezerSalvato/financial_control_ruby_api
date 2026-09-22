@@ -10,9 +10,7 @@ patch:
     This is also how the first goal is started when the category has none.
 
     `starts_on` cannot be after `goal_ends_on`. `value` must be different from the amount already
-    applied by the previous goal. The civil month of `starts_on` must be open (or still missing,
-    with no later month closed). Closed months return **422** `monthly_status_closed`.
-    A month before a later closed month, without its own monthly status, returns **422** `later_month_closed`.
+    applied by the previous goal. Past and closed months are allowed.
 
     When `change_for_next_months` is omitted or `false`, only the given month is changed.
     If the next month already has a goal, it is kept; otherwise a goal is created
@@ -20,7 +18,7 @@ patch:
     or is closed.
 
     When `change_for_next_months` is `true`, the given month is updated and later **open**
-    months are removed. Closed-month lines are never destroyed or updated.
+    months are removed. Later closed-month lines are never destroyed.
   operationId: updateCategoryGoal
   security:
     - bearerAuth: []

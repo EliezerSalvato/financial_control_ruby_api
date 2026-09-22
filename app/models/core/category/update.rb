@@ -31,7 +31,6 @@ class Core::Category::Update < ApplicationSolidProcess
       Given(attributes)
         .and_then(:find_category)
         .and_then(:check_if_name_is_taken)
-        .and_then(:ensure_goal_months_are_open)
         .and_then(:update_goal)
         .and_then(:update_category)
         .and_then(:reload_category)
@@ -56,18 +55,6 @@ class Core::Category::Update < ApplicationSolidProcess
     return Failure(:invalid_input, input:) if input.errors.any?
 
     Continue()
-  end
-
-  def ensure_goal_months_are_open(user:, category:, goal_starts_on:, goal_ends_on:, **)
-    if category.goals.empty? && goal_starts_on.present?
-      result = with_nested_process(Core::MonthlyStatus::EnsureOpen.call(user:, date: goal_starts_on))
-      return result unless result.success?
-    end
-
-    return Continue() if goal_ends_on.blank?
-    return Continue() if goal_starts_on.present? && same_month?(goal_starts_on, goal_ends_on)
-
-    with_nested_process(Core::MonthlyStatus::EnsureOpen.call(user:, date: goal_ends_on))
   end
 
   def update_goal(category:, goal_starts_on:, goal_value:, goal_ends_on:, **)
@@ -97,9 +84,5 @@ class Core::Category::Update < ApplicationSolidProcess
       input.errors.add(:base, :category_update_failed)
       Failure(:category_update_failed, input:)
     end
-  end
-
-  def same_month?(left, right)
-    left.month == right.month && left.year == right.year
   end
 end

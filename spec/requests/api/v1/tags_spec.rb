@@ -185,16 +185,16 @@ RSpec.describe "API::V1::Tags", type: :request do
         expect(response.parsed_body.dig("details", "goal_value")).to be_present
       end
 
-      it "rejects a closed month when creating a goal" do
+      it "allows creating a goal in a closed month" do
         create(:monthly_status, :closed, user:, month: 1, year: 2026)
 
         expect {
           create_tag(tag: { name: "Food", color: "#3B82F6", goal_starts_on: "2026-01-15", goal_value: 500 })
-        }.not_to change(Tag::Record, :count)
+        }.to change(Tag::Record, :count).by(1)
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.parsed_body.dig("details", "base")).to eq(
-          [ "Goals cannot be created for this date because the month is already closed" ]
+        expect(response).to have_http_status(:created)
+        expect(tag_attributes(response.parsed_body)["goals"].map { |item| item.fetch("attributes").values_at("year", "month", "value") }).to eq(
+          [ [ 2026, 1, "500.0" ] ]
         )
       end
 
@@ -342,16 +342,15 @@ RSpec.describe "API::V1::Tags", type: :request do
         )
       end
 
-      it "rejects ending a goal in a closed month" do
+      it "allows ending a goal in a closed month" do
         create(:tag_goal, tag:, starts_on: Date.new(2026, 1, 15), value: 500)
         create(:monthly_status, :closed, user:, month: 6, year: 2026)
 
         update_tag(tag.id, tag: { goal_ends_on: "2026-06-30" })
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.parsed_body.dig("details", "base")).to eq(
-          [ "Goals cannot be changed for this date because the month is already closed" ]
-        )
+        expect(response).to have_http_status(:ok)
+        expect(tag_attributes(response.parsed_body)["goal_ends_on"]).to eq("2026-06-01")
+        expect(tag.reload.goal_ends_on).to eq(Date.new(2026, 6, 1))
       end
 
       it "rejects an invalid color" do

@@ -7,8 +7,6 @@ pt-BR:
           attributes:
             base:
               category_creation_failed: Falha ao criar a categoria
-              later_month_closed: Não é possível criar metas nesta data, pois um mês posterior já está fechado
-              monthly_status_closed: Não é possível criar metas nesta data, pois o mês já está fechado
             goal_ends_on:
               before_starts_on: deve ser igual ou posterior a goal_starts_on
         core/category/deletion/input:
@@ -21,8 +19,6 @@ pt-BR:
           attributes:
             base:
               goal_change_failed: Falha ao alterar a meta
-              later_month_closed: Não é possível alterar metas nesta data, pois um mês posterior já está fechado
-              monthly_status_closed: Não é possível alterar metas nesta data, pois o mês já está fechado
             starts_on:
               after_ends_on: deve ser igual ou anterior a goal_ends_on
             value:
@@ -41,8 +37,6 @@ pt-BR:
             base:
               category_not_found: Categoria não encontrada
               category_update_failed: Falha ao atualizar a categoria
-              later_month_closed: Não é possível alterar metas nesta data, pois um mês posterior já está fechado
-              monthly_status_closed: Não é possível alterar metas nesta data, pois o mês já está fechado
             goal_ends_on:
               before_existing_goal: deve ser posterior a uma meta já existente
               before_starts_on: deve ser igual ou posterior a goal_starts_on
