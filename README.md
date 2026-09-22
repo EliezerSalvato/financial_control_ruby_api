@@ -2,7 +2,14 @@
 
 Rails JSON API for personal financial control: accounts, credit cards, transactions, monthly statements, settlements, and notifications.
 
-Frontend: [financial_control_vue](https://github.com/EliezerSalvato/financial_control_vue)
+Business logic is modeled with [solid-process](https://github.com/solid-process/solid-process) and organized around a hexagonal architecture: domain processes and entities in `Core`, adapters for persistence and infrastructure, and thin HTTP controllers.
+
+| Resource | URL |
+|----------|-----|
+| Frontend | [https://vue.financialcontrol.app.br/](https://vue.financialcontrol.app.br/) |
+| Backend API | [https://api.financialcontrol.app.br/](https://api.financialcontrol.app.br/) |
+| API docs (Redoc) | [https://api.financialcontrol.app.br/docs](https://api.financialcontrol.app.br/docs) |
+| Frontend repository | [financial_control_vue](https://github.com/EliezerSalvato/financial_control_vue) |
 
 ## Tech stack
 
@@ -144,7 +151,8 @@ Interactive docs are served by Redoc at:
 
 | Resource | URL |
 |----------|-----|
-| Docs UI | [http://localhost:3000/docs](http://localhost:3000/docs) |
+| Production | [https://api.financialcontrol.app.br/docs](https://api.financialcontrol.app.br/docs) |
+| Local | [http://localhost:3000/docs](http://localhost:3000/docs) |
 
 Source files:
 
