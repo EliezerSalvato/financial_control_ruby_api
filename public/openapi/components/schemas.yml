@@ -1819,6 +1819,124 @@ MonthlyStatementTransferCollection:
       items:
         $ref: "#/MonthlyStatementTransferResource"
 
+GoalTransactionAttributes:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: Transaction id
+    kind:
+      type: string
+      enum: [income, expense, transfer_between_accounts]
+    description:
+      type: string
+    recurrence_type:
+      type: string
+      enum: [one_time, installment, recurring]
+    value:
+      type: string
+      description: Decimal amount as string (precision 15, scale 2) from the current recurrence
+      example: "100.0"
+    first_recurrence_on:
+      type: string
+      format: date
+      description: Earliest `starts_on` across all recurrences of the transaction
+    current_recurrence_on:
+      type: string
+      format: date
+      description: First recurrence day projected onto the period (billing cycle for cards, civil month for accounts and transfers)
+    ends_on:
+      type: [string, "null"]
+      format: date
+    category_id:
+      type: [string, "null"]
+      format: uuid
+      description: Category id of the transaction
+    tag_ids:
+      type: array
+      items:
+        type: string
+        format: uuid
+      description: Tag ids of the transaction. Empty array when the transaction has no tags.
+
+GoalTransactionResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: goal_transaction
+    attributes:
+      $ref: "#/GoalTransactionAttributes"
+
+GoalTransactionCollection:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: collection
+    data:
+      type: array
+      items:
+        $ref: "#/GoalTransactionResource"
+
+GoalTargetAttributes:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+      description: Category id when `kind` is `category`, tag id when `kind` is `tag`
+    kind:
+      type: string
+      enum: [category, tag]
+    name:
+      type: string
+      description: Category or tag name
+    color:
+      type: string
+      pattern: '^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$'
+      description: Hex color of the category or tag (`#RRGGBB` or `#RRGGBBAA`)
+      example: "#3B82F6"
+    value:
+      type: string
+      description: Decimal goal amount as string (precision 15, scale 2) from the latest goal on or before the requested month
+      example: "1000.0"
+
+GoalTargetResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: goal_target
+    attributes:
+      $ref: "#/GoalTargetAttributes"
+
+GoalTargetCollection:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: collection
+    data:
+      type: array
+      items:
+        $ref: "#/GoalTargetResource"
+
 MonthlyStatusAttributes:
   type: object
   properties:

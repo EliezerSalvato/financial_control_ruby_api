@@ -187,6 +187,8 @@ RSpec.describe "core process persist and not-found failures" do
 
       expect(Tag::Goal::Mapper.to_entity(nil)).to be_nil
       expect(Category::Goal::Mapper.to_entity(nil)).to be_nil
+      expect(Goal::Mapper.to_entity(nil)).to be_nil
+      expect(Goal::Target::Mapper.to_entity(nil)).to be_nil
       expect(Tag::Goal::Mapper.to_record(Tag::Mapper.to_entity(tag).goals.first)).to eq(tag.goals.first)
       expect(Category::Goal::Mapper.to_record(Category::Mapper.to_entity(category).goals.first)).to eq(category.goals.first)
     end

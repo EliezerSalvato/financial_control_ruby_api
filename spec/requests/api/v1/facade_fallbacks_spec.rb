@@ -421,6 +421,25 @@ RSpec.describe "API facade fallback branches", type: :request do
     end
   end
 
+  describe "goals" do
+    it "returns bad request when listing fails unexpectedly" do
+      allow(Goal).to receive(:list).and_return(unexpected_failure)
+
+      get "/api/v1/goals", params: { month: 9, year: 2026 }, headers: headers
+
+      expect(response).to have_http_status(:bad_request)
+    end
+
+    it "returns bad request when listing targets fails unexpectedly" do
+      allow(Goal).to receive(:list_targets).and_return(unexpected_failure)
+
+      get "/api/v1/goals/targets", params: { month: 9, year: 2026 }, headers: headers
+
+      expect(response).to have_http_status(:bad_request)
+    end
+  end
+
+
   describe "monthly statuses" do
     it "returns not found when showing fails unexpectedly" do
       allow(MonthlyStatus).to receive(:find).and_return(unexpected_failure)

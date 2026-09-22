@@ -16,6 +16,8 @@
   description: User-owned financial transactions (income, expense, and transfers)
 - name: Monthly Statements
   description: Monthly statement items for accounts, credit cards, and transfers between accounts
+- name: Goals
+  description: Monthly transactions and category/tag goal amounts for the goals dashboard
 - name: Monthly Statuses
   description: Open or closed status of a calendar month for the authenticated user, including processing updates over Action Cable
 - name: Settlements

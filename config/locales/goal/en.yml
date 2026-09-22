@@ -1,0 +1,5 @@
+---
+en:
+  goal:
+    errors:
+      invalid_period: Invalid period

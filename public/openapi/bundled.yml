@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Financial Control Ruby API
-  version: 1.0.22
+  version: 1.0.23
   description: |
     ## Authentication
 
@@ -35,7 +35,7 @@ info:
     | Access | Endpoints |
     |--------|-----------|
     | Public | registrations, authentications, email confirmations, password resets, session refreshes |
-    | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, monthly statuses, settlements, transactions, notifications, profiles, account deletion, email changes, password changes, session revokes |
+    | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, goals, monthly statuses, settlements, transactions, notifications, profiles, account deletion, email changes, password changes, session revokes |
     | Session token (query or `Authorization`) | Action Cable at `/cable` (`MonthlyStatusChannel`, `NotificationChannel`) |
 
     ---
@@ -209,6 +209,8 @@ tags:
     description: User-owned financial transactions (income, expense, and transfers)
   - name: Monthly Statements
     description: Monthly statement items for accounts, credit cards, and transfers between accounts
+  - name: Goals
+    description: Monthly transactions and category/tag goal amounts for the goals dashboard
   - name: Monthly Statuses
     description: Open or closed status of a calendar month for the authenticated user, including processing updates over Action Cable
   - name: Settlements
@@ -1554,6 +1556,101 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MonthlyStatementTransferCollection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/goals:
+    get:
+      tags:
+        - Goals
+      summary: List goal dashboard transactions
+      description: |
+        Returns the authenticated user's income, expense, and transfer-between-accounts
+        transactions for the given calendar month. Credit card items use the card billing
+        cycle; account items and transfers use the civil month. Period rules are the same
+        as `GET /api/v1/monthly_statements` and `GET /api/v1/monthly_statements/transfers`.
+        Each item includes `category_id` and `tag_ids`.
+        Goal amounts for categories and tags come from `GET /api/v1/goals/targets`.
+        `statuses` and `on` are not public query params.
+        Missing or out-of-range `month`/`year` return **422**.
+      operationId: listGoals
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+          description: Calendar month of the dashboard (1-12)
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9999
+          description: Calendar year of the dashboard
+      responses:
+        '200':
+          description: Goal dashboard transactions listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalTransactionCollection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api/v1/goals/targets:
+    get:
+      tags:
+        - Goals
+      summary: List category and tag goals for a month
+      description: |
+        Returns the authenticated user's categories and tags that have a goal applicable to the given
+        calendar month. `value` comes from the latest `category_goals` / `tag_goals` row whose
+        `(year, month)` is on or before the requested period — the same “current row” rule used for
+        `transaction_recurrences` on the dashboard transactions list.
+        Categories and tags whose first goal starts after the requested month are omitted.
+        Categories and tags whose `goal_ends_on` is before the requested month are omitted.
+        Each item is identified by the category or tag id (`kind` is `category` or `tag`).
+        `color` is the hex color of that category or tag.
+        Missing or out-of-range `month`/`year` return **422**.
+      operationId: listGoalTargets
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+          description: Calendar month of the dashboard (1-12)
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 9999
+          description: Calendar year of the dashboard
+      responses:
+        '200':
+          description: Category and tag goals listed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoalTargetCollection'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '422':
@@ -3977,6 +4074,136 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MonthlyStatementTransferResource'
+    GoalTransactionAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Transaction id
+        kind:
+          type: string
+          enum:
+            - income
+            - expense
+            - transfer_between_accounts
+        description:
+          type: string
+        recurrence_type:
+          type: string
+          enum:
+            - one_time
+            - installment
+            - recurring
+        value:
+          type: string
+          description: Decimal amount as string (precision 15, scale 2) from the current recurrence
+          example: '100.0'
+        first_recurrence_on:
+          type: string
+          format: date
+          description: Earliest `starts_on` across all recurrences of the transaction
+        current_recurrence_on:
+          type: string
+          format: date
+          description: First recurrence day projected onto the period (billing cycle for cards, civil month for accounts and transfers)
+        ends_on:
+          type:
+            - string
+            - 'null'
+          format: date
+        category_id:
+          type:
+            - string
+            - 'null'
+          format: uuid
+          description: Category id of the transaction
+        tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Tag ids of the transaction. Empty array when the transaction has no tags.
+    GoalTransactionResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: goal_transaction
+        attributes:
+          $ref: '#/components/schemas/GoalTransactionAttributes'
+    GoalTransactionCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/GoalTransactionResource'
+    GoalTargetAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Category id when `kind` is `category`, tag id when `kind` is `tag`
+        kind:
+          type: string
+          enum:
+            - category
+            - tag
+        name:
+          type: string
+          description: Category or tag name
+        color:
+          type: string
+          pattern: '^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$'
+          description: Hex color of the category or tag (`#RRGGBB` or `#RRGGBBAA`)
+          example: '#3B82F6'
+        value:
+          type: string
+          description: Decimal goal amount as string (precision 15, scale 2) from the latest goal on or before the requested month
+          example: '1000.0'
+    GoalTargetResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: goal_target
+        attributes:
+          $ref: '#/components/schemas/GoalTargetAttributes'
+    GoalTargetCollection:
+      type: object
+      required:
+        - status
+        - type
+        - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/GoalTargetResource'
     MonthlyStatusAttributes:
       type: object
       properties:

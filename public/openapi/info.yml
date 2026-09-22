@@ -1,5 +1,5 @@
 title: Financial Control Ruby API
-version: "1.0.21"
+version: "1.0.22"
 description: |
   ## Authentication
 
@@ -33,7 +33,7 @@ description: |
   | Access | Endpoints |
   |--------|-----------|
   | Public | registrations, authentications, email confirmations, password resets, session refreshes |
-  | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, monthly statuses, settlements, transactions, notifications, profiles, account deletion, email changes, password changes, session revokes |
+  | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, goals, monthly statuses, settlements, transactions, notifications, profiles, account deletion, email changes, password changes, session revokes |
   | Session token (query or `Authorization`) | Action Cable at `/cable` (`MonthlyStatusChannel`, `NotificationChannel`) |
 
   ---

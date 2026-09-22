@@ -1,0 +1,5 @@
+---
+pt-BR:
+  goal:
+    errors:
+      invalid_period: Período inválido

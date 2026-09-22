@@ -41,6 +41,10 @@ paths:
     $ref: "./paths/monthly_statements.yml"
   /api/v1/monthly_statements/transfers:
     $ref: "./paths/monthly_statement_transfers.yml"
+  /api/v1/goals:
+    $ref: "./paths/goals.yml"
+  /api/v1/goals/targets:
+    $ref: "./paths/goals_targets.yml"
   /api/v1/monthly_statuses:
     $ref: "./paths/monthly_statuses.yml"
   /api/v1/settlements/processing:

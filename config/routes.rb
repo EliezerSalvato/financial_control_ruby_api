@@ -42,6 +42,11 @@ Rails.application.routes.draw do
           get :transfers
         end
       end
+      resources :goals, only: %i[index] do
+        collection do
+          get :targets
+        end
+      end
 
       resources :notifications, only: %i[index show] do
         member do

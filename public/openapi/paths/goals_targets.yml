@@ -1,0 +1,46 @@
+get:
+  tags: [Goals]
+  summary: List category and tag goals for a month
+  description: |
+    Returns the authenticated user's categories and tags that have a goal applicable to the given
+    calendar month. `value` comes from the latest `category_goals` / `tag_goals` row whose
+    `(year, month)` is on or before the requested period — the same “current row” rule used for
+    `transaction_recurrences` on the dashboard transactions list.
+    Categories and tags whose first goal starts after the requested month are omitted.
+    Categories and tags whose `goal_ends_on` is before the requested month are omitted.
+    Each item is identified by the category or tag id (`kind` is `category` or `tag`).
+    `color` is the hex color of that category or tag.
+    Missing or out-of-range `month`/`year` return **422**.
+  operationId: listGoalTargets
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: month
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 12
+      description: Calendar month of the dashboard (1-12)
+    - name: year
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 9999
+      description: Calendar year of the dashboard
+  responses:
+    "200":
+      description: Category and tag goals listed
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/GoalTargetCollection"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"
