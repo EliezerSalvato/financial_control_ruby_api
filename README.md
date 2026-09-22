@@ -1,6 +1,6 @@
 # Financial Control Ruby API
 
-Rails JSON API for personal financial control: accounts, credit cards, transactions, monthly statements, settlements, and notifications.
+Rails JSON API for personal financial control: accounts, credit cards, transactions, monthly statements, goals, settlements, and notifications.
 
 Business logic is modeled with [solid-process](https://github.com/solid-process/solid-process) and organized around a hexagonal architecture: domain processes and entities in `Core`, adapters for persistence and infrastructure, and thin HTTP controllers.
 
@@ -87,6 +87,7 @@ Copy `.env.example` to `.env` and adjust values as needed.
 | `RAILS_LOG_LEVEL` | Log level in production | `info` |
 | `FRONTEND_URL` | Public frontend origin used in mailer links | `http://localhost:5173` |
 | `CORS_ORIGINS` | Comma-separated allowed CORS / Action Cable origins | `http://localhost:5173` |
+| `MAIL_FROM` | Default From address for outbound mail | `from@example.com` |
 | `JOB_CONCURRENCY` | Solid Queue worker processes | `3` |
 | `MISSION_CONTROL_HTTP_BASIC_AUTH_USER` | Mission Control username | `admin` |
 | `MISSION_CONTROL_HTTP_BASIC_AUTH_PASSWORD` | Mission Control password | `secret` |
@@ -156,10 +157,11 @@ Interactive docs are served by Redoc at:
 
 Source files:
 
-- `public/docs/index.html` — Redoc page
-- `public/openapi/spec.yml` — OpenAPI specification
+- `public/docs/index.html` — Redoc page (loads `/openapi/bundled.yml`)
+- `public/openapi/spec.yml` — OpenAPI entrypoint (paths, components)
+- `public/openapi/bundled.yml` — Single-file spec served by Redoc
 
-Update the spec file when adding or changing endpoints.
+Update the OpenAPI files when adding or changing endpoints, and keep `bundled.yml` in sync.
 
 ### Authentication
 
@@ -208,13 +210,14 @@ All require Bearer. See the OpenAPI spec for request and response schemas.
 
 | Resource | Paths |
 |----------|-------|
-| Tags | `GET, POST /tags` · `GET, PATCH, DELETE /tags/{id}` |
-| Categories | `GET, POST /categories` · `GET, PATCH, DELETE /categories/{id}` |
+| Tags | `GET, POST /tags` · `GET, PATCH, DELETE /tags/{id}` · `PATCH /tags/{id}/goals` |
+| Categories | `GET, POST /categories` · `GET, PATCH, DELETE /categories/{id}` · `PATCH /categories/{id}/goals` |
 | Institutions | `GET, POST /institutions` · `GET, PATCH, DELETE /institutions/{id}` |
 | Accounts | `GET, POST /accounts` · `GET, PATCH, DELETE /accounts/{id}` |
 | Credit cards | `GET, POST /credit_cards` · `GET, PATCH, DELETE /credit_cards/{id}` · `GET /credit_cards/invoice_settlements` |
 | Transactions | `GET, POST /transactions` · `GET, PATCH, DELETE /transactions/{id}` · `GET /transactions/settled` · `POST /transactions/{id}/cancel` · `POST /transactions/{id}/recurrences` |
 | Monthly statements | `GET /monthly_statements` · `GET /monthly_statements/transfers` |
+| Goals | `GET /goals` · `GET /goals/targets` |
 | Monthly statuses | `GET, PATCH /monthly_statuses` |
 | Settlements | `POST /settlements/processing` |
 | Notifications | `GET /notifications` · `GET /notifications/{id}` · `POST /notifications/{id}/read` · `POST /notifications/read_all` |
@@ -294,4 +297,4 @@ make migrate
 
 **Docs page loads but endpoints are missing**
 
-Ensure `public/openapi/spec.yml` is up to date. Redoc reads the spec from `/openapi/spec.yml?v=...`. After changing the spec, bump that query param in `public/docs/index.html` and the `version` in `public/openapi/info.yml`.
+Ensure `public/openapi/bundled.yml` is up to date. Redoc reads the spec from `/openapi/bundled.yml?v=...`. After changing the OpenAPI files, bump that query param in `public/docs/index.html` and the `version` in `public/openapi/info.yml`.
