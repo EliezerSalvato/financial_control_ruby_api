@@ -155,13 +155,24 @@ Interactive docs are served by Redoc at:
 | Production | [https://api.financialcontrol.app.br/docs](https://api.financialcontrol.app.br/docs) |
 | Local | [http://localhost:3000/docs](http://localhost:3000/docs) |
 
+The Redoc page includes an **EN / pt-BR** language switcher (`?lang=en` or `?lang=pt-BR`; preference is stored in `localStorage`).
+
 Source files:
 
-- `public/docs/index.html` — Redoc page (loads `/openapi/bundled.yml`)
+- `public/docs/index.html` — Redoc page with language switcher
 - `public/openapi/spec.yml` — OpenAPI entrypoint (paths, components)
-- `public/openapi/bundled.yml` — Single-file spec served by Redoc
+- `public/openapi/bundled.yml` — English single-file spec
+- `public/openapi/bundled.pt-BR.yml` — Portuguese single-file spec (generated)
+- `public/openapi/locales/pt-BR.json` — English → pt-BR map for human-readable OpenAPI strings
 
-Update the OpenAPI files when adding or changing endpoints, and keep `bundled.yml` in sync.
+Update the OpenAPI files when adding or changing endpoints, keep `bundled.yml` in sync, update `locales/pt-BR.json` for new/changed prose, then regenerate the Portuguese bundle:
+
+```bash
+docker compose exec api bin/openapi-localize --check pt-BR
+docker compose exec api bin/openapi-localize
+```
+
+Bump `DOCS_VERSION` in `public/docs/index.html` and `version` in `public/openapi/info.yml` (and both bundled files) after docs changes.
 
 ### Authentication
 
@@ -297,4 +308,4 @@ make migrate
 
 **Docs page loads but endpoints are missing**
 
-Ensure `public/openapi/bundled.yml` is up to date. Redoc reads the spec from `/openapi/bundled.yml?v=...`. After changing the OpenAPI files, bump that query param in `public/docs/index.html` and the `version` in `public/openapi/info.yml`.
+Ensure `public/openapi/bundled.yml` and `public/openapi/bundled.pt-BR.yml` are up to date. Redoc loads them from `/openapi/bundled.yml?v=...` and `/openapi/bundled.pt-BR.yml?v=...`. After changing the OpenAPI files, update `locales/pt-BR.json` if prose changed, run `docker compose exec api bin/openapi-localize`, bump `DOCS_VERSION` in `public/docs/index.html`, and keep `version` in `public/openapi/info.yml` in sync.

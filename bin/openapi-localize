@@ -1,0 +1,163 @@
+#!/usr/bin/env ruby
+
+# Applies locale string maps to the English OpenAPI bundle, or extracts
+# translatable strings for updating a locale map.
+#
+# Usage (inside the api container):
+#   bin/openapi-localize              # generate bundled.pt-BR.yml
+#   bin/openapi-localize pt-BR        # same
+#   bin/openapi-localize --extract    # print unique EN strings as JSON
+#   bin/openapi-localize --check pt-BR  # exit 1 if any string lacks a translation
+#
+# Reads:
+#   public/openapi/bundled.yml
+#   public/openapi/locales/<locale>.json
+#
+# Writes:
+#   public/openapi/bundled.<locale>.yml
+#
+# Translatable fields: summary, description, title, root tags[].name,
+# and operation tags[] string entries (via the same name map).
+
+require "json"
+require "yaml"
+require "pathname"
+
+ROOT = Pathname.new(__dir__).join("..").expand_path
+OPENAPI = ROOT.join("public/openapi")
+SOURCE = OPENAPI.join("bundled.yml")
+LOCALES = OPENAPI.join("locales")
+TRANSLATABLE_KEYS = %w[summary description title].freeze
+
+abort "missing source bundle: #{SOURCE}" unless SOURCE.file?
+
+def collect_strings(doc)
+  strings = {}
+  walk = lambda do |obj, ctx = nil|
+    case obj
+    when Hash
+      obj.each do |key, value|
+        strings[value] = true if TRANSLATABLE_KEYS.include?(key) && value.is_a?(String)
+        walk.call(value, key)
+      end
+    when Array
+      obj.each do |item|
+        if ctx == "tags" && item.is_a?(Hash)
+          strings[item["name"]] = true if item["name"].is_a?(String)
+          strings[item["description"]] = true if item["description"].is_a?(String)
+        else
+          walk.call(item, ctx)
+        end
+      end
+    end
+  end
+  walk.call(doc)
+  strings.keys
+end
+
+doc = YAML.load_file(SOURCE)
+mode = ARGV[0]
+
+if mode == "--extract"
+  list = collect_strings(doc).sort_by { |s| [s.include?("\n") ? 1 : 0, s.size, s] }
+  puts JSON.pretty_generate(list)
+  exit 0
+end
+
+check_only = false
+locale = "pt-BR"
+ARGV.each do |arg|
+  case arg
+  when "--check" then check_only = true
+  when "--extract" then abort "use: bin/openapi-localize --extract"
+  else
+    locale = arg.strip
+  end
+end
+
+abort "usage: bin/openapi-localize [--check] [locale]" if locale.empty? || locale == "en"
+
+map_path = LOCALES.join("#{locale}.json")
+abort "missing locale map: #{map_path}" unless map_path.file?
+
+translations = JSON.parse(map_path.read)
+abort "locale map must be a JSON object" unless translations.is_a?(Hash)
+
+all_strings = collect_strings(doc)
+missing = all_strings.reject { |s| translations.key?(s) }
+
+if check_only
+  if missing.empty?
+    puts "ok: #{all_strings.size} strings covered for #{locale}"
+    exit 0
+  end
+  warn "missing #{missing.size} translation(s) for #{locale}:"
+  missing.first(30).each { |s| warn "  - #{s.inspect[0, 120]}" }
+  exit 1
+end
+
+translated = 0
+untranslated = []
+
+apply = lambda do |obj, ctx = nil|
+  case obj
+  when Hash
+    obj.each do |key, value|
+      if TRANSLATABLE_KEYS.include?(key) && value.is_a?(String)
+        if translations.key?(value)
+          obj[key] = translations[value]
+          translated += 1
+        else
+          untranslated << value
+        end
+      else
+        apply.call(value, key)
+      end
+    end
+  when Array
+    obj.each do |item|
+      if ctx == "tags" && item.is_a?(Hash)
+        %w[name description].each do |field|
+          value = item[field]
+          next unless value.is_a?(String)
+
+          if translations.key?(value)
+            item[field] = translations[value]
+            translated += 1
+          else
+            untranslated << value
+          end
+        end
+      else
+        apply.call(item, ctx)
+      end
+    end
+  end
+end
+
+apply.call(doc)
+
+untranslated.uniq!
+if untranslated.any?
+  warn "warning: #{untranslated.size} string(s) without translation (left in English)"
+  untranslated.first(20).each { |s| warn "  - #{s.inspect[0, 120]}" }
+end
+
+retag = lambda do |obj|
+  case obj
+  when Hash
+    if obj.key?("tags") && obj["tags"].is_a?(Array) && obj["tags"].all? { |t| t.is_a?(String) }
+      obj["tags"] = obj["tags"].map { |t| translations.fetch(t, t) }
+    end
+    obj.each_value { |v| retag.call(v) }
+  when Array
+    obj.each { |v| retag.call(v) }
+  end
+end
+retag.call(doc)
+
+out = OPENAPI.join("bundled.#{locale}.yml")
+yaml = YAML.dump(doc).sub(/\A---\n/, "")
+out.write(yaml)
+
+puts "wrote #{out.relative_path_from(ROOT)} (#{translated} replacements, #{untranslated.size} missing)"

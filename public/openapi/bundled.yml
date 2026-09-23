@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Financial Control Ruby API
-  version: 1.0.29
+  version: 1.0.30
   description: |
     ## Authentication
 
@@ -183,8 +183,8 @@ info:
     | Path | Purpose |
     |------|---------|
     | `GET /up` | Rails health check |
-    | `GET /docs` | Redirects to the Redoc UI |
-    | `/openapi/*` | Static OpenAPI files (Redoc loads `/openapi/bundled.yml`) |
+    | `GET /docs` | Redoc UI (language switcher: `en` / `pt-BR`, or `?lang=`) |
+    | `/openapi/*` | Static OpenAPI files (`bundled.yml`, `bundled.pt-BR.yml`) |
     | `/jobs` | Mission Control Jobs (HTTP basic auth) |
     | `/cable` | Action Cable (see WebSockets) |
 servers:

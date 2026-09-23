@@ -1,13 +1,163 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>API Docs</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      }
+
+      #lang-switcher {
+        position: fixed;
+        top: 12px;
+        right: 16px;
+        z-index: 1000;
+        display: inline-flex;
+        gap: 4px;
+        padding: 4px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid #d0d7de;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+
+      #lang-switcher button {
+        appearance: none;
+        border: 0;
+        margin: 0;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: transparent;
+        color: #57606a;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      #lang-switcher button[aria-pressed="true"] {
+        background: #0969da;
+        color: #fff;
+      }
+
+      #lang-switcher button:focus-visible {
+        outline: 2px solid #0969da;
+        outline-offset: 2px;
+      }
+
+      #redoc-container {
+        min-height: 100vh;
+      }
+    </style>
   </head>
   <body>
-    <redoc spec-url="/openapi/bundled.yml?v=1.0.29"></redoc>
+    <div id="lang-switcher" role="group" aria-label="Documentation language">
+      <button type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang="pt-BR" aria-pressed="false">pt-BR</button>
+    </div>
+    <div id="redoc-container"></div>
     <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+    <script>
+      (function () {
+        var DOCS_VERSION = "1.0.30";
+        var STORAGE_KEY = "openapi-docs-lang";
+        var SPECS = {
+          en: "/openapi/bundled.yml?v=" + DOCS_VERSION,
+          "pt-BR": "/openapi/bundled.pt-BR.yml?v=" + DOCS_VERSION
+        };
+        var LABELS = {
+          en: {
+            title: "API Docs",
+            aria: "Documentation language"
+          },
+          "pt-BR": {
+            title: "Documentação da API",
+            aria: "Idioma da documentação"
+          }
+        };
+
+        var container = document.getElementById("redoc-container");
+        var switcher = document.getElementById("lang-switcher");
+        var buttons = switcher.querySelectorAll("button[data-lang]");
+
+        function normalizeLang(value) {
+          if (value === "pt" || value === "pt-BR" || value === "pt_br" || value === "pt-br") {
+            return "pt-BR";
+          }
+          return "en";
+        }
+
+        function detectLang() {
+          var params = new URLSearchParams(window.location.search);
+          if (params.has("lang")) {
+            return normalizeLang(params.get("lang"));
+          }
+          try {
+            var stored = window.localStorage.getItem(STORAGE_KEY);
+            if (stored) {
+              return normalizeLang(stored);
+            }
+          } catch (_) {}
+          var languages = navigator.languages && navigator.languages.length
+            ? navigator.languages
+            : [navigator.language];
+          for (var i = 0; i < languages.length; i++) {
+            var lang = String(languages[i] || "").toLowerCase();
+            if (lang === "pt" || lang.indexOf("pt-") === 0) {
+              return "pt-BR";
+            }
+          }
+          return "en";
+        }
+
+        function setUrlLang(lang) {
+          var url = new URL(window.location.href);
+          url.searchParams.set("lang", lang);
+          window.history.replaceState({}, "", url);
+        }
+
+        function render(lang) {
+          lang = normalizeLang(lang);
+          var specUrl = SPECS[lang] || SPECS.en;
+          var labels = LABELS[lang] || LABELS.en;
+
+          document.documentElement.lang = lang === "pt-BR" ? "pt-BR" : "en";
+          document.title = labels.title;
+          switcher.setAttribute("aria-label", labels.aria);
+
+          buttons.forEach(function (button) {
+            button.setAttribute(
+              "aria-pressed",
+              button.getAttribute("data-lang") === lang ? "true" : "false"
+            );
+          });
+
+          try {
+            window.localStorage.setItem(STORAGE_KEY, lang);
+          } catch (_) {}
+          setUrlLang(lang);
+
+          container.innerHTML = "";
+          Redoc.init(specUrl, {}, container);
+        }
+
+        buttons.forEach(function (button) {
+          button.addEventListener("click", function () {
+            render(button.getAttribute("data-lang"));
+          });
+        });
+
+        render(detectLang());
+      })();
+    </script>
   </body>
 </html>

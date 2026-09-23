@@ -1,0 +1,5301 @@
+openapi: 3.1.0
+info:
+  title: API Ruby de Controle Financeiro
+  version: 1.0.30
+  description: |
+    ## Autenticação
+
+    Endpoints protegidos exigem um **token de sessão Bearer** no header `Authorization`:
+
+    ```http
+    Authorization: Bearer <token>
+    ```
+
+    ### Fluxo
+
+    1. **Registrar** — `POST /api/v1/user/registrations`
+    2. **Confirmar e-mail** — `POST /api/v1/user/email/confirmations` (token do e-mail)
+    3. **Entrar** — `POST /api/v1/user/authentications` → `token` no corpo JSON; `refresh_token` é definido como cookie httpOnly criptografado (`SameSite=Lax`; `Secure` em produção). O `remember_me` opcional controla a duração do cookie e do refresh. O login **revoga todas as sessões de refresh anteriores**. Um token Bearer mais antigo permanece válido até expirar (15 minutos)
+    4. **Chamar endpoints protegidos** com `Authorization: Bearer <token>`. Um token válido de um usuário **inativo** também é **401**
+    5. **Atualizar** — quando o token de sessão expira, `PATCH /api/v1/user/session/refreshes` (lê o cookie `refresh_token`; `remember_me` opcional no corpo)
+    6. **Revogar** — `DELETE /api/v1/user/session/revokes` para invalidar todas as sessões ativas (Bearer obrigatório). Não limpa o cookie `refresh_token`. Alteração de senha, redefinição de senha e alteração de e-mail também revogam sessões de refresh sem excluir o cookie
+
+    ### Duração dos tokens
+
+    | Token | Duração |
+    |-------|----------|
+    | Sessão (`token`) | 15 minutos |
+    | Cookie de refresh (`remember_me: true`) | 30 dias |
+    | Cookie de refresh (sem `remember_me`) | cookie de sessão / 1 dia no servidor |
+    | Confirmação de e-mail | 24 horas |
+    | Redefinição de senha | 15 minutos |
+
+    ### Público vs protegido
+
+    | Acesso | Endpoints |
+    |--------|-----------|
+    | Público | registrations, authentications, email confirmations, password resets, session refreshes |
+    | Bearer obrigatório | tags, categories, institutions, accounts, credit cards, monthly statements, goals, monthly statuses, settlements, transactions, notifications, profiles, account deletion, email changes, password changes, session revokes |
+    | Token de sessão (query ou `Authorization`) | Action Cable em `/cable` (`MonthlyStatusChannel`, `NotificationChannel`) |
+
+    ---
+
+    ## WebSockets
+
+    O Action Cable está montado em `/cable`. Use o mesmo token de sessão da API REST:
+
+    ```
+    ws://localhost:3000/cable?token=<token>
+    ```
+
+    Clientes nativos podem enviar `Authorization: Bearer <token>` no handshake do WebSocket em vez do parâmetro de query.
+
+    O handshake é rejeitado quando o token está ausente ou inválido, ou quando o usuário está inativo.
+
+    Inscreva-se em um mês civil pertencente ao usuário atual:
+
+    ```json
+    { "channel": "MonthlyStatusChannel", "month": 8, "year": 2026 }
+    ```
+
+    A linha de status mensal já deve existir (mesma identidade de `GET /api/v1/monthly_statuses`). Caso contrário, a inscrição é rejeitada.
+
+    Na inscrição, e sempre que a coluna `processing` mudar, o servidor envia:
+
+    ```json
+    { "processing": true, "last_processed_at": null }
+    ```
+
+    `last_processed_at` é um timestamp ISO 8601, ou `null` quando o mês nunca concluiu uma execução de processamento.
+
+    Inscreva-se no stream de notificações do usuário atual (sem parâmetros):
+
+    ```json
+    { "channel": "NotificationChannel" }
+    ```
+
+    Não há payload inicial na inscrição. O cliente carrega a contagem de não lidas e a primeira página via `GET /api/v1/notifications`.
+
+    Quando uma única notificação é criada, o servidor envia o kind da notificação, o recurso JSON:API e a contagem atual de não lidas:
+
+    ```json
+    {
+      "kind": "transaction.validation.errors",
+      "notification": {
+        "id": "0199...",
+        "type": "notification",
+        "attributes": { "id": "0199...", "kind": "transaction.validation.errors", "title": "...", "read": false }
+      },
+      "unread_count": 7
+    }
+    ```
+
+    Quando um job cria várias notificações para o mesmo usuário, o servidor envia um evento de grupo sem o recurso. Os kinds em lote hoje são `settlement.errors` e `monthly_status.errors`:
+
+    ```json
+    { "kind": "settlement.errors", "unread_count": 7 }
+    ```
+
+    Distinga os dois pela presença de `notification`. Se estiver presente, o item pode ser inserido no topo da lista. Se estiver ausente, atualize o badge a partir de `unread_count` e busque de novo `GET /api/v1/notifications`.
+
+    ---
+
+    ## Locale
+
+    Quando a requisição está autenticada, as mensagens da API seguem esta ordem:
+
+    1. `configs.locale` do usuário atual (`en` ou `pt-BR`)
+    2. Padrão: inglês (`en`)
+
+    Cookie e `Accept-Language` são ignorados enquanto o usuário está autenticado.
+
+    Quando a requisição não está autenticada, as mensagens da API seguem esta ordem:
+
+    1. Cookie `locale` (`en` ou `pt-BR`)
+    2. Header `Accept-Language` (`pt-BR`, `pt`, `en`, …)
+    3. Padrão: inglês (`en`)
+
+    A API lê o cookie `locale`; ela não o define. O cliente deve definir o cookie quando
+    quiser mensagens não autenticadas em um determinado locale.
+
+    No login (`POST /api/v1/user/authentications`), se um cookie `locale` válido estiver presente
+    e diferir de `configs.locale` do usuário, o locale armazenado é atualizado para corresponder ao cookie.
+
+    ---
+
+    ## Envelope de resposta
+
+    Sucesso:
+
+    ```json
+    { "status": "success", "type": "object", "data": {}, "message": "optional" }
+    ```
+
+    Erro:
+
+    ```json
+    { "status": "error", "message": "...", "details": { "field": ["..."] } }
+    ```
+
+    Falhas inesperadas em `/api/v1` retornam **500** com esse envelope JSON. Em produção a mensagem é uma string genérica de internal-server-error; fora de produção é a mensagem da exceção.
+
+    Respostas de limite de taxa (**429**) **não** são JSON. São o corpo `text/plain` padrão do Rack::Attack (`Retry later`).
+
+    ---
+
+    ## Limitação de taxa
+
+    Todos os endpoints HTTP, exceto `/up` e `/cable` (qualquer método), são limitados:
+
+    | Escopo | Limite |
+    |-------|-------|
+    | Geral | 300 requisições / 5 minutos por IP, token Bearer hasheado e id do usuário |
+    | Endpoints de autenticação | 10 requisições / 1 minuto |
+
+    Throttles dedicados de autenticação se aplicam a:
+
+    - `POST /api/v1/user/authentications` (por IP e e-mail)
+    - `POST /api/v1/user/registrations` (por IP e e-mail)
+    - `POST /api/v1/user/password/resets` (por IP e e-mail)
+    - `PATCH /api/v1/user/password/resets` (por IP e token)
+    - `PATCH /api/v1/user/session/refreshes` (por IP e cookie de refresh)
+
+    Toda operação documenta **429**. Confirmação de e-mail, alteração de senha, alteração de e-mail e revogação de sessão usam apenas o throttle geral.
+
+    ---
+
+    ## Fuso horário
+
+    A API usa `America/Sao_Paulo`. Meses civis, `reference_date` de liquidação e jobs recorrentes de produção seguem esse fuso.
+
+    Jobs de produção (`config/recurring.yml`):
+
+    - Liquidar meses abertos diariamente às 03:00
+    - Fechar meses abertos anteriores às 05:00 no dia 1
+    - Limpar jobs Solid Queue finalizados a cada hora no minuto 12
+
+    ---
+
+    ## Outras superfícies HTTP
+
+    Estas não são operações OpenAPI:
+
+    | Path | Propósito |
+    |------|---------|
+    | `GET /up` | Health check do Rails |
+    | `GET /docs` | UI Redoc (seletor de idioma: `en` / `pt-BR`, ou `?lang=`) |
+    | `/openapi/*` | Arquivos OpenAPI estáticos (`bundled.yml`, `bundled.pt-BR.yml`) |
+    | `/jobs` | Mission Control Jobs (HTTP basic auth) |
+    | `/cable` | Action Cable (veja WebSockets) |
+servers:
+- url: http://localhost:3000
+  description: Desenvolvimento local
+tags:
+- name: Autenticação
+  description: Entrar, atualizar sessão e revogar sessões
+- name: Usuário
+  description: Registro, perfil, conta, e-mail e senha
+- name: Tags
+  description: Rótulos do usuário para categorizar transações, com metas mensais opcionais
+- name: Categorias
+  description: Categorias do usuário para organizar transações, com metas mensais
+    opcionais
+- name: Instituições
+  description: Instituições financeiras do usuário
+- name: Contas
+  description: Contas financeiras do usuário (contas bancárias e dinheiro)
+- name: Cartões de crédito
+  description: Cartões de crédito do usuário
+- name: Transações
+  description: Transações financeiras do usuário (receitas, despesas e transferências)
+- name: Extratos mensais
+  description: Itens do extrato mensal para contas, cartões de crédito e transferências
+    entre contas
+- name: Metas
+  description: Transações mensais e valores de metas de categoria/tag para o painel
+    de metas
+- name: Status mensais
+  description: Status aberto ou fechado de um mês civil do usuário autenticado, incluindo
+    atualizações de processamento via Action Cable
+- name: Liquidações
+  description: Enfileirar o processamento de ocorrências de transação, transferências
+    e faturas de cartão de crédito vencidas
+- name: Notificações
+  description: Notificações do usuário com paginação por cursor, contagem de não lidas
+    e entrega em tempo real via Action Cable
+paths:
+  "/api/v1/tags":
+    get:
+      tags:
+      - Tags
+      summary: Listar tags
+      description: Retorna uma lista paginada de tags do usuário autenticado. Suporta
+        filtros Ransack via `q`.
+      operationId: listTags
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: q[name_cont]
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Filtrar tags cujo nome contém o valor informado
+      - name: q[active_eq]
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Filtrar por flag ativo
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          example: name asc
+        description: Expressão de ordenação (padrão `active desc, name asc`)
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+      responses:
+        '200':
+          description: Tags listadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TagCollection"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    post:
+      tags:
+      - Tags
+      summary: Criar tag
+      description: Cria uma nova tag para o usuário autenticado. `goal_starts_on`
+        e `goal_value` opcionais iniciam uma meta; `goal_ends_on` é opcional.
+      operationId: createTag
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TagRequest"
+            example:
+              tag:
+                name: Vacation
+                color: "#3B82F6"
+                active: true
+      responses:
+        '201':
+          description: Tag criada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TagSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/tags/{id}":
+    get:
+      tags:
+      - Tags
+      summary: Exibir tag
+      description: Retorna uma única tag pertencente ao usuário autenticado.
+      operationId: showTag
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Tag encontrada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TagSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    patch:
+      tags:
+      - Tags
+      summary: Atualizar tag
+      description: Atualiza uma tag existente pertencente ao usuário autenticado.
+        `goal_ends_on` encerra uma meta existente. `goal_starts_on` e `goal_value`
+        iniciam uma meta apenas quando nenhuma existe.
+      operationId: updateTag
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TagUpdateRequest"
+            example:
+              tag:
+                name: Vacation
+                color: "#10B981"
+                active: false
+      responses:
+        '200':
+          description: Tag atualizada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TagSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    delete:
+      tags:
+      - Tags
+      summary: Excluir tag
+      description: Exclui uma tag pertencente ao usuário autenticado.
+      operationId: deleteTag
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Tag excluída
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/tags/{tag_id}/goals":
+    patch:
+      tags:
+      - Tags
+      summary: Atualizar ou dividir uma meta de tag
+      description: |
+        Adiciona uma alteração de valor a uma meta de tag pertencente ao usuário autenticado.
+
+        As metas se aplicam desde o mês de `starts_on` até a próxima meta, e a resposta as lista ordenadas por ano e mês.
+        Apenas o ano e o mês de `starts_on` são persistidos. Se já existir uma meta naquele year-month, ela é atualizada;
+        caso contrário, uma nova meta é criada.
+        É assim também que a primeira meta é iniciada quando a tag não tem nenhuma.
+
+        `starts_on` não pode ser após `goal_ends_on`. `value` deve ser diferente do valor já
+        aplicado pela meta anterior. Meses passados e fechados são permitidos.
+
+        Quando `change_for_next_months` é omitido ou `false`, apenas o mês informado é alterado.
+        Se o próximo mês já tem uma meta, ela é mantida; caso contrário, uma meta é criada
+        para o próximo mês com o valor anterior, a menos que esse próximo mês ficasse após `goal_ends_on`
+        ou esteja fechado.
+
+        Quando `change_for_next_months` é `true`, o mês informado é atualizado e os meses **abertos**
+        posteriores são removidos. Linhas de meses fechados posteriores nunca são destruídas.
+      operationId: updateTagGoal
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: tag_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: UUID da tag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TagGoalRequest"
+            examples:
+              currentMonthOnly:
+                summary: Alterar apenas o mês informado
+                value:
+                  tag_goal:
+                    value: 600
+                    starts_on: '2026-03-01'
+              currentAndNextMonths:
+                summary: Alterar o mês informado e todos os meses abertos seguintes
+                value:
+                  tag_goal:
+                    value: 600
+                    starts_on: '2026-03-01'
+                    change_for_next_months: true
+      responses:
+        '200':
+          description: Meta criada ou atualizada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TagSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/categories":
+    get:
+      tags:
+      - Categorias
+      summary: Listar categorias
+      description: Retorna uma lista paginada de categorias do usuário autenticado.
+        Suporta filtros Ransack via `q`.
+      operationId: listCategories
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: q[name_cont]
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Filtrar categorias cujo nome contém o valor informado
+      - name: q[active_eq]
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Filtrar por flag ativo
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          example: name asc
+        description: Expressão de ordenação (padrão `active desc, name asc`)
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+      responses:
+        '200':
+          description: Categorias listadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CategoryCollection"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    post:
+      tags:
+      - Categorias
+      summary: Criar categoria
+      description: Cria uma nova categoria para o usuário autenticado. `goal_starts_on`
+        e `goal_value` opcionais iniciam uma meta; `goal_ends_on` é opcional.
+      operationId: createCategory
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CategoryRequest"
+            example:
+              category:
+                name: Vacation
+                color: "#3B82F6"
+                active: true
+      responses:
+        '201':
+          description: Categoria criada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CategorySuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/categories/{id}":
+    get:
+      tags:
+      - Categorias
+      summary: Exibir categoria
+      description: Retorna uma única categoria pertencente ao usuário autenticado.
+      operationId: showCategory
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Categoria encontrada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CategorySuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    patch:
+      tags:
+      - Categorias
+      summary: Atualizar categoria
+      description: Atualiza uma categoria existente pertencente ao usuário autenticado.
+        `goal_ends_on` encerra uma meta existente. `goal_starts_on` e `goal_value`
+        iniciam uma meta apenas quando nenhuma existe.
+      operationId: updateCategory
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CategoryUpdateRequest"
+            example:
+              category:
+                name: Vacation
+                color: "#10B981"
+                active: false
+      responses:
+        '200':
+          description: Categoria atualizada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CategorySuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    delete:
+      tags:
+      - Categorias
+      summary: Excluir categoria
+      description: |
+        Exclui uma categoria pertencente ao usuário autenticado.
+        Categorias já usadas por transações não podem ser excluídas; inative-as em vez disso.
+      operationId: deleteCategory
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Categoria excluída
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/categories/{category_id}/goals":
+    patch:
+      tags:
+      - Categorias
+      summary: Atualizar ou dividir uma meta de categoria
+      description: |
+        Adiciona uma alteração de valor a uma meta de categoria pertencente ao usuário autenticado.
+
+        As metas se aplicam desde o mês de `starts_on` até a próxima meta, e a resposta as lista ordenadas por ano e mês.
+        Apenas o ano e o mês de `starts_on` são persistidos. Se já existir uma meta naquele year-month, ela é atualizada;
+        caso contrário, uma nova meta é criada.
+        É assim também que a primeira meta é iniciada quando a categoria não tem nenhuma.
+
+        `starts_on` não pode ser após `goal_ends_on`. `value` deve ser diferente do valor já
+        aplicado pela meta anterior. Meses passados e fechados são permitidos.
+
+        Quando `change_for_next_months` é omitido ou `false`, apenas o mês informado é alterado.
+        Se o próximo mês já tem uma meta, ela é mantida; caso contrário, uma meta é criada
+        para o próximo mês com o valor anterior, a menos que esse próximo mês ficasse após `goal_ends_on`
+        ou esteja fechado.
+
+        Quando `change_for_next_months` é `true`, o mês informado é atualizado e os meses **abertos**
+        posteriores são removidos. Linhas de meses fechados posteriores nunca são destruídas.
+      operationId: updateCategoryGoal
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: category_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: UUID da categoria
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CategoryGoalRequest"
+            examples:
+              currentMonthOnly:
+                summary: Alterar apenas o mês informado
+                value:
+                  category_goal:
+                    value: 600
+                    starts_on: '2026-03-01'
+              currentAndNextMonths:
+                summary: Alterar o mês informado e todos os meses abertos seguintes
+                value:
+                  category_goal:
+                    value: 600
+                    starts_on: '2026-03-01'
+                    change_for_next_months: true
+      responses:
+        '200':
+          description: Meta criada ou atualizada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CategorySuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/institutions":
+    get:
+      tags:
+      - Instituições
+      summary: Listar instituições
+      description: Retorna uma lista paginada de instituições do usuário autenticado.
+        Suporta filtros Ransack via `q`.
+      operationId: listInstitutions
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: q[name_cont]
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Filtrar instituições cujo nome contém o valor informado
+      - name: q[active_eq]
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Filtrar por flag ativo
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          example: name asc
+        description: Expressão de ordenação (padrão `active desc, name asc`)
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+      responses:
+        '200':
+          description: Instituições listadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/InstitutionCollection"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    post:
+      tags:
+      - Instituições
+      summary: Criar instituição
+      description: Cria uma nova instituição para o usuário autenticado. `name` e
+        `logo_key` são obrigatórios.
+      operationId: createInstitution
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/InstitutionRequest"
+            example:
+              institution:
+                name: Nubank
+                logo_key: institutions/nubank.png
+                active: true
+      responses:
+        '201':
+          description: Instituição criada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/InstitutionSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/institutions/{id}":
+    get:
+      tags:
+      - Instituições
+      summary: Exibir instituição
+      description: Retorna uma única instituição pertencente ao usuário autenticado.
+      operationId: showInstitution
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Instituição encontrada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/InstitutionSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    patch:
+      tags:
+      - Instituições
+      summary: Atualizar instituição
+      description: Atualiza uma instituição existente pertencente ao usuário autenticado.
+      operationId: updateInstitution
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/InstitutionUpdateRequest"
+            example:
+              institution:
+                name: Nubank
+                logo_key: institutions/nubank-v2.png
+                active: false
+      responses:
+        '200':
+          description: Instituição atualizada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/InstitutionSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    delete:
+      tags:
+      - Instituições
+      summary: Excluir instituição
+      description: |
+        Exclui uma instituição pertencente ao usuário autenticado.
+        Instituições com contas ou cartões de crédito já usados por transações não podem ser excluídas; inative-as em vez disso.
+        Contas e cartões de crédito vinculados que não são usados por transações também são excluídos.
+      operationId: deleteInstitution
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Instituição excluída
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/accounts":
+    get:
+      tags:
+      - Contas
+      summary: Listar contas
+      description: Retorna uma lista paginada de contas do usuário autenticado. Suporta
+        filtros Ransack via `q`.
+      operationId: listAccounts
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: q[name_cont]
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Filtrar contas cujo nome contém o valor informado
+      - name: q[kind_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - bank_account
+          - cash
+        description: Filtrar por tipo de conta
+      - name: q[bank_account_type_eq]
+        in: query
+        required: false
+        schema:
+          "$ref": "#/components/schemas/BankAccountType"
+        description: Filtrar por tipo de conta bancária (relevante para o tipo `bank_account`)
+      - name: q[institution_id_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Filtrar por id da instituição (relevante para o tipo `bank_account`)
+      - name: q[current_balance_eq]
+        in: query
+        required: false
+        schema:
+          type: number
+        description: Filtrar por saldo atual exato
+      - name: q[allow_negative_balance_eq]
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Filtrar por permissão de saldo negativo
+      - name: q[active_eq]
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Filtrar por flag ativo
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          example: name asc
+        description: Expressão de ordenação (padrão `active desc, name asc`)
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+      responses:
+        '200':
+          description: Contas listadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AccountCollection"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    post:
+      tags:
+      - Contas
+      summary: Criar conta
+      description: |
+        Cria uma nova conta para o usuário autenticado.
+
+        Os campos permitidos dependem de `kind`:
+        - `bank_account` — exige `institution_id` (deve pertencer ao usuário e estar ativo) e `bank_account_type`
+        - `cash` — deve omitir `institution_id` e `bank_account_type`
+      operationId: createAccount
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AccountRequest"
+            examples:
+              bank_account:
+                summary: Conta bancária
+                value:
+                  account:
+                    name: Nubank Checking
+                    kind: bank_account
+                    institution_id: '0198f0c2-7b3a-7b6e-9f2d-1a2b3c4d5e6f'
+                    bank_account_type: checking
+                    color: "#820AD1"
+                    allow_negative_balance: false
+                    active: true
+              cash:
+                summary: Dinheiro
+                value:
+                  account:
+                    name: Wallet
+                    kind: cash
+                    color: "#10B981"
+                    allow_negative_balance: false
+                    active: true
+      responses:
+        '201':
+          description: Conta criada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AccountSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/accounts/{id}":
+    get:
+      tags:
+      - Contas
+      summary: Exibir conta
+      description: Retorna uma única conta pertencente ao usuário autenticado.
+      operationId: showAccount
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Conta encontrada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AccountSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    patch:
+      tags:
+      - Contas
+      summary: Atualizar conta
+      description: |
+        Atualiza uma conta existente pertencente ao usuário autenticado.
+
+        Os campos permitidos dependem de `kind` (do corpo da requisição, ou da conta existente quando omitido):
+        - `bank_account` — pode incluir `institution_id` (ao alterar, deve pertencer ao usuário e estar ativo) e `bank_account_type`
+        - `cash` — `institution_id` e `bank_account_type` não são permitidos
+
+        Uma instituição já vinculada pode estar inativa; atualizações que mantêm o `institution_id` atual são permitidas.
+      operationId: updateAccount
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AccountUpdateRequest"
+            example:
+              account:
+                name: Updated Wallet
+                color: "#10B981"
+                allow_negative_balance: true
+                active: false
+      responses:
+        '200':
+          description: Conta atualizada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/AccountSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    delete:
+      tags:
+      - Contas
+      summary: Excluir conta
+      description: |
+        Exclui uma conta pertencente ao usuário autenticado.
+        Contas já usadas por transações não podem ser excluídas; inative-as em vez disso.
+      operationId: deleteAccount
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Conta excluída
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/credit_cards":
+    get:
+      tags:
+      - Cartões de crédito
+      summary: Listar cartões de crédito
+      description: Retorna uma lista paginada de cartões de crédito do usuário autenticado.
+        Suporta filtros Ransack via `q`.
+      operationId: listCreditCards
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: q[name_cont]
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Filtrar cartões de crédito cujo nome contém o valor informado
+      - name: q[network_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Filtrar por bandeira
+      - name: q[institution_id_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Filtrar por id da instituição
+      - name: q[default_payment_account_id_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Filtrar por id da conta de pagamento padrão
+      - name: q[allow_negative_available_limit_eq]
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Filtrar por permissão de limite disponível negativo
+      - name: q[active_eq]
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Filtrar por flag ativo
+      - name: q[total_limit_eq]
+        in: query
+        required: false
+        schema:
+          type: number
+        description: Filtrar por limite total exato
+      - name: q[available_limit_eq]
+        in: query
+        required: false
+        schema:
+          type: number
+        description: Filtrar por limite disponível exato
+      - name: q[closing_day_eq]
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 31
+        description: Filtrar por dia de fechamento
+      - name: q[due_day_eq]
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 31
+        description: Filtrar por dia de vencimento
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          example: name asc
+        description: Expressão de ordenação (padrão `active desc, name asc`)
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+      responses:
+        '200':
+          description: Cartões de crédito listados
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CreditCardCollection"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    post:
+      tags:
+      - Cartões de crédito
+      summary: Criar cartão de crédito
+      description: Cria um novo cartão de crédito para o usuário autenticado.
+      operationId: createCreditCard
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CreditCardRequest"
+            example:
+              credit_card:
+                institution_id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b'
+                default_payment_account_id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6c'
+                name: Nubank Platinum
+                total_limit: 5000
+                closing_day: 10
+                due_day: 17
+                network: mastercard
+                allow_negative_available_limit: false
+                active: true
+      responses:
+        '201':
+          description: Cartão de crédito criado
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CreditCardSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/credit_cards/invoice_settlements":
+    get:
+      tags:
+      - Cartões de crédito
+      summary: Listar liquidações de faturas de cartão de crédito
+      description: |
+        Retorna as faturas de cartão de crédito pagas do usuário autenticado cuja `due_date` cai no mês civil informado.
+        Cada item expõe o ciclo da fatura (`opening_date`, `closing_date`, `due_date`), a conta de pagamento,
+        o valor liquidado (`total_value`), o limite liberado e `settled_on`.
+        Faturas do mês anterior ou seguinte não são incluídas.
+        `month`/`year` ausentes ou fora do intervalo retornam **422**.
+      operationId: listCreditCardInvoiceSettlements
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 12
+        description: Mês civil da data de vencimento da fatura (1-12)
+      - name: year
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        description: Ano civil da data de vencimento da fatura
+      responses:
+        '200':
+          description: Liquidações de faturas de cartão de crédito listadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CreditCardInvoiceSettlementCollection"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/credit_cards/{id}":
+    get:
+      tags:
+      - Cartões de crédito
+      summary: Exibir cartão de crédito
+      description: Retorna um único cartão de crédito pertencente ao usuário autenticado.
+      operationId: showCreditCard
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Cartão de crédito encontrado
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CreditCardSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    patch:
+      tags:
+      - Cartões de crédito
+      summary: Atualizar cartão de crédito
+      description: |
+        Atualiza um cartão de crédito existente pertencente ao usuário autenticado.
+        Alterar `total_limit` ajusta `available_limit` pelo mesmo delta e
+        é rejeitado quando isso tornaria `available_limit` negativo.
+        `closing_day` e `due_day` não podem ser alterados após a criação.
+      operationId: updateCreditCard
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CreditCardUpdateRequest"
+            example:
+              credit_card:
+                name: Nubank Ultravioleta
+                total_limit: 7000
+                allow_negative_available_limit: true
+                active: false
+      responses:
+        '200':
+          description: Cartão de crédito atualizado
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/CreditCardSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    delete:
+      tags:
+      - Cartões de crédito
+      summary: Excluir cartão de crédito
+      description: |
+        Exclui um cartão de crédito pertencente ao usuário autenticado.
+        Cartões de crédito já usados por transações não podem ser excluídos; inative-os em vez disso.
+      operationId: deleteCreditCard
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Cartão de crédito excluído
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/monthly_statements":
+    get:
+      tags:
+      - Extratos mensais
+      summary: Listar itens do extrato mensal
+      description: |
+        Retorna as transações do usuário autenticado que pertencem ao mês civil informado.
+        Itens de cartão de crédito usam o ciclo da fatura do cartão naquele mês (`opening_date`, `closing_date`, `due_date`).
+        `opening_date` é o dia seguinte à data de fechamento do ciclo anterior (limitado quando o dia de fechamento
+        não existe naquele mês). Itens de conta usam o primeiro e o último dia do mês e não têm `due_date`.
+        `payment_method` é `credit_card` ou `account`. `value` e `starts_on` vêm da recorrência mais recente
+        cujo `starts_on` é em ou antes da data de fechamento do período. `first_recurrence_on` é o menor
+        `starts_on` entre todas as recorrências da transação. `current_recurrence_on` é esse primeiro
+        dia de recorrência projetado no mês de abertura do período. Se essa data for anterior a `opening_date`,
+        avança um mês. Se essa data for posterior a `closing_date` e o mês anterior for mais curto
+        que o dia de fechamento do ciclo, move para o dia seguinte ao último dia desse mês anterior para que
+        caia no ciclo atual. Nunca precede `first_recurrence_on`. Itens recurring e installment
+        são incluídos quando `current_recurrence_on` cai no período e `ends_on` é null ou
+        `current_recurrence_on` é em ou antes de `ends_on`. Se essa data foi deslocada para `opening_date`
+        porque o dia projetado cai após `closing_date`, o item ainda é incluído quando
+        `opening_date` é o dia seguinte a `ends_on`.
+        Transferências entre contas não são incluídas.
+        Transações pending, active e completed são incluídas. Transações canceladas antes de
+        `current_recurrence_on` não são incluídas. Transações canceladas incluídas expõem `canceled_on`.
+        `month`/`year` ausentes ou fora do intervalo retornam **422**.
+      operationId: listMonthlyStatements
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 12
+        description: Mês civil do extrato (1-12)
+      - name: year
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        description: Ano civil do extrato
+      responses:
+        '200':
+          description: Itens do extrato mensal listados
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MonthlyStatementCollection"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/monthly_statements/transfers":
+    get:
+      tags:
+      - Extratos mensais
+      summary: Listar transferências do extrato mensal
+      description: |
+        Retorna as transferências entre contas do usuário autenticado que pertencem ao mês civil informado.
+        Os itens usam o primeiro e o último dia do mês como `opening_date` e `closing_date`.
+        Cada item expõe as contas de origem e destino (`id`, `name` e `brand`).
+        `brand` é o `logo_key` da instituição para contas bancárias (usa a cor da conta quando a
+        instituição não tem logo). Contas em dinheiro usam a cor da conta.
+        `value` e `starts_on` vêm da recorrência mais recente cujo `starts_on` é em ou antes da
+        data de fechamento do período. `first_recurrence_on` é o menor `starts_on` entre todas as recorrências da
+        transferência. `current_recurrence_on` é esse primeiro dia de recorrência projetado no mês de
+        abertura do período. Se essa data for anterior a `opening_date`, avança um mês. Se essa data for
+        posterior a `closing_date` e o mês anterior for mais curto que o dia de fechamento do período, move para
+        o dia seguinte ao último dia desse mês anterior para que caia no período atual. Nunca
+        precede `first_recurrence_on`. Itens recurring e installment são incluídos quando
+        `current_recurrence_on` cai no período e `ends_on` é null ou `current_recurrence_on` é
+        em ou antes de `ends_on`. Se essa data foi deslocada para `opening_date` porque o dia projetado
+        cai após `closing_date`, o item ainda é incluído quando `opening_date` é o dia seguinte a
+        `ends_on`.
+        Receitas, despesas e transações de cartão de crédito não são incluídas.
+        Transferências pending, active e completed são incluídas. Transferências canceladas antes de
+        `current_recurrence_on` não são incluídas. Transferências canceladas incluídas expõem `canceled_on`.
+        `month`/`year` ausentes ou fora do intervalo retornam **422**.
+      operationId: listMonthlyStatementTransfers
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 12
+        description: Mês civil do extrato (1-12)
+      - name: year
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        description: Ano civil do extrato
+      responses:
+        '200':
+          description: Transferências do extrato mensal listadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MonthlyStatementTransferCollection"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/goals":
+    get:
+      tags:
+      - Metas
+      summary: Listar transações do painel de metas
+      description: |
+        Retorna as transações de receita, despesa e transferência entre contas
+        do usuário autenticado para o mês civil informado. Itens de cartão de crédito usam o
+        ciclo da fatura do cartão; itens de conta e transferências usam o mês civil. As regras do período são as mesmas
+        de `GET /api/v1/monthly_statements` e `GET /api/v1/monthly_statements/transfers`.
+        Cada item inclui `category_id` e `tag_ids`.
+        Os valores das metas de categorias e tags vêm de `GET /api/v1/goals/targets`.
+        `statuses` e `on` não são parâmetros de consulta públicos.
+        `month`/`year` ausentes ou fora do intervalo retornam **422**.
+      operationId: listGoals
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 12
+        description: Mês civil do painel (1-12)
+      - name: year
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        description: Ano civil do painel
+      responses:
+        '200':
+          description: Transações do painel de metas listadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GoalTransactionCollection"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/goals/targets":
+    get:
+      tags:
+      - Metas
+      summary: Listar metas de categoria e tag de um mês
+      description: |
+        Retorna as categorias e tags do usuário autenticado que têm uma meta aplicável ao
+        mês civil informado. `value` vem da linha mais recente de `category_goals` / `tag_goals` cujo
+        `(year, month)` é em ou antes do período solicitado — a mesma regra de “linha atual” usada para
+        `transaction_recurrences` na lista de transações do painel.
+        Categorias e tags cuja primeira meta começa após o mês solicitado são omitidas.
+        Categorias e tags cujo `goal_ends_on` é anterior ao mês solicitado são omitidas.
+        Cada item é identificado pelo id da categoria ou da tag (`kind` é `category` ou `tag`).
+        `color` é a cor hexadecimal dessa categoria ou tag.
+        `month`/`year` ausentes ou fora do intervalo retornam **422**.
+      operationId: listGoalTargets
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 12
+        description: Mês civil do painel (1-12)
+      - name: year
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        description: Ano civil do painel
+      responses:
+        '200':
+          description: Metas de categoria e tag listadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GoalTargetCollection"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/monthly_statuses":
+    get:
+      tags:
+      - Status mensais
+      summary: Exibir status mensal
+      description: |
+        Retorna o status mensal do usuário autenticado para o mês civil informado.
+        A identidade é `(user, month, year)`, não um UUID. `user` é sempre o usuário atual.
+        Se nenhuma linha existir, a API retorna 404 sem criar um registro.
+        `month`/`year` ausentes ou fora do intervalo retornam **422**.
+
+        Atualizações de processamento (`processing` e `last_processed_at`) também são enviadas via Action Cable
+        em `MonthlyStatusChannel`. Veja a seção WebSockets na descrição da API.
+      operationId: showMonthlyStatus
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 12
+        description: Mês civil (1-12)
+      - name: year
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        description: Ano civil
+      responses:
+        '200':
+          description: Status mensal encontrado
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MonthlyStatusSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    patch:
+      tags:
+      - Status mensais
+      summary: Atualizar status mensal
+      description: |
+        Fecha ou reabre o mês do usuário autenticado. A identidade é `(user, month, year)`,
+        não um UUID. `user` é sempre o usuário atual.
+        Se nenhuma linha existir, uma é criada e depois atualizada, então um mês ausente pode ser fechado
+        em uma única requisição. Um mês ausente que precede um mês já fechado é rejeitado
+        com 422 (`later_month_closed` em `base`) e não é criado.
+        Enviar o `status` já persistido é idempotente (200).
+      operationId: updateMonthlyStatus
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/MonthlyStatusUpdateRequest"
+            example:
+              monthly_status:
+                month: 8
+                year: 2026
+                status: closed
+      responses:
+        '200':
+          description: Status mensal atualizado
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MonthlyStatusSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/settlements/processing":
+    post:
+      tags:
+      - Liquidações
+      summary: Enfileirar processamento de liquidação
+      description: |
+        Aceita uma requisição de liquidação e retorna **202** imediatamente. O HTTP não valida `month`,
+        `year` ou `reference_date` além de exigir o wrapper `settlement` (wrapper ausente → 400).
+
+        Um job em background é enfileirado, a menos que aquele mês civil já esteja em `processing`. Nesse caso
+        a resposta ainda é 202 com a mesma mensagem de enfileiramento, e nenhum job novo é enfileirado.
+
+        O job processa ocorrências vencidas, transferências e faturas de cartão de crédito do usuário
+        autenticado no mês civil informado.
+
+        Para o mês atual, `reference_date` deve ser hoje ou ontem. Para um mês passado, `reference_date`
+        é ignorado e o último dia daquele mês é usado. Meses futuros são rejeitados pelo job.
+
+        O job também rejeita um mês quando o mês civil anterior ainda tem um `monthly_status` aberto.
+        Se aquele mês anterior não tem linha aberta (ausente ou já fechado), o processamento pode começar.
+
+        Um mês que precede um `monthly_status` fechado também é rejeitado. Meses abertos ou ausentes posteriores
+        não bloqueiam o processamento.
+
+        Essas regras de domínio e falhas de itens (saldo ou limite insuficiente) rodam de forma assíncrona.
+        Elas viram notificações; não aparecem nesta resposta HTTP.
+      operationId: processSettlements
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/SettlementProcessingRequest"
+            example:
+              settlement:
+                month: 8
+                year: 2026
+                reference_date: '2026-08-28'
+      responses:
+        '202':
+          description: |
+            Aceito. Um job é enfileirado, a menos que o mês já esteja em processamento.
+            A mensagem é a mesma nos dois casos.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+              example:
+                status: success
+                message: Settlement processing has been queued
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/notifications":
+    get:
+      tags:
+      - Notificações
+      summary: Listar notificações
+      description: |
+        Retorna as notificações do usuário autenticado em ordem de scroll infinito (`id` descendente, UUID v7).
+        A paginação é baseada em keyset: passe `meta.next_cursor` da resposta anterior como `after`.
+        A contagem de não lidas é exposta em `meta.unread_count`. Passe `unread=true` para retornar apenas notificações não lidas.
+        Não há parâmetro `sort`.
+      operationId: listNotifications
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: after
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Cursor opaco de `meta.next_cursor`. Omita para buscar a página
+          mais recente.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+      - name: unread
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+        description: Quando true, retorna apenas notificações não lidas. `meta.unread_count`
+          permanece a contagem total de não lidas.
+      responses:
+        '200':
+          description: Notificações listadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/NotificationCollection"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/notifications/{id}":
+    get:
+      tags:
+      - Notificações
+      summary: Exibir notificação
+      description: Retorna uma única notificação pertencente ao usuário autenticado.
+      operationId: showNotification
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Notificação encontrada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/NotificationSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/notifications/{id}/read":
+    post:
+      tags:
+      - Notificações
+      summary: Marcar notificação como lida
+      description: |
+        Marca como lida uma notificação pertencente ao usuário autenticado.
+        Notificações já lidas têm sucesso sem alterar o `read_at` original.
+      operationId: readNotification
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Notificação marcada como lida
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/NotificationSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/notifications/read_all":
+    post:
+      tags:
+      - Notificações
+      summary: Marcar todas as notificações como lidas
+      description: |
+        Marca como lidas todas as notificações não lidas do usuário autenticado.
+        Tem sucesso com `meta.count` mesmo quando não há notificações não lidas.
+      operationId: readAllNotifications
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Notificações marcadas como lidas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/NotificationReadAllResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/transactions":
+    get:
+      tags:
+      - Transações
+      summary: Listar transações
+      description: |
+        Retorna uma lista paginada de transações do usuário autenticado. Suporta filtros Ransack via `q`.
+        Os itens da listagem incluem recorrências e `current_value`.
+        Alvos de pagamento que se aplicam ao item estão presentes como `null`; alvos que não se aplicam são omitidos.
+        `tag_ids` é sempre `null` na listagem. Use show para ler alvos de pagamento e tags preenchidos.
+      operationId: listTransactions
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: q[id_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Filtrar por id da transação
+      - name: q[description_cont]
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Filtrar transações cuja descrição contém o valor informado
+      - name: q[kind_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - income
+          - expense
+          - transfer_between_accounts
+        description: Filtrar por tipo
+      - name: q[status_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - pending
+          - active
+          - completed
+          - canceled
+        description: Filtrar por status
+      - name: q[payment_method_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - pix
+          - debit
+          - credit_card
+          - ted
+          - doc
+          - deposit
+          - cash
+          - boleto
+        description: Filtrar por método de pagamento
+      - name: q[recurrence_type_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - one_time
+          - installment
+          - recurring
+        description: Filtrar por tipo de recorrência
+      - name: q[category_id_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Filtrar por id da categoria
+      - name: q[installments_count_eq]
+        in: query
+        required: false
+        schema:
+          type: integer
+        description: Filtrar por quantidade de parcelas
+      - name: q[created_at_gteq]
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+        description: Filtrar transações criadas em ou após o datetime informado
+      - name: q[created_at_lteq]
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+        description: Filtrar transações criadas em ou antes do datetime informado
+      - name: q[ends_on_gteq]
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+        description: Filtrar transações cujo ends_on é em ou após a data informada
+      - name: q[ends_on_lteq]
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+        description: Filtrar transações cujo ends_on é em ou antes da data informada
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          example: status, created_at desc
+        description: Expressão de ordenação (padrão `status, created_at desc`)
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+      responses:
+        '200':
+          description: Transações listadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionCollection"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    post:
+      tags:
+      - Transações
+      summary: Criar transação
+      description: |
+        Cria uma nova transação para o usuário autenticado.
+        `installments_count` é calculado a partir de `recurrence_type`, `starts_on` e `ends_on`.
+        `status` é sempre definido como `pending` e não pode ser enviado.
+        `starts_on` é somente escrita na requisição; a resposta o expõe em cada item de `recurrences`.
+        Categoria, tags, conta e cartão de crédito devem pertencer ao usuário autenticado e estar ativos.
+        Uma data que pertence a um mês fechado é rejeitada com 422 (`monthly_status_closed` em `base`).
+        Uma data em um mês ausente que precede um mês já fechado é rejeitada com 422 (`later_month_closed` em `base`).
+        Transações de cartão de crédito usam o mês do ciclo da fatura do cartão, não o mês civil de `starts_on`.
+        Uma despesa de cartão de crédito cujas datas se sobrepõem a uma fatura paga é rejeitada com 422 (`invoice_already_paid` em `base`).
+      operationId: createTransaction
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TransactionRequest"
+            example:
+              transaction:
+                description: Compras do mercado
+                kind: expense
+                payment_method: pix
+                recurrence_type: one_time
+                starts_on: '2026-08-11'
+                value: 100
+                account_id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6b'
+                category_id: '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6c'
+                tag_ids:
+                - '018f1a2b-3c4d-7e8f-9a0b-1c2d3e4f5a6d'
+      responses:
+        '201':
+          description: Transação criada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/transactions/settled":
+    get:
+      tags:
+      - Transações
+      summary: Listar transações liquidadas
+      description: |
+        Retorna as ocorrências de transação do usuário autenticado que foram liquidadas no mês civil informado.
+        Um item é incluído quando tem uma liquidação cuja `occurred_on` cai nesse mês.
+        Transações pending sem liquidação não são incluídas.
+        Transações recurring e installment aparecem uma vez por ocorrência liquidada no mês.
+        Cada item expõe o valor e as datas da liquidação (`occurred_on`, `settled_on`, `value`, `installment_number`)
+        junto com a identidade da transação e o alvo de pagamento.
+        Receitas, despesas e transferências entre contas são incluídas.
+        O `type` opcional restringe a lista a um alvo de pagamento (`account`, `credit_card` ou `transfer_between_accounts`).
+        `month`/`year` ausentes ou fora do intervalo retornam **422**.
+      operationId: listSettledTransactions
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 12
+        description: Mês civil da ocorrência de liquidação (1-12)
+      - name: year
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        description: Ano civil da ocorrência de liquidação
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - account
+          - credit_card
+          - transfer_between_accounts
+        description: 'Filtrar por alvo de pagamento. Quando omitido, liquidações de
+          conta, cartão de crédito e transferência são todas incluídas.
+
+          '
+      responses:
+        '200':
+          description: Transações liquidadas listadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/SettledTransactionCollection"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/transactions/{id}":
+    get:
+      tags:
+      - Transações
+      summary: Exibir transação
+      description: Retorna uma única transação pertencente ao usuário autenticado,
+        incluindo alvos de pagamento, tags e recorrências.
+      operationId: showTransaction
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Transação encontrada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    patch:
+      tags:
+      - Transações
+      summary: Atualizar transação
+      description: |
+        Atualiza uma transação existente pertencente ao usuário autenticado.
+        Os campos editáveis dependem de `status` (veja `TransactionUpdateRequest`).
+        Quando pending, `starts_on` e `value` atualizam a recorrência existente no lugar.
+        `starts_on` é somente escrita na requisição; a resposta o expõe em cada item de `recurrences`.
+        `status` não pode ser alterado.
+        Mover uma despesa de cartão de crédito para uma fatura paga (via `starts_on`, `ends_on`, `credit_card_id`, `payment_method` ou `recurrence_type`) é rejeitado com 422 (`invoice_already_paid` em `base`).
+      operationId: updateTransaction
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TransactionUpdateRequest"
+            example:
+              transaction:
+                description: Compras do mercado (atualizado)
+                value: 120
+                starts_on: '2026-10-11'
+      responses:
+        '200':
+          description: Transação atualizada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    delete:
+      tags:
+      - Transações
+      summary: Excluir transação
+      description: |
+        Exclui uma transação pending pertencente ao usuário autenticado, incluindo dependentes.
+        Transações active, completed e canceled são rejeitadas.
+        Para cancelar uma transação active, use `POST /api/v1/transactions/{id}/cancel`.
+      operationId: deleteTransaction
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Transação excluída
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/transactions/{id}/cancel":
+    post:
+      tags:
+      - Transações
+      summary: Cancelar transação
+      description: |
+        Cancela uma transação active pertencente ao usuário autenticado definindo `status` como `canceled`
+        e `canceled_on` com a data atual.
+        Transações pending, completed e já canceled são rejeitadas.
+        Para excluir uma transação pending, use `DELETE /api/v1/transactions/{id}`.
+      operationId: cancelTransaction
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Transação cancelada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/transactions/{transaction_id}/recurrences":
+    post:
+      tags:
+      - Transações
+      summary: Criar ou dividir uma recorrência de transação
+      description: |
+        Adiciona uma alteração de valor a uma transação recurring ou installment pertencente ao usuário autenticado.
+
+        As recorrências se aplicam desde `starts_on` até a próxima recorrência, e a resposta as lista ordenadas por `starts_on`.
+        Apenas o ano e o mês são obtidos de `starts_on`; o dia é substituído pelo dia da
+        primeira recorrência da transação (limitado ao fim desse mês quando necessário).
+        Se já existir uma recorrência no mesmo year-month de `starts_on`, ela é atualizada no lugar;
+        caso contrário, uma nova recorrência é criada.
+
+        Permitido apenas quando `status` é `active`. `starts_on` não pode ser após o `ends_on` da transação.
+        Uma data que pertence a um mês fechado é rejeitada com 422 (`monthly_status_closed` em `starts_on`).
+        Uma data em um mês ausente que precede um mês já fechado é rejeitada com 422 (`later_month_closed` em `starts_on`).
+        Meses passados são permitidos quando o status mensal deles ainda está aberto.
+        Criar uma recorrência em um mês que ainda não tem uma exige `value` diferente do
+        valor já aplicado por uma recorrência anterior. Atualizar a recorrência do mês que
+        já carrega esse valor é permitido mesmo quando `value` não muda.
+        Transações pending, completed e canceled são rejeitadas. Transações one-time são rejeitadas.
+        Parcelas de cartão de crédito com `limit_consumption_type` `upfront` não podem alterar valores de recorrência.
+
+        Quando `change_for_next_months` é omitido ou `false`, apenas o mês informado é alterado.
+        Se o próximo mês já tem uma recorrência, ela é mantida; caso contrário, uma recorrência é criada
+        para o próximo mês com o valor anterior, a menos que esse próximo mês ficasse após `ends_on`
+        ou esteja fechado.
+        Todas as outras recorrências permanecem inalteradas.
+
+        Quando `change_for_next_months` é `true`, o mês informado é atualizado (ou mantido quando `value` corresponde
+        ao valor já aplicado) e toda recorrência de mês aberto posterior é removida para que esse valor
+        se aplique a partir daquele mês. Recorrências de meses fechados posteriores nunca são destruídas.
+      operationId: createTransactionRecurrence
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: transaction_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: UUID da transação
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TransactionRecurrenceRequest"
+            examples:
+              currentMonthOnly:
+                summary: Alterar apenas o mês informado
+                value:
+                  transaction_recurrence:
+                    value: 120
+                    starts_on: '2026-01-01'
+              currentAndNextMonths:
+                summary: Alterar o mês informado e todos os meses seguintes
+                value:
+                  transaction_recurrence:
+                    value: 120
+                    starts_on: '2026-01-01'
+                    change_for_next_months: true
+      responses:
+        '200':
+          description: Recorrência criada ou atualizada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/user/authentications":
+    post:
+      tags:
+      - Autenticação
+      summary: Entrar
+      description: |
+        Autentica com e-mail e senha.
+        O usuário deve estar **verificado** e **ativo**.
+        Retorna um `token` de sessão de curta duração no corpo JSON e define um cookie
+        httpOnly criptografado `refresh_token` (`SameSite=Lax`; `Secure` em produção). O refresh token nunca
+        é retornado no corpo JSON. O `remember_me` opcional controla a duração do cookie e do refresh.
+        Quando um cookie `locale` válido está presente e difere de `configs.locale`, o locale do usuário
+        é atualizado para corresponder ao cookie. Outras chaves de config são mantidas.
+        O login **revoga todas as sessões de refresh anteriores** desse usuário, então apenas o novo cookie
+        de refresh é válido. Um token Bearer mais antigo permanece válido até expirar (15 minutos).
+      operationId: createAuthentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AuthenticationRequest"
+            examples:
+              default:
+                summary: Cookie de sessão (1 dia no servidor)
+                value:
+                  email: john.doe@example.com
+                  password: password123
+              rememberMe:
+                summary: Cookie de refresh persistente (30 dias)
+                value:
+                  email: john.doe@example.com
+                  password: password123
+                  remember_me: true
+      responses:
+        '200':
+          description: Autenticado. Define o cookie httpOnly criptografado `refresh_token`.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: |
+                Cookie httpOnly criptografado `refresh_token` (`SameSite=Lax`; `Secure` em produção).
+                Cookie de sessão por padrão. Persistente (30 dias) quando `remember_me` é true.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TokensSuccessResponse"
+              example:
+                status: success
+                type: object
+                data:
+                  token: eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaEpJaWs9IiwiZXhwIjpudWxsLCJwdXIiOiJzZXNzaW9uX3Rva2VuIn19--abc
+                  user:
+                    data:
+                      id: '019abc...'
+                      type: user
+                      attributes:
+                        id: '019abc...'
+                        first_name: John
+                        last_name: Doe
+                        email: john.doe@example.com
+                        configs: {}
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/user/session/refreshes":
+    patch:
+      tags:
+      - Autenticação
+      summary: Atualizar sessão
+      description: |
+        Lê o cookie httpOnly criptografado `refresh_token` e retorna um novo `token` de sessão.
+        Rotaciona o cookie de refresh. Não exige o header Bearer.
+        O `remember_me` opcional no corpo controla a duração do cookie rotacionado.
+      operationId: refreshSession
+      parameters:
+      - name: refresh_token
+        in: cookie
+        required: true
+        schema:
+          type: string
+        description: Cookie httpOnly criptografado do refresh token definido no login
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/RefreshSessionRequest"
+            example:
+              remember_me: true
+      responses:
+        '200':
+          description: Token de sessão rotacionado. Define um novo cookie httpOnly
+            criptografado `refresh_token`.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: |
+                Cookie httpOnly criptografado `refresh_token` rotacionado (`SameSite=Lax`; `Secure` em produção).
+                Cookie de sessão por padrão. Persistente (30 dias) quando `remember_me` é true.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TokensSuccessResponse"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/user/session/revokes":
+    delete:
+      tags:
+      - Autenticação
+      summary: Revogar todas as sessões
+      description: |
+        Invalida todas as sessões de refresh ativas do usuário autenticado.
+        O token Bearer atual permanece válido até expirar (15 minutos).
+        O cookie `refresh_token` não é excluído; a próxima tentativa de refresh falha até o usuário entrar novamente.
+      operationId: revokeSessions
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Sessões revogadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/user/registrations":
+    post:
+      tags:
+      - Usuário
+      summary: Registrar um novo usuário
+      description: |
+        Cria um usuário (não verificado) e enfileira uma mensagem de confirmação de e-mail.
+        Após o registro, confirme o e-mail antes de entrar.
+      operationId: createRegistration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/RegistrationRequest"
+            example:
+              first_name: John
+              last_name: Doe
+              email: john.doe@example.com
+              password: password123
+              password_confirmation: password123
+      responses:
+        '201':
+          description: Usuário criado
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/RegistrationSuccessResponse"
+              example:
+                status: success
+                type: object
+                data:
+                  user:
+                    data:
+                      id: '019abc...'
+                      type: user
+                      attributes:
+                        id: '019abc...'
+                        first_name: John
+                        last_name: Doe
+                        email: john.doe@example.com
+                        configs: {}
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/user/profiles":
+    patch:
+      tags:
+      - Usuário
+      summary: Atualizar perfil
+      description: |
+        Atualiza parcialmente o perfil do usuário autenticado. Envie qualquer combinação de `first_name`, `last_name` e `configs`.
+        `configs` é mesclado no JSON armazenado: as chaves enviadas sobrescrevem as existentes, e as demais são mantidas.
+      operationId: updateProfile
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/ProfileUpdateRequest"
+            examples:
+              names:
+                summary: Atualizar nomes
+                value:
+                  first_name: Jane
+                  last_name: Smith
+              configs:
+                summary: Mesclar configs sem alterar nomes
+                value:
+                  configs:
+                    locale: pt-BR
+      responses:
+        '200':
+          description: Perfil atualizado
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/user/accounts":
+    delete:
+      tags:
+      - Usuário
+      summary: Excluir conta
+      description: Exclui permanentemente o usuário autenticado. Exige a senha atual.
+      operationId: deleteUserAccount
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AccountDeletionRequest"
+            example:
+              password: password123
+      responses:
+        '200':
+          description: Conta excluída
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/user/email/confirmations":
+    post:
+      tags:
+      - Usuário
+      summary: Confirmar e-mail
+      description: Confirma o e-mail do usuário com o token recebido por e-mail. Endpoint
+        público.
+      operationId: confirmEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/EmailConfirmationRequest"
+            example:
+              token: confirmation-token-from-email
+      responses:
+        '200':
+          description: E-mail confirmado
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/user/email/changes":
+    patch:
+      tags:
+      - Usuário
+      summary: Alterar e-mail
+      description: |
+        Altera o e-mail do usuário autenticado.
+        Exige a senha atual. Marca o usuário como não verificado e envia um novo e-mail de confirmação.
+        Revoga todas as sessões de refresh. O token Bearer atual permanece válido até expirar
+        (o usuário permanece autenticado nesta requisição). O cookie `refresh_token` não é excluído.
+        Entrar com o novo e-mail fica bloqueado até o usuário confirmá-lo.
+      operationId: changeEmail
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/EmailChangeRequest"
+            example:
+              current_password: password123
+              new_email: new.email@example.com
+      responses:
+        '200':
+          description: Alteração de e-mail iniciada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/user/password/changes":
+    patch:
+      tags:
+      - Usuário
+      summary: Alterar senha
+      description: |
+        Altera a senha do usuário autenticado. Exige a senha atual.
+        Revoga todas as sessões de refresh. O token Bearer atual permanece válido até expirar.
+        O cookie `refresh_token` não é excluído.
+      operationId: changePassword
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/PasswordChangeRequest"
+            example:
+              current_password: password123
+              password: new-password123
+              password_confirmation: new-password123
+      responses:
+        '200':
+          description: Senha alterada
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/user/password/resets":
+    post:
+      tags:
+      - Usuário
+      summary: Solicitar redefinição de senha
+      description: |
+        Envia instruções de redefinição de senha para o e-mail informado.
+        O usuário deve existir, estar **ativo** e ter e-mail verificado. Endpoint público.
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/PasswordResetRequest"
+            example:
+              email: john.doe@example.com
+      responses:
+        '200':
+          description: Instruções de redefinição enviadas
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    patch:
+      tags:
+      - Usuário
+      summary: Redefinir senha
+      description: |
+        Define uma nova senha usando o token do e-mail de redefinição. Endpoint público.
+        Revoga todas as sessões de refresh. Qualquer token Bearer já emitido permanece válido até expirar.
+        O cookie `refresh_token` não é excluído.
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/PasswordResetUpdateRequest"
+            example:
+              token: reset-token-from-email
+              password: new-password123
+              password_confirmation: new-password123
+      responses:
+        '200':
+          description: Redefinição de senha
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: signed session token
+      description: |
+        Token de sessão retornado no corpo JSON por `POST /api/v1/user/authentications`
+        ou `PATCH /api/v1/user/session/refreshes`. O refresh token é um cookie
+        httpOnly criptografado (`SameSite=Lax`; `Secure` em produção), não um header Bearer.
+
+        ```http
+        Authorization: Bearer <token>
+        ```
+  responses:
+    BadRequest:
+      description: Parâmetros ou filtros de requisição inválidos
+      content:
+        application/json:
+          schema:
+            "$ref": "#/components/schemas/ErrorResponse"
+          example:
+            status: error
+            message: Invalid request
+            details: {}
+    Unauthorized:
+      description: Token Bearer ausente ou inválido, ou token válido de um usuário
+        inativo
+      content:
+        application/json:
+          schema:
+            "$ref": "#/components/schemas/ErrorResponse"
+          example:
+            status: error
+            message: Unauthorized
+            details: {}
+    UnprocessableContent:
+      description: Falha de validação ou de regra de negócio
+      content:
+        application/json:
+          schema:
+            "$ref": "#/components/schemas/ErrorResponse"
+          example:
+            status: error
+            message: Email has already been taken
+            details:
+              email:
+              - has already been taken
+    TooManyRequests:
+      description: |
+        Limite de taxa excedido. O corpo é o `text/plain` padrão do Rack::Attack (`Retry later`),
+        não o envelope JSON de erro. Veja a seção Rate limiting na descrição da API.
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: 'Retry later
+
+              '
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            "$ref": "#/components/schemas/ErrorResponse"
+          example:
+            status: error
+            message: Not found
+            details: {}
+    InternalServerError:
+      description: |
+        Falha inesperada. Usa o envelope JSON de erro.
+        Em produção a mensagem é uma string genérica de internal-server-error;
+        fora de produção é a mensagem da exceção.
+      content:
+        application/json:
+          schema:
+            "$ref": "#/components/schemas/ErrorResponse"
+          example:
+            status: error
+            message: Internal Server Error
+            details: {}
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: UUID do recurso
+  schemas:
+    TagGoalAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        year:
+          type: integer
+        value:
+          type: string
+          description: Valor decimal como string (precisão 15, escala 2)
+          example: '500.0'
+    TagGoalResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: tag_goal
+        attributes:
+          "$ref": "#/components/schemas/TagGoalAttributes"
+    TagAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: string
+          pattern: "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+          description: Cor hexadecimal (`#RRGGBB` ou `#RRGGBBAA`)
+          example: "#3B82F6"
+        active:
+          type: boolean
+        goal_ends_on:
+          type:
+          - string
+          - 'null'
+          format: date
+          description: Mês final opcional da meta, sempre armazenado como o primeiro
+            dia desse mês. Null significa que a meta continua. Grave isso na criação/atualização
+            da tag; o histórico de valores está em `goals`.
+        current_goal:
+          oneOf:
+          - "$ref": "#/components/schemas/TagGoalResource"
+          - type: 'null'
+          description: Meta aplicável ao mês atual, ou null quando não há meta ou
+            o mês atual é posterior a `goal_ends_on`.
+        goals:
+          type: array
+          description: Histórico de valores da meta ordenado por `year` e `month`
+          items:
+            "$ref": "#/components/schemas/TagGoalResource"
+    TagResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: tag
+        attributes:
+          "$ref": "#/components/schemas/TagAttributes"
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        count:
+          type: integer
+        pages:
+          type: integer
+        next_page:
+          type:
+          - integer
+          - 'null'
+        prev_page:
+          type:
+          - integer
+          - 'null'
+    TagCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TagResource"
+        meta:
+          "$ref": "#/components/schemas/PaginationMeta"
+    ErrorResponse:
+      type: object
+      required:
+      - status
+      - message
+      - details
+      properties:
+        status:
+          type: string
+          const: error
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    TagRequest:
+      type: object
+      required:
+      - tag
+      properties:
+        tag:
+          type: object
+          required:
+          - name
+          - color
+          properties:
+            name:
+              type: string
+            color:
+              type: string
+              pattern: "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+              description: Cor hexadecimal (`#RRGGBB` ou `#RRGGBBAA`)
+              example: "#3B82F6"
+            active:
+              type: boolean
+              default: true
+              description: Padrão `true` quando omitido
+            goal_starts_on:
+              type: string
+              format: date
+              description: |
+                Somente escrita. Junto com `goal_value`, cria a primeira linha de meta.
+                Omita ambos para criar uma tag sem meta. Enviar apenas um dos dois é rejeitado.
+                Meses passados e fechados são permitidos.
+            goal_value:
+              type: number
+              minimum: 0
+              description: Somente escrita. Obrigatório com `goal_starts_on` para
+                iniciar uma meta.
+            goal_ends_on:
+              type: string
+              format: date
+              description: Opcional. Deve ser em ou após o mês de `goal_starts_on`.
+                Armazenado como o primeiro dia do mês. Meses passados e fechados são
+                permitidos.
+    TagSuccessResponse:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          "$ref": "#/components/schemas/TagResource"
+    MessageSuccessResponse:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          const: success
+        message:
+          type: string
+    TagUpdateRequest:
+      type: object
+      required:
+      - tag
+      properties:
+        tag:
+          type: object
+          minProperties: 1
+          properties:
+            name:
+              type: string
+            color:
+              type: string
+              pattern: "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+              description: Cor hexadecimal (`#RRGGBB` ou `#RRGGBBAA`)
+              example: "#3B82F6"
+            active:
+              type: boolean
+            goal_starts_on:
+              type: string
+              format: date
+              description: |
+                Somente escrita. Inicia uma meta quando a tag não tem nenhuma, junto com `goal_value`.
+                Rejeitado quando já existe uma meta — use `PATCH /api/v1/tags/{tag_id}/goals` para alterar o valor de um mês.
+            goal_value:
+              type: number
+              minimum: 0
+              description: Somente escrita. Obrigatório com `goal_starts_on` para
+                iniciar uma meta. Rejeitado quando já existe uma meta.
+            goal_ends_on:
+              type: string
+              format: date
+              description: |
+                Encerra a meta. Armazenado como o primeiro dia do mês. Deve ser após o mês da meta mais recente.
+                Meses passados e fechados são permitidos. Não exclui o histórico.
+          description: Atualização parcial — apenas os campos enviados são alterados
+    TagGoalRequest:
+      type: object
+      required:
+      - tag_goal
+      properties:
+        tag_goal:
+          type: object
+          required:
+          - starts_on
+          - value
+          properties:
+            starts_on:
+              type: string
+              format: date
+              description: |
+                Somente escrita. Apenas o ano e o mês são persistidos. Faz upsert por year-month quando a linha já existe.
+                Meses passados e fechados são permitidos.
+                Não pode ser após o mês de `goal_ends_on`.
+            value:
+              type: number
+              minimum: 0
+              description: Novo valor para o mês informado. Deve diferir do valor
+                já aplicado pela meta anterior.
+            change_for_next_months:
+              type: boolean
+              default: false
+              description: |
+                Quando `false` ou omitido, apenas o mês informado é alterado.
+                Se o próximo mês já tem uma meta, ela é mantida; caso contrário, uma é criada com o valor anterior,
+                a menos que esse próximo mês ficasse após `goal_ends_on` ou esteja fechado.
+                Quando `true`, os meses **abertos** posteriores são removidos. Linhas de meses fechados posteriores nunca são destruídas.
+    CategoryGoalAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        year:
+          type: integer
+        value:
+          type: string
+          description: Valor decimal como string (precisão 15, escala 2)
+          example: '500.0'
+    CategoryGoalResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: category_goal
+        attributes:
+          "$ref": "#/components/schemas/CategoryGoalAttributes"
+    CategoryAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        color:
+          type: string
+          pattern: "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+          description: Cor hexadecimal (`#RRGGBB` ou `#RRGGBBAA`)
+          example: "#3B82F6"
+        active:
+          type: boolean
+        goal_ends_on:
+          type:
+          - string
+          - 'null'
+          format: date
+          description: Mês final opcional da meta, sempre armazenado como o primeiro
+            dia desse mês. Null significa que a meta continua. Grave isso na criação/atualização
+            da categoria; o histórico de valores está em `goals`.
+        current_goal:
+          oneOf:
+          - "$ref": "#/components/schemas/CategoryGoalResource"
+          - type: 'null'
+          description: Meta aplicável ao mês atual, ou null quando não há meta ou
+            o mês atual é posterior a `goal_ends_on`.
+        goals:
+          type: array
+          description: Histórico de valores da meta ordenado por `year` e `month`
+          items:
+            "$ref": "#/components/schemas/CategoryGoalResource"
+    CategoryResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: category
+        attributes:
+          "$ref": "#/components/schemas/CategoryAttributes"
+    CategoryCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CategoryResource"
+        meta:
+          "$ref": "#/components/schemas/PaginationMeta"
+    CategoryRequest:
+      type: object
+      required:
+      - category
+      properties:
+        category:
+          type: object
+          required:
+          - name
+          - color
+          properties:
+            name:
+              type: string
+            color:
+              type: string
+              pattern: "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+              description: Cor hexadecimal (`#RRGGBB` ou `#RRGGBBAA`)
+              example: "#3B82F6"
+            active:
+              type: boolean
+              default: true
+              description: Padrão `true` quando omitido
+            goal_starts_on:
+              type: string
+              format: date
+              description: |
+                Somente escrita. Junto com `goal_value`, cria a primeira linha de meta.
+                Omita ambos para criar uma categoria sem meta. Enviar apenas um dos dois é rejeitado.
+                Meses passados e fechados são permitidos.
+            goal_value:
+              type: number
+              minimum: 0
+              description: Somente escrita. Obrigatório com `goal_starts_on` para
+                iniciar uma meta.
+            goal_ends_on:
+              type: string
+              format: date
+              description: Opcional. Deve ser em ou após o mês de `goal_starts_on`.
+                Armazenado como o primeiro dia do mês. Meses passados e fechados são
+                permitidos.
+    CategorySuccessResponse:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          "$ref": "#/components/schemas/CategoryResource"
+    CategoryUpdateRequest:
+      type: object
+      required:
+      - category
+      properties:
+        category:
+          type: object
+          minProperties: 1
+          properties:
+            name:
+              type: string
+            color:
+              type: string
+              pattern: "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+              description: Cor hexadecimal (`#RRGGBB` ou `#RRGGBBAA`)
+              example: "#3B82F6"
+            active:
+              type: boolean
+            goal_starts_on:
+              type: string
+              format: date
+              description: |
+                Somente escrita. Inicia uma meta quando a categoria não tem nenhuma, junto com `goal_value`.
+                Rejeitado quando já existe uma meta — use `PATCH /api/v1/categories/{category_id}/goals` para alterar o valor de um mês.
+            goal_value:
+              type: number
+              minimum: 0
+              description: Somente escrita. Obrigatório com `goal_starts_on` para
+                iniciar uma meta. Rejeitado quando já existe uma meta.
+            goal_ends_on:
+              type: string
+              format: date
+              description: |
+                Encerra a meta. Armazenado como o primeiro dia do mês. Deve ser após o mês da meta mais recente.
+                Meses passados e fechados são permitidos. Não exclui o histórico.
+          description: Atualização parcial — apenas os campos enviados são alterados
+    CategoryGoalRequest:
+      type: object
+      required:
+      - category_goal
+      properties:
+        category_goal:
+          type: object
+          required:
+          - starts_on
+          - value
+          properties:
+            starts_on:
+              type: string
+              format: date
+              description: |
+                Somente escrita. Apenas o ano e o mês são persistidos. Faz upsert por year-month quando a linha já existe.
+                Meses passados e fechados são permitidos.
+                Não pode ser após o mês de `goal_ends_on`.
+            value:
+              type: number
+              minimum: 0
+              description: Novo valor para o mês informado. Deve diferir do valor
+                já aplicado pela meta anterior.
+            change_for_next_months:
+              type: boolean
+              default: false
+              description: |
+                Quando `false` ou omitido, apenas o mês informado é alterado.
+                Se o próximo mês já tem uma meta, ela é mantida; caso contrário, uma é criada com o valor anterior,
+                a menos que esse próximo mês ficasse após `goal_ends_on` ou esteja fechado.
+                Quando `true`, os meses **abertos** posteriores são removidos. Linhas de meses fechados posteriores nunca são destruídas.
+    InstitutionAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        logo_key:
+          type: string
+          description: Chave de armazenamento do logo da instituição. Sempre presente;
+            nunca null.
+          example: institutions/nubank.png
+        active:
+          type: boolean
+    InstitutionResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: institution
+        attributes:
+          "$ref": "#/components/schemas/InstitutionAttributes"
+    InstitutionCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/InstitutionResource"
+        meta:
+          "$ref": "#/components/schemas/PaginationMeta"
+    InstitutionRequest:
+      type: object
+      required:
+      - institution
+      properties:
+        institution:
+          type: object
+          required:
+          - name
+          - logo_key
+          properties:
+            name:
+              type: string
+            logo_key:
+              type: string
+              description: Chave de armazenamento do logo da instituição. Obrigatória
+                na criação.
+              example: institutions/nubank.png
+            active:
+              type: boolean
+              default: true
+              description: Padrão `true` quando omitido
+    InstitutionSuccessResponse:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          "$ref": "#/components/schemas/InstitutionResource"
+    InstitutionUpdateRequest:
+      type: object
+      required:
+      - institution
+      properties:
+        institution:
+          type: object
+          minProperties: 1
+          properties:
+            name:
+              type: string
+            logo_key:
+              type: string
+              description: Chave de armazenamento do logo da instituição
+              example: institutions/nubank.png
+            active:
+              type: boolean
+          description: Atualização parcial — apenas os campos enviados são alterados
+    BankAccountType:
+      type: string
+      enum:
+      - checking
+      - savings
+      - investment
+      - salary
+    AccountKind:
+      type: string
+      enum:
+      - bank_account
+      - cash
+    AccountAttributes:
+      type: object
+      description: |
+        Atributos comuns estão sempre presentes. `institution_id` e `bank_account_type`
+        só são incluídos quando `kind` é `bank_account`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        kind:
+          "$ref": "#/components/schemas/AccountKind"
+        institution_id:
+          type: string
+          format: uuid
+          description: Presente apenas quando `kind` é `bank_account`
+        bank_account_type:
+          "$ref": "#/components/schemas/BankAccountType"
+          description: Presente apenas quando `kind` é `bank_account`
+        current_balance:
+          type: string
+          description: Valor decimal como string (precisão 15, escala 2)
+          example: '0.0'
+        color:
+          type: string
+          pattern: "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+          description: Cor hexadecimal (`#RRGGBB` ou `#RRGGBBAA`)
+          example: "#3B82F6"
+        allow_negative_balance:
+          type: boolean
+          description: Quando true, a liquidação pode deixar `current_balance` negativo
+        active:
+          type: boolean
+    AccountResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: account
+        attributes:
+          "$ref": "#/components/schemas/AccountAttributes"
+    AccountCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/AccountResource"
+        meta:
+          "$ref": "#/components/schemas/PaginationMeta"
+    AccountRequest:
+      type: object
+      required:
+      - account
+      properties:
+        account:
+          type: object
+          required:
+          - name
+          - kind
+          - color
+          properties:
+            name:
+              type: string
+            kind:
+              "$ref": "#/components/schemas/AccountKind"
+            institution_id:
+              type: string
+              format: uuid
+              description: Obrigatório quando `kind` é `bank_account`; não permitido
+                para `cash`
+            bank_account_type:
+              "$ref": "#/components/schemas/BankAccountType"
+              description: Obrigatório quando `kind` é `bank_account`; não permitido
+                para `cash`
+            current_balance:
+              type: number
+              default: 0
+              description: Padrão `0` quando omitido
+            color:
+              type: string
+              pattern: "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+              description: Cor hexadecimal (`#RRGGBB` ou `#RRGGBBAA`)
+              example: "#3B82F6"
+            allow_negative_balance:
+              type: boolean
+              default: false
+              description: Padrão `false` quando omitido. Quando true, a liquidação
+                pode deixar `current_balance` negativo.
+            active:
+              type: boolean
+              default: true
+              description: Padrão `true` quando omitido
+    AccountSuccessResponse:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          "$ref": "#/components/schemas/AccountResource"
+    AccountUpdateRequest:
+      type: object
+      required:
+      - account
+      properties:
+        account:
+          type: object
+          minProperties: 1
+          properties:
+            name:
+              type: string
+            kind:
+              "$ref": "#/components/schemas/AccountKind"
+            institution_id:
+              type: string
+              format: uuid
+              description: Permitido apenas quando o `kind` resultante é `bank_account`
+            bank_account_type:
+              "$ref": "#/components/schemas/BankAccountType"
+              description: Permitido apenas quando o `kind` resultante é `bank_account`
+            current_balance:
+              type: number
+            color:
+              type: string
+              pattern: "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+              description: Cor hexadecimal (`#RRGGBB` ou `#RRGGBBAA`)
+              example: "#3B82F6"
+            allow_negative_balance:
+              type: boolean
+            active:
+              type: boolean
+          description: Atualização parcial — apenas os campos enviados são alterados
+    CreditCardAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        institution_id:
+          type: string
+          format: uuid
+        default_payment_account_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        total_limit:
+          type: string
+          description: Valor decimal como string (precisão 15, escala 2)
+          example: '5000.0'
+        available_limit:
+          type: string
+          description: |
+            Valor decimal como string (precisão 15, escala 2).
+            A liquidação o mantém entre 0 e `total_limit`, a menos que `allow_negative_available_limit` seja true,
+            caso em que pode ficar abaixo de 0. Atualizar `total_limit` ainda rejeita um `available_limit`
+            resultante negativo, mesmo quando essa flag é true.
+          example: '5000.0'
+        closing_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        due_day:
+          type: integer
+          minimum: 1
+          maximum: 31
+        network:
+          type: string
+          example: mastercard
+        allow_negative_available_limit:
+          type: boolean
+          description: Quando true, a liquidação pode deixar `available_limit` negativo
+        active:
+          type: boolean
+    CreditCardResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: credit_card
+        attributes:
+          "$ref": "#/components/schemas/CreditCardAttributes"
+    CreditCardCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CreditCardResource"
+        meta:
+          "$ref": "#/components/schemas/PaginationMeta"
+    CreditCardRequest:
+      type: object
+      required:
+      - credit_card
+      properties:
+        credit_card:
+          type: object
+          required:
+          - institution_id
+          - default_payment_account_id
+          - name
+          - closing_day
+          - due_day
+          - network
+          properties:
+            institution_id:
+              type: string
+              format: uuid
+            default_payment_account_id:
+              type: string
+              format: uuid
+              description: Deve referenciar uma conta pertencente ao usuário autenticado
+            name:
+              type: string
+            total_limit:
+              type: number
+              minimum: 0
+              default: 0
+              description: Padrão `0` quando omitido. `available_limit` é inicializado
+                com o mesmo valor.
+            closing_day:
+              type: integer
+              minimum: 1
+              maximum: 31
+            due_day:
+              type: integer
+              minimum: 1
+              maximum: 31
+            network:
+              type: string
+            allow_negative_available_limit:
+              type: boolean
+              default: false
+              description: Padrão `false` quando omitido. Quando true, a liquidação
+                pode deixar `available_limit` negativo.
+            active:
+              type: boolean
+              default: true
+              description: Padrão `true` quando omitido
+    CreditCardSuccessResponse:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          "$ref": "#/components/schemas/CreditCardResource"
+    CreditCardInvoiceSettlementAttributes:
+      type: object
+      description: |
+        Uma fatura de cartão de crédito paga cuja `due_date` cai no mês civil solicitado.
+        `id` é o id da liquidação da fatura. `total_value` é o valor debitado da conta de pagamento.
+        `released_limit` é o valor devolvido ao limite disponível do cartão.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id da liquidação da fatura
+        credit_card_id:
+          type: string
+          format: uuid
+        payment_account_id:
+          type: string
+          format: uuid
+          description: Conta que pagou a fatura
+        opening_date:
+          type: string
+          format: date
+          description: Primeiro dia do ciclo da fatura
+        closing_date:
+          type: string
+          format: date
+          description: Último dia do ciclo da fatura
+        due_date:
+          type: string
+          format: date
+          description: Data de vencimento da fatura. Usada para selecionar o mês civil.
+        total_value:
+          type: string
+          description: Valor decimal como string (precisão 15, escala 2)
+          example: '100.0'
+        released_limit:
+          type: string
+          description: Valor decimal como string (precisão 15, escala 2)
+          example: '100.0'
+        settled_on:
+          type: string
+          format: date
+          description: Data em que a fatura foi processada
+    CreditCardInvoiceSettlementResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: credit_card_invoice_settlement
+        attributes:
+          "$ref": "#/components/schemas/CreditCardInvoiceSettlementAttributes"
+    CreditCardInvoiceSettlementCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CreditCardInvoiceSettlementResource"
+    CreditCardUpdateRequest:
+      type: object
+      required:
+      - credit_card
+      properties:
+        credit_card:
+          type: object
+          minProperties: 1
+          properties:
+            institution_id:
+              type: string
+              format: uuid
+            default_payment_account_id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            total_limit:
+              type: number
+              minimum: 0
+              description: |
+                Quando alterado, `available_limit` é ajustado pelo mesmo delta
+                (`new_total_limit - old_total_limit`). Rejeitado se o `available_limit`
+                resultante ficar negativo.
+            network:
+              type: string
+            allow_negative_available_limit:
+              type: boolean
+            active:
+              type: boolean
+          description: |
+            Atualização parcial — apenas os campos enviados são alterados.
+            `closing_day` e `due_day` não podem ser alterados após a criação.
+    MonthlyStatementAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id da transação
+        kind:
+          type: string
+          enum:
+          - income
+          - expense
+          description: Transferência entre contas nunca é incluída no extrato
+        description:
+          type: string
+        recurrence_type:
+          type: string
+          enum:
+          - one_time
+          - installment
+          - recurring
+        payment_method:
+          type: string
+          enum:
+          - credit_card
+          - account
+          description: Agrupamento do extrato. `account` cobre todos os métodos de
+            pagamento baseados em conta.
+        resource_id:
+          type: string
+          format: uuid
+          description: Id do cartão de crédito ou da conta
+        resource_name:
+          type: string
+          description: Nome do cartão de crédito ou da conta
+        resource_brand:
+          type: string
+          description: |
+            Bandeira do cartão de crédito, ou `logo_key` da instituição para contas bancárias
+            (usa a cor da conta quando a instituição não tem logo).
+            Contas em dinheiro usam a cor da conta.
+        opening_date:
+          type: string
+          format: date
+        closing_date:
+          type: string
+          format: date
+        due_date:
+          type:
+          - string
+          - 'null'
+          format: date
+          description: Presente para cartões de crédito. Sempre `null` para contas.
+        value:
+          type: string
+          description: Valor decimal como string (precisão 15, escala 2) da recorrência
+            atual
+          example: '100.0'
+        first_recurrence_on:
+          type: string
+          format: date
+          description: Menor `starts_on` entre todas as recorrências da transação
+        current_recurrence_on:
+          type: string
+          format: date
+          description: |
+            Primeiro dia de recorrência projetado no mês de abertura do período. Se essa data for anterior a
+            `opening_date`, avança um mês. Se essa data for posterior a `closing_date` e o mês anterior
+            for mais curto que o dia de fechamento do ciclo, move para o dia seguinte ao último dia
+            desse mês anterior. O dia é limitado ao último dia do mês quando necessário. Nunca
+            precede `first_recurrence_on`. Itens recorrentes são omitidos quando essa data está fora do
+            período.
+        starts_on:
+          type: string
+          format: date
+          description: "`starts_on` da recorrência atual"
+        ends_on:
+          type:
+          - string
+          - 'null'
+          format: date
+        canceled_on:
+          type:
+          - string
+          - 'null'
+          format: date
+          description: Definido quando a transação é cancelada. Null caso contrário.
+    MonthlyStatementResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: monthly_statement
+        attributes:
+          "$ref": "#/components/schemas/MonthlyStatementAttributes"
+    MonthlyStatementCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MonthlyStatementResource"
+    MonthlyStatementTransferAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id da transação
+        kind:
+          type: string
+          const: transfer_between_accounts
+        description:
+          type: string
+        recurrence_type:
+          type: string
+          enum:
+          - one_time
+          - installment
+          - recurring
+        source_account_id:
+          type: string
+          format: uuid
+        source_account_name:
+          type: string
+        source_account_brand:
+          type: string
+          description: |
+            `logo_key` da instituição para contas bancárias (usa a cor da conta quando a
+            instituição não tem logo). Contas em dinheiro usam a cor da conta.
+        destination_account_id:
+          type: string
+          format: uuid
+        destination_account_name:
+          type: string
+        destination_account_brand:
+          type: string
+          description: |
+            `logo_key` da instituição para contas bancárias (usa a cor da conta quando a
+            instituição não tem logo). Contas em dinheiro usam a cor da conta.
+        opening_date:
+          type: string
+          format: date
+          description: Primeiro dia do mês civil
+        closing_date:
+          type: string
+          format: date
+          description: Último dia do mês civil
+        value:
+          type: string
+          description: Valor decimal como string (precisão 15, escala 2) da recorrência
+            atual
+          example: '100.0'
+        first_recurrence_on:
+          type: string
+          format: date
+          description: Menor `starts_on` entre todas as recorrências da transferência
+        current_recurrence_on:
+          type: string
+          format: date
+          description: |
+            Primeiro dia de recorrência projetado no mês de abertura do período. Se essa data for anterior a
+            `opening_date`, avança um mês. Se essa data for posterior a `closing_date` e o mês anterior
+            for mais curto que o dia de fechamento do período, move para o dia seguinte ao último dia
+            desse mês anterior. O dia é limitado ao último dia do mês quando necessário. Nunca
+            precede `first_recurrence_on`. Itens recorrentes são omitidos quando essa data está fora do
+            período.
+        starts_on:
+          type: string
+          format: date
+          description: "`starts_on` da recorrência atual"
+        ends_on:
+          type:
+          - string
+          - 'null'
+          format: date
+        canceled_on:
+          type:
+          - string
+          - 'null'
+          format: date
+          description: Definido quando a transferência é cancelada. Null caso contrário.
+    MonthlyStatementTransferResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: monthly_statement_transfer
+        attributes:
+          "$ref": "#/components/schemas/MonthlyStatementTransferAttributes"
+    MonthlyStatementTransferCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/MonthlyStatementTransferResource"
+    GoalTransactionAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id da transação
+        kind:
+          type: string
+          enum:
+          - income
+          - expense
+          - transfer_between_accounts
+        description:
+          type: string
+        recurrence_type:
+          type: string
+          enum:
+          - one_time
+          - installment
+          - recurring
+        value:
+          type: string
+          description: Valor decimal como string (precisão 15, escala 2) da recorrência
+            atual
+          example: '100.0'
+        first_recurrence_on:
+          type: string
+          format: date
+          description: Menor `starts_on` entre todas as recorrências da transação
+        current_recurrence_on:
+          type: string
+          format: date
+          description: Primeiro dia de recorrência projetado no período (ciclo da
+            fatura para cartões, mês civil para contas e transferências)
+        ends_on:
+          type:
+          - string
+          - 'null'
+          format: date
+        category_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: Id da categoria da transação
+        tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Ids das tags da transação. Array vazio quando a transação não
+            tem tags.
+    GoalTransactionResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: goal_transaction
+        attributes:
+          "$ref": "#/components/schemas/GoalTransactionAttributes"
+    GoalTransactionCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/GoalTransactionResource"
+    GoalTargetAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id da categoria quando `kind` é `category`, id da tag quando
+            `kind` é `tag`
+        kind:
+          type: string
+          enum:
+          - category
+          - tag
+        name:
+          type: string
+          description: Nome da categoria ou da tag
+        color:
+          type: string
+          pattern: "^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+          description: Cor hexadecimal da categoria ou tag (`#RRGGBB` ou `#RRGGBBAA`)
+          example: "#3B82F6"
+        value:
+          type: string
+          description: Valor decimal da meta como string (precisão 15, escala 2) da
+            meta mais recente em ou antes do mês solicitado
+          example: '1000.0'
+    GoalTargetResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: goal_target
+        attributes:
+          "$ref": "#/components/schemas/GoalTargetAttributes"
+    GoalTargetCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/GoalTargetResource"
+    MonthlyStatusAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        year:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        status:
+          type: string
+          enum:
+          - open
+          - closed
+        processing:
+          type: boolean
+        last_processed_at:
+          type: string
+          format: date-time
+          nullable: true
+    MonthlyStatusResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: monthly_status
+        attributes:
+          "$ref": "#/components/schemas/MonthlyStatusAttributes"
+    MonthlyStatusSuccessResponse:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          "$ref": "#/components/schemas/MonthlyStatusResource"
+    MonthlyStatusUpdateRequest:
+      type: object
+      required:
+      - monthly_status
+      properties:
+        monthly_status:
+          type: object
+          required:
+          - month
+          - year
+          - status
+          properties:
+            month:
+              type: integer
+              minimum: 1
+              maximum: 12
+            year:
+              type: integer
+              minimum: 1
+              maximum: 9999
+            status:
+              type: string
+              enum:
+              - open
+              - closed
+              description: Fecha ou reabre o mês
+    SettlementProcessingRequest:
+      type: object
+      required:
+      - settlement
+      properties:
+        settlement:
+          type: object
+          description: |
+            O job espera `month`, `year` e `reference_date`. O HTTP não exige nem valida
+            esses campos; valores ausentes ou inválidos falham de forma assíncrona e viram notificações.
+          properties:
+            month:
+              type: integer
+              minimum: 1
+              maximum: 12
+            year:
+              type: integer
+              minimum: 1
+              maximum: 9999
+            reference_date:
+              type: string
+              format: date
+              description: |
+                Data de corte inclusiva. O job exige hoje ou ontem para o mês atual.
+                Ignorada para meses passados (o último dia do mês informado é usado em vez disso).
+                Meses futuros são rejeitados pelo job, não pelo HTTP.
+    NotificationAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          description: |
+            Tipo de notificação gerado pelo sistema. Valores conhecidos:
+
+            - `transaction.validation.errors` — uma transação ou transferência falhou durante a liquidação
+            - `credit_card_invoice.validation.errors` — uma fatura de cartão de crédito falhou durante a liquidação
+            - `settlement.errors` — o processo de liquidação falhou como um todo, ou ocorreu um erro inesperado
+            - `monthly_status.closing.errors` — um mês não pôde ser fechado (itens pendentes ou falha no fechamento)
+            - `monthly_status.errors` — erro inesperado no fechamento mensal
+        title:
+          type: string
+        body:
+          type:
+          - string
+          - 'null'
+        read:
+          type: boolean
+        read_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        notifiable_type:
+          type:
+          - string
+          - 'null'
+          description: Tipo de referência fraca do recurso relacionado, quando houver
+        notifiable_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        data:
+          type: object
+          additionalProperties: true
+          description: |
+            Payload específico do kind. A forma varia conforme `kind`:
+
+            - `transaction.validation.errors`: `type`, `item_kind`, `month`, `year`, `occurred_on`
+            - `credit_card_invoice.validation.errors`: `type`, `month`, `year`, `due_date`
+            - `settlement.errors`: `type`, `month`, `year`, e `error` opcional (nome da classe da exceção)
+            - `monthly_status.closing.errors`: `month`, `year`, `pending_occurrences`, `pending_invoices`, `failure`
+            - `monthly_status.errors`: `type`, `error` opcional, e `month`/`year` opcionais quando a competência é conhecida
+        created_at:
+          type: string
+          format: date-time
+    NotificationResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: notification
+        attributes:
+          "$ref": "#/components/schemas/NotificationAttributes"
+    NotificationCursorMeta:
+      type: object
+      properties:
+        limit:
+          type: integer
+        next_cursor:
+          type:
+          - string
+          - 'null'
+          description: Cursor opaco para buscar a próxima página; null quando não
+            há mais notificações
+        has_more:
+          type: boolean
+        unread_count:
+          type: integer
+          description: Total de notificações não lidas do usuário autenticado
+    NotificationCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/NotificationResource"
+        meta:
+          "$ref": "#/components/schemas/NotificationCursorMeta"
+    NotificationSuccessResponse:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          "$ref": "#/components/schemas/NotificationResource"
+    NotificationReadAllResponse:
+      type: object
+      required:
+      - status
+      - message
+      - meta
+      properties:
+        status:
+          type: string
+          const: success
+        message:
+          type: string
+        meta:
+          type: object
+          properties:
+            count:
+              type: integer
+              description: Número de notificações marcadas como lidas nesta requisição
+    TransactionRecurrenceAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        starts_on:
+          type: string
+          format: date
+        value:
+          type: string
+          description: Valor decimal como string (precisão 15, escala 2)
+          example: '100.0'
+    TransactionRecurrenceResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: transaction_recurrence
+        attributes:
+          "$ref": "#/components/schemas/TransactionRecurrenceAttributes"
+    TransactionAttributes:
+      type: object
+      description: |
+        Atributos comuns, recorrências e `current_value` estão presentes na listagem e no show.
+        `account_id`, `credit_card_id`, `limit_consumption_type`, `source_account_id`, `destination_account_id` e `tag_ids` são preenchidos em show, create, update e cancel.
+        Na listagem, `tag_ids` é sempre `null`. Alvos de pagamento que se aplicam ao item
+        (`account_id` para métodos baseados em conta, `credit_card_id` e `limit_consumption_type` para cartão de crédito,
+        `source_account_id` e `destination_account_id` para transferências) estão presentes como `null`.
+        Campos que não se aplicam ao item são omitidos, não enviados como `null`.
+        `account_id` só é incluído para métodos de pagamento baseados em conta.
+        `credit_card_id` e `limit_consumption_type` só são incluídos quando `payment_method` é `credit_card`.
+        `source_account_id` e `destination_account_id` só são incluídos quando `kind` é `transfer_between_accounts`.
+        `starts_on` não é um atributo de nível superior; é retornado em cada item de `recurrences`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        category_id:
+          type: string
+          format: uuid
+          nullable: true
+        description:
+          type: string
+        kind:
+          type: string
+          enum:
+          - income
+          - expense
+          - transfer_between_accounts
+        status:
+          type: string
+          enum:
+          - pending
+          - active
+          - completed
+          - canceled
+          description: Sempre `pending` na criação. Não gravável via atualização.
+        payment_method:
+          type: string
+          nullable: true
+          enum:
+          - pix
+          - debit
+          - credit_card
+          - ted
+          - doc
+          - deposit
+          - cash
+          - boleto
+        recurrence_type:
+          type: string
+          enum:
+          - one_time
+          - installment
+          - recurring
+        installments_count:
+          type: integer
+          nullable: true
+        ends_on:
+          type: string
+          format: date
+          nullable: true
+        canceled_on:
+          type: string
+          format: date
+          nullable: true
+          description: Definido com a data atual quando a transação é cancelada. Null
+            caso contrário. Não gravável.
+        account_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Presente apenas para métodos de pagamento baseados em conta.
+            `null` na listagem; omitido caso contrário.
+        credit_card_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Presente apenas quando `payment_method` é `credit_card`. `null`
+            na listagem; omitido caso contrário.
+        limit_consumption_type:
+          type: string
+          nullable: true
+          enum:
+          - upfront
+          - monthly
+          description: |
+            Presente apenas quando `payment_method` é `credit_card`. `null` na listagem; omitido caso contrário.
+            Sempre `upfront` para `one_time` e `monthly` para `recurring`.
+            `installment` pode ser `upfront` ou `monthly`.
+        source_account_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Presente apenas quando `kind` é `transfer_between_accounts`.
+            `null` na listagem; omitido caso contrário.
+        destination_account_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Presente apenas quando `kind` é `transfer_between_accounts`.
+            `null` na listagem; omitido caso contrário.
+        tag_ids:
+          type: array
+          nullable: true
+          items:
+            type: string
+            format: uuid
+          description: Sempre `null` na listagem. Preenchido em show, create, update
+            e cancel.
+        current_value:
+          type: string
+          nullable: true
+          description: |
+            Valor aplicável ao mês atual: a recorrência mais recente cujo year-month é em ou antes do mês atual.
+            Se toda recorrência começa em um mês futuro, o valor da recorrência mais antiga é usado.
+          example: '100.0'
+        recurrences:
+          type: array
+          description: Histórico de valores ordenado por `starts_on`
+          items:
+            "$ref": "#/components/schemas/TransactionRecurrenceResource"
+    TransactionResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: transaction
+        attributes:
+          "$ref": "#/components/schemas/TransactionAttributes"
+    TransactionCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TransactionResource"
+        meta:
+          "$ref": "#/components/schemas/PaginationMeta"
+    TransactionRequest:
+      type: object
+      required:
+      - transaction
+      properties:
+        transaction:
+          type: object
+          description: |
+            Categoria, tags, conta e cartão de crédito devem pertencer ao usuário autenticado e estar ativos.
+            `starts_on` é somente escrita; a resposta o retorna em cada item de `recurrences`.
+          required:
+          - category_id
+          - description
+          - kind
+          - recurrence_type
+          - starts_on
+          - value
+          properties:
+            category_id:
+              type: string
+              format: uuid
+              description: Deve pertencer ao usuário autenticado e estar ativa
+            description:
+              type: string
+            kind:
+              type: string
+              enum:
+              - income
+              - expense
+              - transfer_between_accounts
+            payment_method:
+              type: string
+              nullable: true
+              enum:
+              - pix
+              - debit
+              - credit_card
+              - ted
+              - doc
+              - deposit
+              - cash
+              - boleto
+              description: |
+                Obrigatório para income/expense. Deve ser null para transfer_between_accounts.
+                Income permite pix|ted|doc|deposit|cash|boleto.
+                Expense permite pix|debit|credit_card|ted|doc|deposit|cash|boleto.
+            recurrence_type:
+              type: string
+              enum:
+              - one_time
+              - installment
+              - recurring
+            starts_on:
+              type: string
+              format: date
+              description: Primeira data de recorrência. Somente escrita; a resposta
+                a expõe em `recurrences`.
+            ends_on:
+              type: string
+              format: date
+              nullable: true
+              description: |
+                Obrigatório para installment. Opcional para recurring. Deve ser null para one_time.
+                Deve ser em ou após `starts_on`.
+                Para installment, deve cair em um mês posterior a `starts_on` para que `installments_count` seja maior que 1.
+            value:
+              type: number
+              minimum: 0
+            limit_consumption_type:
+              type: string
+              nullable: true
+              enum:
+              - upfront
+              - monthly
+              description: |
+                Usado quando payment_method é credit_card.
+                Ignorado para one_time (sempre upfront) e recurring (sempre monthly).
+                Obrigatório para installment, que pode escolher upfront ou monthly.
+            account_id:
+              type: string
+              format: uuid
+              description: |
+                Obrigatório quando payment_method é baseado em conta (pix, debit, ted, doc, deposit, cash, boleto).
+                Deve pertencer ao usuário autenticado e estar ativo.
+            credit_card_id:
+              type: string
+              format: uuid
+              description: Obrigatório quando payment_method é credit_card. Deve pertencer
+                ao usuário autenticado e estar ativo.
+            source_account_id:
+              type: string
+              format: uuid
+              description: Obrigatório quando kind é transfer_between_accounts. Deve
+                pertencer ao usuário autenticado e estar ativo.
+            destination_account_id:
+              type: string
+              format: uuid
+              description: |
+                Obrigatório quando kind é transfer_between_accounts. Deve diferir de source_account_id.
+                Deve pertencer ao usuário autenticado e estar ativo.
+            tag_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+              description: Cada tag deve pertencer ao usuário autenticado e estar
+                ativa
+    TransactionSuccessResponse:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          "$ref": "#/components/schemas/TransactionResource"
+    SettledTransactionAttributes:
+      type: object
+      description: |
+        Uma ocorrência liquidada no mês solicitado.
+        `id` é o id da liquidação. `transaction_id` é a transação pai.
+        `value` é o valor liquidado, não o `current_value` da transação.
+        `account_id` só é incluído para métodos de pagamento baseados em conta.
+        `credit_card_id` e `limit_consumption_type` só são incluídos quando `payment_method` é `credit_card`.
+        `source_account_id` e `destination_account_id` só são incluídos quando `kind` é `transfer_between_accounts`.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id da liquidação
+        transaction_id:
+          type: string
+          format: uuid
+        category_id:
+          type: string
+          format: uuid
+          nullable: true
+        description:
+          type: string
+        kind:
+          type: string
+          enum:
+          - income
+          - expense
+          - transfer_between_accounts
+        status:
+          type: string
+          enum:
+          - pending
+          - active
+          - completed
+          - canceled
+        payment_method:
+          type: string
+          nullable: true
+          enum:
+          - pix
+          - debit
+          - credit_card
+          - ted
+          - doc
+          - deposit
+          - cash
+          - boleto
+        recurrence_type:
+          type: string
+          enum:
+          - one_time
+          - installment
+          - recurring
+        installments_count:
+          type: integer
+          nullable: true
+        ends_on:
+          type:
+          - string
+          - 'null'
+          format: date
+        canceled_on:
+          type:
+          - string
+          - 'null'
+          format: date
+        occurred_on:
+          type: string
+          format: date
+          description: Data de negócio da ocorrência liquidada. Usada para selecionar
+            o mês civil.
+        settled_on:
+          type: string
+          format: date
+          description: Data em que a ocorrência foi processada.
+        value:
+          type: string
+          description: Valor decimal como string (precisão 15, escala 2) da liquidação
+          example: '100.0'
+        installment_number:
+          type:
+          - integer
+          - 'null'
+          description: Presente em ocorrências installment e recurring. Null para
+            one-time.
+        account_id:
+          type: string
+          format: uuid
+          description: Presente apenas para métodos de pagamento baseados em conta.
+        credit_card_id:
+          type: string
+          format: uuid
+          description: Presente apenas quando `payment_method` é `credit_card`.
+        limit_consumption_type:
+          type: string
+          enum:
+          - upfront
+          - monthly
+          description: Presente apenas quando `payment_method` é `credit_card`.
+        source_account_id:
+          type: string
+          format: uuid
+          description: Presente apenas quando `kind` é `transfer_between_accounts`.
+        destination_account_id:
+          type: string
+          format: uuid
+          description: Presente apenas quando `kind` é `transfer_between_accounts`.
+    SettledTransactionResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: settled_transaction
+        attributes:
+          "$ref": "#/components/schemas/SettledTransactionAttributes"
+    SettledTransactionCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            "$ref": "#/components/schemas/SettledTransactionResource"
+    TransactionUpdateRequest:
+      type: object
+      required:
+      - transaction
+      properties:
+        transaction:
+          type: object
+          minProperties: 1
+          properties:
+            category_id:
+              type: string
+              format: uuid
+            description:
+              type: string
+            kind:
+              type: string
+              enum:
+              - income
+              - expense
+              - transfer_between_accounts
+              description: Gravável apenas quando o status é pending
+            payment_method:
+              type: string
+              nullable: true
+              enum:
+              - pix
+              - debit
+              - credit_card
+              - ted
+              - doc
+              - deposit
+              - cash
+              - boleto
+              description: Gravável apenas quando o status é pending
+            recurrence_type:
+              type: string
+              enum:
+              - one_time
+              - installment
+              - recurring
+              description: Gravável apenas quando o status é pending
+            ends_on:
+              type: string
+              format: date
+              nullable: true
+              description: |
+                Gravável quando o status é pending, ou quando o status é active e recurrence_type é recurring.
+                Limpo automaticamente quando recurrence_type é one_time.
+                Deve ser em ou após `starts_on`.
+                Para installment, deve cair em um mês posterior a `starts_on` para que `installments_count` seja maior que 1.
+                Quando active, não pode ser anterior ao `starts_on` da recorrência existente mais recente.
+            starts_on:
+              type: string
+              format: date
+              description: |
+                Gravável apenas quando o status é pending. Atualiza a recorrência existente no lugar.
+                Somente escrita; a resposta o expõe em `recurrences`.
+                Deve ser em ou antes de `ends_on` quando `ends_on` está presente.
+            value:
+              type: number
+              minimum: 0
+              description: Gravável apenas quando o status é pending. Atualiza a recorrência
+                existente no lugar.
+            limit_consumption_type:
+              type: string
+              nullable: true
+              enum:
+              - upfront
+              - monthly
+              description: |
+                Gravável apenas quando o status é pending.
+                Ignorado para one_time (sempre upfront) e recurring (sempre monthly).
+                Obrigatório para installment, a menos que a transação já tenha um tipo de consumo de limite do cartão de crédito.
+            account_id:
+              type: string
+              format: uuid
+              description: Gravável quando o status é pending ou active
+            credit_card_id:
+              type: string
+              format: uuid
+              description: Gravável quando o status é pending ou active
+            source_account_id:
+              type: string
+              format: uuid
+              description: Gravável quando o status é pending ou active
+            destination_account_id:
+              type: string
+              format: uuid
+              description: Gravável quando o status é pending ou active
+            tag_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+          description: |
+            Atualização parcial. Descrição, categoria e tags são sempre graváveis.
+            Conta, cartão, origem, destino e ends_on recorrente são graváveis, a menos que o status seja completed ou canceled.
+            Tipo, método de pagamento, tipo de recorrência, starts_on, value e consumo de limite são graváveis apenas quando pending.
+            `installments_count` é calculado e não é um campo da requisição.
+            Completed e canceled aceitam apenas description, category_id e tag_ids.
+            Campos de pagamento mutuamente exclusivos são limpos para corresponder ao kind e ao método de pagamento resultantes.
+            Uma categoria, conta, cartão ou tag inativa já vinculada pode ser mantida; uma recém-selecionada inativa é rejeitada.
+    TransactionRecurrenceRequest:
+      type: object
+      required:
+      - transaction_recurrence
+      properties:
+        transaction_recurrence:
+          type: object
+          required:
+          - starts_on
+          - value
+          properties:
+            starts_on:
+              type: string
+              format: date
+              description: |
+                Mês que deve receber o novo valor.
+                Apenas o ano e o mês são obtidos desta data; o dia é substituído pelo dia da
+                primeira recorrência da transação (limitado ao fim desse mês quando necessário).
+                Se já existir uma recorrência no mesmo year-month, ela é atualizada no lugar.
+                Caso contrário, uma nova recorrência é criada para a data normalizada.
+                Não pode ser após o `ends_on` da transação.
+                Rejeitado quando o mês está fechado, ou quando o mês está ausente e um mês posterior já está fechado.
+                Meses passados são permitidos quando o status mensal deles ainda está aberto.
+            value:
+              type: number
+              minimum: 0
+              description: |
+                Novo valor para o mês informado.
+                Deve ser diferente do valor já aplicado pela recorrência anterior.
+                Não pode ser alterado quando o `limit_consumption_type` da transação é `upfront`.
+            change_for_next_months:
+              type: boolean
+              default: false
+              description: |
+                Quando `false` ou omitido, apenas o mês informado é alterado.
+                Se o próximo mês já tem uma recorrência, ela é mantida; caso contrário, uma é criada
+                com o valor anterior, a menos que esse próximo mês ficasse após `ends_on` ou esteja fechado.
+                Recorrências posteriores permanecem inalteradas.
+                Quando `true`, o novo valor se aplica a partir do mês informado e toda recorrência
+                de mês aberto posterior é removida. Recorrências de meses fechados posteriores nunca são destruídas.
+                Permitido apenas quando o `status` da transação é `active`.
+    AuthenticationRequest:
+      type: object
+      required:
+      - email
+      - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          description: A presença é obrigatória. O comprimento mínimo não é exigido
+            no login.
+        remember_me:
+          type: boolean
+          default: false
+          description: |
+            Quando `true`, o cookie de refresh é persistente e o refresh token no servidor dura 30 dias.
+            Quando omitido ou `false`, o cookie é de sessão e o token no servidor dura 1 dia.
+            O cookie é httpOnly, `SameSite=Lax` e `Secure` em produção.
+    UserAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        configs:
+          type: object
+          additionalProperties: true
+          description: 'Preferências do usuário armazenadas como JSON. Padrão: objeto
+            vazio. Chave conhecida: `locale` (`en` ou `pt-BR`).'
+    UserResource:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            type:
+              type: string
+              const: user
+            attributes:
+              "$ref": "#/components/schemas/UserAttributes"
+    TokensData:
+      type: object
+      required:
+      - token
+      - user
+      properties:
+        token:
+          type: string
+          description: Token de sessão (Bearer). Expira em 15 minutos.
+        user:
+          "$ref": "#/components/schemas/UserResource"
+    TokensSuccessResponse:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        data:
+          "$ref": "#/components/schemas/TokensData"
+    RefreshSessionRequest:
+      type: object
+      properties:
+        remember_me:
+          type: boolean
+          default: false
+          description: |
+            Quando `true`, o cookie de refresh rotacionado é persistente e o token no servidor dura 30 dias.
+            Quando omitido ou `false`, o cookie é de sessão e o token no servidor dura 1 dia.
+            O `refresh_token` é lido do cookie httpOnly criptografado (`SameSite=Lax`; `Secure` em produção), não deste corpo.
+    RegistrationRequest:
+      type: object
+      required:
+      - first_name
+      - last_name
+      - email
+      - password
+      - password_confirmation
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        password_confirmation:
+          type: string
+          format: password
+    RegistrationSuccessResponse:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        data:
+          type: object
+          properties:
+            user:
+              "$ref": "#/components/schemas/UserResource"
+    ProfileUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        configs:
+          type: object
+          additionalProperties: true
+          description: |
+            Mesclado nas configs armazenadas. As chaves enviadas sobrescrevem as existentes; as chaves não enviadas são mantidas.
+            Pode ser enviado sozinho, sem `first_name` ou `last_name`.
+            Chave conhecida: `locale` (`en` ou `pt-BR`). Outras chaves são armazenadas como estão.
+    AccountDeletionRequest:
+      type: object
+      required:
+      - password
+      properties:
+        password:
+          type: string
+          format: password
+    EmailConfirmationRequest:
+      type: object
+      required:
+      - token
+      properties:
+        token:
+          type: string
+    EmailChangeRequest:
+      type: object
+      required:
+      - current_password
+      - new_email
+      properties:
+        current_password:
+          type: string
+          format: password
+        new_email:
+          type: string
+          format: email
+    PasswordChangeRequest:
+      type: object
+      required:
+      - current_password
+      - password
+      - password_confirmation
+      properties:
+        current_password:
+          type: string
+          format: password
+        password:
+          type: string
+          format: password
+          minLength: 8
+        password_confirmation:
+          type: string
+          format: password
+    PasswordResetRequest:
+      type: object
+      required:
+      - email
+      properties:
+        email:
+          type: string
+          format: email
+    PasswordResetUpdateRequest:
+      type: object
+      required:
+      - token
+      - password
+      - password_confirmation
+      properties:
+        token:
+          type: string
+        password:
+          type: string
+          format: password
+          minLength: 8
+        password_confirmation:
+          type: string
+          format: password

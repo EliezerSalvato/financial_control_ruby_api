@@ -192,7 +192,8 @@ Always:
 - use serializers (`jsonapi-serializer`, e.g. `User::Serializer`) wrapping entities from the facade
 - use I18n for messages under `config/locales/<context>/` (e.g. `en.yml`, `pt-BR.yml`, mailer locales)
 - keep OpenAPI docs in sync: add/update path files under `public/openapi/paths/`, wire them in `public/openapi/spec.yml`, update `components/` when needed (Redoc UI at `/docs`)
-- whenever OpenAPI docs change, bump the docs version in `public/docs/index.html` (`spec-url` query param `?v=...`) so clients reload the latest spec; keep `public/openapi/info.yml` `version` in sync when the API docs version itself changes
+- OpenAPI UI is bilingual (`en` / `pt-BR`): English remains the source of truth in the modular YAML + `public/openapi/bundled.yml`; translations live in `public/openapi/locales/pt-BR.json`; regenerate with `docker compose exec api bin/openapi-localize` (writes `public/openapi/bundled.pt-BR.yml`). After changing EN prose, update the locale map (use `bin/openapi-localize --extract` / `--check pt-BR`) before regenerating
+- whenever OpenAPI docs change, bump the docs version in `public/docs/index.html` (`DOCS_VERSION`) so clients reload the latest spec; keep `public/openapi/info.yml` `version` (and both bundled files) in sync when the API docs version itself changes
 - return proper HTTP status codes
 - keep response consistency (`render_json_with_success` / `render_json_with_error` / `render_json_with_model_errors`)
 - use Zeitwerk conventions
@@ -240,7 +241,7 @@ Ask yourself:
 5. Are there performance concerns?
 6. Does this require request specs / factories?
 7. Will the full suite still report 100% line coverage?
-8. Does this require OpenAPI / I18n updates? If OpenAPI changed, was the docs version bumped (`public/docs/index.html` `?v=...`)?
+8. Does this require OpenAPI / I18n updates? If OpenAPI changed, was the docs version bumped (`public/docs/index.html` `DOCS_VERSION`), `locales/pt-BR.json` updated, and `bin/openapi-localize` re-run?
 9. Did the user ask for a commit?
 
 Only then implement.
