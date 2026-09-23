@@ -14,7 +14,9 @@ post:
     A date that belongs to a closed month is rejected with 422 (`monthly_status_closed` on `starts_on`).
     A date in a missing month that precedes an already closed month is rejected with 422 (`later_month_closed` on `starts_on`).
     Past months are allowed when their monthly status is still open.
-    `value` must be different from the amount already applied by the previous recurrence.
+    Creating a recurrence in a month that does not yet have one requires `value` different from the
+    amount already applied by a previous recurrence. Updating the recurrence of the month that
+    already carries that amount is allowed even when `value` is unchanged.
     Pending, completed, and canceled transactions are rejected. One-time transactions are rejected.
     Credit card installments with `limit_consumption_type` `upfront` cannot change recurrence values.
 
@@ -24,9 +26,9 @@ post:
     or is closed.
     All other recurrences are left unchanged.
 
-    When `change_for_next_months` is `true`, the given month is updated and every later
-    open-month recurrence is removed so the new amount applies from that month onward.
-    Later closed-month recurrences are never destroyed.
+    When `change_for_next_months` is `true`, the given month is updated (or kept when `value` matches
+    the amount already applied) and every later open-month recurrence is removed so that amount
+    applies from that month onward. Later closed-month recurrences are never destroyed.
   operationId: createTransactionRecurrence
   security:
     - bearerAuth: []

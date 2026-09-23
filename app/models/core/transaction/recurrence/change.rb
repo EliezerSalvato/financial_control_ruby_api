@@ -123,7 +123,9 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
     Continue(existing_recurrence:, old_value:)
   end
 
-  def reject_same_value(value:, old_value:, **)
+  def reject_same_value(value:, old_value:, existing_recurrence:, change_for_next_months:, **)
+    return Continue() if existing_recurrence.present?
+    return Continue() if change_for_next_months
     return Continue() if old_value.nil? || value != old_value
 
     input.errors.add(:value, :same_as_previous)
@@ -131,7 +133,9 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
     Failure(:invalid_input, input:)
   end
 
-  def upsert_current_month(transaction:, existing_recurrence:, starts_on:, value:, **)
+  def upsert_current_month(transaction:, existing_recurrence:, starts_on:, value:, old_value:, **)
+    return Continue() if value == old_value
+
     if existing_recurrence
       update_existing_recurrence(existing_recurrence:, starts_on:, value:)
     else
@@ -139,11 +143,13 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
     end
   end
 
-  def apply_following_months_policy(transaction:, starts_on:, change_for_next_months:, old_value:, user:, **)
+  def apply_following_months_policy(transaction:, starts_on:, change_for_next_months:, old_value:, value:, user:, **)
     if change_for_next_months
       destroy_following_recurrences(transaction:, starts_on:)
-    else
+    elsif value != old_value
       ensure_next_month_with_previous_value(transaction:, starts_on:, old_value:, user:)
+    else
+      Continue()
     end
   end
 

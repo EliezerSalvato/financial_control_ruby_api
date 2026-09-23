@@ -559,16 +559,16 @@ RSpec.describe "API::V1::Transaction::Recurrences", type: :request do
         expect(response.parsed_body.dig("details", "value")).to be_present
       end
 
-      it "rejects the same value as the current month recurrence" do
+      it "allows editing the month that already has the given value without creating another recurrence" do
         transaction
 
         expect {
           create_recurrence(transaction.id, { value: 100, starts_on: "2026-08-01" })
         }.not_to change(Transaction::Recurrence::Record, :count)
 
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(response.parsed_body.dig("details", "value")).to eq(
-          [ "must be different from the previous recurrence" ]
+        expect(response).to have_http_status(:ok)
+        expect(recurrence_pairs(response.parsed_body)).to eq(
+          [ [ "2026-08-01", "100.0" ] ]
         )
       end
 
@@ -582,6 +582,23 @@ RSpec.describe "API::V1::Transaction::Recurrences", type: :request do
         expect(response).to have_http_status(:unprocessable_content)
         expect(response.parsed_body.dig("details", "value")).to eq(
           [ "must be different from the previous recurrence" ]
+        )
+      end
+
+      it "keeps the same value and removes later recurrences when change_for_next_months is true" do
+        create(:transaction_recurrence, financial_transaction: transaction, starts_on: Date.new(2026, 9, 1), value: 150)
+        create(:transaction_recurrence, financial_transaction: transaction, starts_on: Date.new(2026, 11, 1), value: 180)
+
+        expect {
+          create_recurrence(
+            transaction.id,
+            { value: 100, starts_on: "2026-08-01", change_for_next_months: true }
+          )
+        }.to change(Transaction::Recurrence::Record, :count).by(-2)
+
+        expect(response).to have_http_status(:ok)
+        expect(recurrence_pairs(response.parsed_body)).to eq(
+          [ [ "2026-08-01", "100.0" ] ]
         )
       end
 
