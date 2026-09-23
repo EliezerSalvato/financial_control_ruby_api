@@ -41,6 +41,8 @@ en:
               upfront_limit_consumption: Recurrence value cannot be changed when limit consumption is upfront
             starts_on:
               after_ends_on: must be on or before ends_on
+              later_month_closed: recurrence cannot be changed for this date because a later month is already closed
+              monthly_status_closed: recurrence cannot be changed for this month because the month is already closed
             value:
               same_as_previous: must be different from the previous recurrence
         core/transaction/settlement/creation/input:

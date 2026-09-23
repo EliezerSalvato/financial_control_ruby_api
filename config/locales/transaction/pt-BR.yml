@@ -41,6 +41,8 @@ pt-BR:
               upfront_limit_consumption: O valor da recorrência não pode ser alterado quando o consumo de limite é à vista
             starts_on:
               after_ends_on: deve ser igual ou anterior a ends_on
+              later_month_closed: não é possível alterar a recorrência nesta data, pois um mês posterior já está fechado
+              monthly_status_closed: não é possível alterar a recorrência para este mês, pois este mês já está fechado
             value:
               same_as_previous: deve ser diferente da recorrência anterior
         core/transaction/settlement/creation/input:

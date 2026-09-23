@@ -2,9 +2,11 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
   deps do
     attribute :transaction_repository, default: -> { Transaction::Adapters.repository }
     attribute :recurrence_repository, default: -> { Transaction::Adapters.recurrence_repository }
+    attribute :monthly_status_repository, default: -> { MonthlyStatus::Adapters.repository }
 
     validates :transaction_repository, kind_of: Core::Transaction::Repository::Interface
     validates :recurrence_repository, kind_of: Core::Transaction::Recurrence::Repository::Interface
+    validates :monthly_status_repository, kind_of: Core::MonthlyStatus::Repository::Interface
   end
 
   input do
@@ -27,6 +29,7 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
         .and_then(:reject_invalid_status)
         .and_then(:reject_one_time)
         .and_then(:reject_upfront_limit_consumption)
+        .and_then(:ensure_month_is_open)
         .and_then(:validate_starts_on_window)
         .and_then(:resolve_existing_recurrence)
         .and_then(:reject_same_value)
@@ -76,6 +79,33 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
     Failure(:invalid_input, input:)
   end
 
+  def ensure_month_is_open(user:, transaction:, starts_on:, **)
+    case Core::MonthlyStatus::EnsureOpen.call(
+      user:,
+      date: starts_on,
+      payment_method: transaction.payment_method,
+      credit_card_id: transaction.credit_card_id
+    )
+    in Solid::Success then Continue()
+    in Solid::Failure(input:)
+      merge_month_status_errors(input)
+      Failure(:invalid_input, input: self.input)
+    end
+  end
+
+  def merge_month_status_errors(nested_input)
+    nested_input.errors.details.each do |attribute, errors|
+      errors.each do |detail|
+        target = starts_on_month_status_error?(detail[:error]) ? :starts_on : attribute
+        input.errors.add(target, detail[:error])
+      end
+    end
+  end
+
+  def starts_on_month_status_error?(error)
+    error.in?([ :monthly_status_closed, :later_month_closed ])
+  end
+
   def validate_starts_on_window(transaction:, starts_on:, **)
     if transaction.ends_on.present? && starts_on > transaction.ends_on
       input.errors.add(:starts_on, :after_ends_on)
@@ -109,11 +139,11 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
     end
   end
 
-  def apply_following_months_policy(transaction:, starts_on:, change_for_next_months:, old_value:, **)
+  def apply_following_months_policy(transaction:, starts_on:, change_for_next_months:, old_value:, user:, **)
     if change_for_next_months
       destroy_following_recurrences(transaction:, starts_on:)
     else
-      ensure_next_month_with_previous_value(transaction:, starts_on:, old_value:)
+      ensure_next_month_with_previous_value(transaction:, starts_on:, old_value:, user:)
     end
   end
 
@@ -127,11 +157,12 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
     end
   end
 
-  def ensure_next_month_with_previous_value(transaction:, starts_on:, old_value:)
+  def ensure_next_month_with_previous_value(transaction:, starts_on:, old_value:, user:)
     return Continue() if old_value.nil?
 
     next_starts_on = next_month_starts_on(transaction:, starts_on:)
     return Continue() if transaction.ends_on.present? && next_starts_on > transaction.ends_on
+    return Continue() if month_closed?(user:, date: next_starts_on)
     return Continue() if find_recurrence_by_starts_on(transaction:, starts_on: next_starts_on)
 
     create_recurrence(transaction:, starts_on: next_starts_on, value: old_value)
@@ -146,6 +177,13 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
 
   def first_series_day(transaction)
     transaction.recurrences.map(&:starts_on).min&.day
+  end
+
+  def month_closed?(user:, date:)
+    case deps.monthly_status_repository.find(user_id: user.id, month: date.month, year: date.year)
+    in Solid::Success(monthly_status:) then monthly_status.closed?
+    in Solid::Failure(type: :monthly_status_not_found) then false
+    end
   end
 
   def reload_transaction(user:, transaction:, **)

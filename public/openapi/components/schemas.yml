@@ -1461,6 +1461,8 @@ TransactionRecurrenceRequest:
             If a recurrence already exists in the same year-month, it is updated in place.
             Otherwise a new recurrence is created for the normalized date.
             Cannot be after the transaction `ends_on`.
+            Rejected when the month is closed, or when the month is missing and a later month is already closed.
+            Past months are allowed when their monthly status is still open.
         value:
           type: number
           minimum: 0
@@ -1474,10 +1476,10 @@ TransactionRecurrenceRequest:
           description: |
             When `false` or omitted, only the given month is changed.
             If the next month already has a recurrence, it is kept; otherwise one is created
-            with the previous amount, unless that next month would be after `ends_on`.
+            with the previous amount, unless that next month would be after `ends_on` or is closed.
             Later recurrences are left unchanged.
             When `true`, the new amount applies from the given month onward and every later
-            recurrence is removed.
+            open-month recurrence is removed. Later closed-month recurrences are never destroyed.
             Allowed only when the transaction `status` is `active`.
 
 TransactionSuccessResponse:

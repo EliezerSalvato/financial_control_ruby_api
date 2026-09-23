@@ -297,12 +297,121 @@ RSpec.describe "API::V1::Transaction::Recurrences", type: :request do
           create(:transaction, :recurring, :active, user:, account:, category:, starts_on: Date.new(2026, 1, 1), value: 100)
         end
 
-        it "accepts the change" do
+        it "accepts the change when the month is still open" do
+          create(:monthly_status, user:, month: 1, year: 2026)
+
           create_recurrence(transaction.id, { value: 120, starts_on: "2026-01-01" })
 
           expect(response).to have_http_status(:ok)
           expect(recurrence_pairs(response.parsed_body)).to eq(
             [ [ "2026-01-01", "120.0" ], [ "2026-02-01", "100.0" ] ]
+          )
+        end
+
+        it "rejects the change when the month is closed" do
+          transaction
+          create(:monthly_status, :closed, user:, month: 1, year: 2026)
+
+          expect {
+            create_recurrence(transaction.id, { value: 120, starts_on: "2026-01-01" })
+          }.not_to change(Transaction::Recurrence::Record, :count)
+
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(response.parsed_body.dig("details", "starts_on")).to eq(
+            [ "recurrence cannot be changed for this month because the month is already closed" ]
+          )
+        end
+
+        it "rejects the change when a later month is already closed" do
+          transaction
+          create(:monthly_status, :closed, user:, month: 4, year: 2026)
+
+          expect {
+            create_recurrence(transaction.id, { value: 120, starts_on: "2026-03-01" })
+          }.not_to change(Transaction::Recurrence::Record, :count)
+
+          expect(response).to have_http_status(:unprocessable_content)
+          expect(response.parsed_body.dig("details", "starts_on")).to eq(
+            [ "recurrence cannot be changed for this date because a later month is already closed" ]
+          )
+        end
+
+        it "allows the change from the first open month after closed months" do
+          transaction
+          create(:monthly_status, :closed, user:, month: 1, year: 2026)
+          create(:monthly_status, :closed, user:, month: 2, year: 2026)
+          create(:monthly_status, :closed, user:, month: 3, year: 2026)
+          create(:monthly_status, :closed, user:, month: 4, year: 2026)
+          create(:monthly_status, user:, month: 5, year: 2026)
+
+          expect {
+            create_recurrence(transaction.id, { value: 120, starts_on: "2026-05-01" })
+          }.to change(Transaction::Recurrence::Record, :count).by(2)
+
+          expect(response).to have_http_status(:ok)
+          expect(recurrence_pairs(response.parsed_body)).to eq(
+            [ [ "2026-01-01", "100.0" ], [ "2026-05-01", "120.0" ], [ "2026-06-01", "100.0" ] ]
+          )
+        end
+      end
+
+      context "when later months interact with closed monthly statuses" do
+        it "does not destroy closed-month recurrences when change_for_next_months is true" do
+          transaction = create(
+            :transaction,
+            :recurring,
+            :active,
+            user:,
+            account:,
+            category:,
+            starts_on: Date.new(2026, 1, 1),
+            value: 66
+          )
+          create(:transaction_recurrence, financial_transaction: transaction, starts_on: Date.new(2026, 8, 1), value: 76)
+          create(:transaction_recurrence, financial_transaction: transaction, starts_on: Date.new(2026, 9, 1), value: 86)
+          create(:transaction_recurrence, financial_transaction: transaction, starts_on: Date.new(2026, 12, 1), value: 76)
+          create(:monthly_status, user:, month: 9, year: 2026)
+          create(:monthly_status, :closed, user:, month: 12, year: 2026)
+
+          expect {
+            create_recurrence(
+              transaction.id,
+              { value: 87, starts_on: "2026-09-01", change_for_next_months: true }
+            )
+          }.not_to change(Transaction::Recurrence::Record, :count)
+
+          expect(response).to have_http_status(:ok)
+          expect(recurrence_pairs(response.parsed_body)).to eq(
+            [
+              [ "2026-01-01", "66.0" ],
+              [ "2026-08-01", "76.0" ],
+              [ "2026-09-01", "87.0" ],
+              [ "2026-12-01", "76.0" ]
+            ]
+          )
+        end
+
+        it "does not restore the previous value when the next month is closed" do
+          transaction = create(
+            :transaction,
+            :recurring,
+            :active,
+            user:,
+            account:,
+            category:,
+            starts_on: Date.new(2026, 1, 1),
+            value: 100
+          )
+          create(:monthly_status, user:, month: 8, year: 2026)
+          create(:monthly_status, :closed, user:, month: 9, year: 2026)
+
+          expect {
+            create_recurrence(transaction.id, { value: 120, starts_on: "2026-08-01" })
+          }.to change(Transaction::Recurrence::Record, :count).by(1)
+
+          expect(response).to have_http_status(:ok)
+          expect(recurrence_pairs(response.parsed_body)).to eq(
+            [ [ "2026-01-01", "100.0" ], [ "2026-08-01", "120.0" ] ]
           )
         end
       end

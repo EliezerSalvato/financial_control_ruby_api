@@ -45,11 +45,18 @@ module Transaction::Recurrence::Repository::Adapters::ActiveRecord
     records = Transaction::Recurrence::Record.where(transaction_id: transaction.id, starts_on: next_month_start..)
 
     records.each do |record|
+      next if closed_month?(user_id: transaction.user_id, month: record.month, year: record.year)
       next if record.destroy
 
       return Failure(:recurrence_destruction_failed, errors: Transaction::Recurrence::Mapper.to_errors(record))
     end
 
     Success(:recurrences_destroyed)
+  end
+
+  private
+
+  def closed_month?(user_id:, month:, year:)
+    MonthlyStatus::Record.exists?(user_id:, month:, year:, status: Core::MonthlyStatus::Status::CLOSED)
   end
 end
