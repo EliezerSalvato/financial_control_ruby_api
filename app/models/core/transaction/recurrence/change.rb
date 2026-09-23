@@ -23,6 +23,7 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
     rollback_on_failure {
       Given(attributes)
         .and_then(:find_transaction)
+        .and_then(:normalize_starts_on)
         .and_then(:reject_invalid_status)
         .and_then(:reject_one_time)
         .and_then(:reject_upfront_limit_consumption)
@@ -43,6 +44,14 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
     in Solid::Failure(type: :transaction_not_found)
       Failure(:transaction_not_found)
     end
+  end
+
+  def normalize_starts_on(transaction:, starts_on:, **)
+    first_starts_on = transaction.recurrences.map(&:starts_on).min
+    return Continue() if first_starts_on.nil?
+
+    day = [ first_starts_on.day, starts_on.end_of_month.day ].min
+    Continue(starts_on: Date.new(starts_on.year, starts_on.month, day))
   end
 
   def reject_invalid_status(transaction:, **)
@@ -130,20 +139,13 @@ class Core::Transaction::Recurrence::Change < ApplicationSolidProcess
 
   def next_month_starts_on(transaction:, starts_on:)
     following_month = starts_on.beginning_of_month.next_month
-    day = next_month_day(transaction:, starts_on:)
+    day = first_series_day(transaction) || starts_on.day
 
     Date.new(following_month.year, following_month.month, [ day, following_month.end_of_month.day ].min)
   end
 
-  def next_month_day(transaction:, starts_on:)
-    series_day = transaction.recurrences.map { |recurrence| recurrence.starts_on.day }.max
-    return starts_on.day if series_day.nil?
-
-    if starts_on == starts_on.end_of_month && series_day > starts_on.day
-      series_day
-    else
-      starts_on.day
-    end
+  def first_series_day(transaction)
+    transaction.recurrences.map(&:starts_on).min&.day
   end
 
   def reload_transaction(user:, transaction:, **)

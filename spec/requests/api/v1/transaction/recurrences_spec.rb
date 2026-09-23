@@ -93,7 +93,33 @@ RSpec.describe "API::V1::Transaction::Recurrences", type: :request do
           )
         end
 
-        it "updates the existing recurrence when starts_on is a different day in the same month" do
+        it "clamps a mid-month starts_on to the first recurrence day at month end" do
+          end_of_month_transaction = create(
+            :transaction,
+            :recurring,
+            :active,
+            user:,
+            account:,
+            category:,
+            starts_on: Date.new(2026, 5, 31),
+            value: 77
+          )
+
+          expect {
+            create_recurrence(end_of_month_transaction.id, { value: 79, starts_on: "2026-09-15" })
+          }.to change(Transaction::Recurrence::Record, :count).by(2)
+
+          expect(response).to have_http_status(:ok)
+          expect(recurrence_pairs(response.parsed_body)).to eq(
+            [
+              [ "2026-05-31", "77.0" ],
+              [ "2026-09-30", "79.0" ],
+              [ "2026-10-31", "77.0" ]
+            ]
+          )
+        end
+
+        it "ignores the day of starts_on and keeps the first recurrence day" do
           transaction
 
           expect {
@@ -102,7 +128,7 @@ RSpec.describe "API::V1::Transaction::Recurrences", type: :request do
 
           expect(response).to have_http_status(:ok)
           expect(recurrence_pairs(response.parsed_body)).to eq(
-            [ [ "2026-08-15", "120.0" ], [ "2026-09-15", "100.0" ] ]
+            [ [ "2026-08-01", "120.0" ], [ "2026-09-01", "100.0" ] ]
           )
         end
 

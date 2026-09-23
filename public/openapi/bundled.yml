@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Financial Control Ruby API
-  version: 1.0.24
+  version: 1.0.25
   description: |
     ## Authentication
 
@@ -2320,8 +2320,10 @@ paths:
         Adds a value change to a recurring or installment transaction owned by the authenticated user.
 
         Recurrences apply from `starts_on` until the next recurrence, and the response lists them ordered by `starts_on`.
-        If a recurrence already exists in the same year-month as `starts_on`, it is updated in place
-        (including the day of `starts_on`); otherwise a new recurrence is created.
+        Only year and month are taken from `starts_on`; the day is replaced by the day of the transaction's
+        first recurrence (clamped to the end of that month when needed).
+        If a recurrence already exists in the same year-month as `starts_on`, it is updated in place;
+        otherwise a new recurrence is created.
 
         Allowed only when `status` is `active`. `starts_on` cannot be after the transaction `ends_on`.
         `value` must be different from the amount already applied by the previous recurrence.
@@ -4981,9 +4983,10 @@ components:
               format: date
               description: |
                 Month that should receive the new value.
-                If a recurrence already exists in the same year-month, it is updated in place
-                (including the day of `starts_on`).
-                Otherwise a new recurrence is created for this date.
+                Only year and month are taken from this date; the day is replaced by the day of the
+                transaction's first recurrence (clamped to the end of that month when needed).
+                If a recurrence already exists in the same year-month, it is updated in place.
+                Otherwise a new recurrence is created for the normalized date.
                 Cannot be after the transaction `ends_on`.
             value:
               type: number

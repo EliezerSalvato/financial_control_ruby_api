@@ -1456,9 +1456,10 @@ TransactionRecurrenceRequest:
           format: date
           description: |
             Month that should receive the new value.
-            If a recurrence already exists in the same year-month, it is updated in place
-            (including the day of `starts_on`).
-            Otherwise a new recurrence is created for this date.
+            Only year and month are taken from this date; the day is replaced by the day of the
+            transaction's first recurrence (clamped to the end of that month when needed).
+            If a recurrence already exists in the same year-month, it is updated in place.
+            Otherwise a new recurrence is created for the normalized date.
             Cannot be after the transaction `ends_on`.
         value:
           type: number
