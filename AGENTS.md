@@ -46,7 +46,7 @@ docker compose exec api bin/rails console
 
 Use the service name defined in `docker-compose.yml` (`api`). If `container_name` differs, still prefer `docker compose exec` / `run` with the **service** name, not the container name.
 
-Do **not** use the `Makefile` — it is for human developers only. Always run commands via `docker compose`.
+Do **not** use the `Makefile` — it is for human developers only. Always run commands via `docker compose`. The **only exception** is `make ci` (see [CI validation](#ci-validation-mandatory)).
 
 ### Allowed on the host
 
@@ -215,6 +215,23 @@ Do not invent a parallel test stack. Mirror an existing request spec when adding
 
 ---
 
+### CI validation (mandatory)
+
+After **any** change to the project (code, specs, config, locales, OpenAPI, migrations, etc.), run the full CI pipeline from the host before finishing:
+
+```bash
+make ci
+```
+
+It runs `bin/ci` inside the `api` container (setup, RuboCop, `i18n-tasks health`, bundler-audit, Brakeman, and RSpec with 100% line coverage — see `config/ci.rb`).
+
+- If any step fails, fix the cause and re-run `make ci` until it passes.
+- Never bypass a failing step by disabling cops, adding Brakeman ignores, lowering coverage, or skipping specs, unless the user explicitly approves it.
+- If a failure is unrelated to your change (e.g. a new advisory from `bundler-audit`), report it to the user instead of silently working around it.
+- Do not report a task as done while `make ci` is failing; state clearly which step failed and why.
+
+---
+
 ## Environment Policy
 
 - All investigations, bug reproductions, Rails commands, and validation of changes must be performed using the `test` environment unless I explicitly request a different environment.
@@ -244,4 +261,4 @@ Ask yourself:
 8. Does this require OpenAPI / I18n updates? If OpenAPI changed, was the docs version bumped (`public/docs/index.html` `DOCS_VERSION`), `locales/pt-BR.json` updated, and `bin/openapi-localize` re-run?
 9. Did the user ask for a commit?
 
-Only then implement.
+Only then implement. After implementing, run `make ci` and fix any failure before finishing.
