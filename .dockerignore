@@ -1,6 +1,7 @@
 .git
 .github
 .cursor
+.agents
 .terraform
 **/.terraform
 *.tfstate

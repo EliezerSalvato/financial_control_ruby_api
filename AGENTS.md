@@ -9,7 +9,22 @@ Before making code changes:
 1. Read this file (`AGENTS.md`)
 2. Read only files relevant to the requested feature
 3. Avoid loading unnecessary context
-4. Follow project rules in `.cursor/rules/` when applicable
+4. Follow the matching rules in `.agents/rules/` (see [Project rules](#project-rules))
+
+## Project rules
+
+This project is used with both Cursor and Claude Code. This file is the single source of instructions: Cursor reads it natively and `CLAUDE.md` only imports it (`@AGENTS.md`). Never add content to `CLAUDE.md`, and do not create `.cursor/rules/` or `.claude/rules/`.
+
+Detailed rules live **only** in `.agents/rules/` as plain Markdown. Before working on a matching task, read the rule file:
+
+| Rule | Read when |
+|------|-----------|
+| [`.agents/rules/active-record-patterns.md`](.agents/rules/active-record-patterns.md) | Editing `*::Record`, mappers, adapters or migrations (`app/models/**/*.rb` outside `app/models/core/`, `db/migrate/**/*.rb`) |
+| [`.agents/rules/commit-patterns.md`](.agents/rules/commit-patterns.md) | Creating or suggesting a git commit |
+| [`.agents/rules/readme.md`](.agents/rules/readme.md) | Creating or updating `README.md` |
+| [`.agents/rules/terraform-naming.md`](.agents/rules/terraform-naming.md) | Writing or reviewing Terraform (`**/*.tf`, `**/*.tfvars`) |
+
+To add a rule, create `.agents/rules/<name>.md` (plain Markdown, no tool-specific frontmatter) and add a row to this table.
 
 ## Docker (mandatory)
 
@@ -243,7 +258,7 @@ It runs `bin/ci` inside the `api` container (setup, RuboCop, `i18n-tasks health`
 
 ### Commits
 
-Only create a git commit when the user explicitly asks. When committing, follow `.cursor/rules/commit-patterns.mdc` (Conventional Commits).
+Only create a git commit when the user explicitly asks. When committing, follow `.agents/rules/commit-patterns.md` (Conventional Commits).
 
 ---
 
@@ -251,7 +266,7 @@ Only create a git commit when the user explicitly asks. When committing, follow 
 
 Ask yourself:
 
-1. Which `.cursor/rules/` apply?
+1. Which rules in `.agents/rules/` apply?
 2. Which layer owns this change (see Layer map)?
 3. Which existing files are the best reference to mirror?
 4. Are there security concerns (auth, tokens, cookies)?

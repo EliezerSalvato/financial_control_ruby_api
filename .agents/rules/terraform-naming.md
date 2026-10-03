@@ -1,11 +1,3 @@
----
-description: Naming, file layout, and variable modeling conventions for Terraform. Apply when writing or reviewing .tf/.tfvars — resources, data sources, variables, outputs, modules, and locals.
-globs:
-  - "**/*.tf"
-  - "**/*.tfvars"
-alwaysApply: false
----
-
 # Terraform Naming and Layout
 
 All Terraform authoring and review **must** follow these conventions.

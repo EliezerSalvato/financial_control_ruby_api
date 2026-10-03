@@ -1,8 +1,4 @@
----
-description: README conventions
-globs: README.md
-alwaysApply: false
----
+# README Rules
 
 When creating or updating README.md:
 

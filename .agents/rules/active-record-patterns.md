@@ -1,13 +1,3 @@
----
-description: Persistence patterns for *::Record, mappers, and migrations. Use when working with ActiveRecord records (not core processes).
-globs:
-  - app/models/**/*.rb
-  - db/migrate/**/*.rb
-excludeGlobs:
-  - app/models/core/**/*.rb
-alwaysApply: false
----
-
 # Active Record Patterns
 
 This project does **not** use fat `ApplicationRecord` domain models or `app/services/`.

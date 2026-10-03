@@ -1,8 +1,3 @@
----
-description: Conventional Commits rules. Apply when creating or suggesting git commits.
-alwaysApply: false
----
-
 # Commit Rules
 
 When generating or suggesting commit messages, ALWAYS follow these rules.
