@@ -27,10 +27,12 @@ class Core::Transaction::Creation < ApplicationSolidProcess
     attribute :source_account_id, :string
     attribute :destination_account_id, :string
     attribute :tag_ids, default: -> { [] }
+    attribute :source_key, :string
 
     normalizes :description, with: ->(value) { value&.strip }
     normalizes :kind, :payment_method, :recurrence_type, :limit_consumption_type, with: ->(value) { value&.strip.presence }
     normalizes :category_id, :account_id, :credit_card_id, :source_account_id, :destination_account_id, with: ->(value) { value&.strip.presence }
+    normalizes :source_key, with: ->(value) { value&.strip.presence }
     normalizes :tag_ids, with: ->(value) { value.to_a.map { |id| id.to_s.strip.presence }.compact.uniq }
 
     validates :user, :description, :category_id, :kind, :recurrence_type, :starts_on, :value, presence: true
@@ -139,7 +141,7 @@ class Core::Transaction::Creation < ApplicationSolidProcess
   end
 
   def create_transaction(
-    user:, category_id:, description:, kind:, payment_method:, recurrence_type:, ends_on:, installments_count: nil, **
+    user:, category_id:, description:, kind:, payment_method:, recurrence_type:, ends_on:, source_key:, installments_count: nil, **
   )
     attributes = {
       category_id:,
@@ -149,11 +151,15 @@ class Core::Transaction::Creation < ApplicationSolidProcess
       payment_method:,
       recurrence_type:,
       installments_count:,
-      ends_on:
+      ends_on:,
+      source_key:
     }
 
     case deps.transaction_repository.create(user:, attributes:)
     in Solid::Success(transaction:) then Continue(transaction:)
+    in Solid::Failure(type: :already_imported)
+      input.errors.add(:source_key, :taken)
+      Failure(:already_imported, input:)
     in Solid::Failure(errors:)
       add_errors_to_input(errors)
       input.errors.add(:base, :transaction_creation_failed)

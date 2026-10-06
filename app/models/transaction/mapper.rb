@@ -16,6 +16,7 @@ module Transaction::Mapper
       installments_count: record.installments_count,
       ends_on: record.ends_on,
       canceled_on: record.canceled_on,
+      source_key: record.source_key,
       **contextual_attributes(record, include_associations:),
       recurrences: record.recurrences.sort_by(&:starts_on).map { |recurrence| Transaction::Recurrence::Mapper.to_entity(recurrence) }
     )

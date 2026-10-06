@@ -16,7 +16,8 @@ Core::Transaction::Entity = Data.define(
   :source_account_id,
   :destination_account_id,
   :tag_ids,
-  :recurrences
+  :recurrences,
+  :source_key
 ) do
   def initialize(
     id:,
@@ -36,7 +37,8 @@ Core::Transaction::Entity = Data.define(
     credit_card_id: nil,
     limit_consumption_type: nil,
     source_account_id: nil,
-    destination_account_id: nil
+    destination_account_id: nil,
+    source_key: nil
   )
     super
   end

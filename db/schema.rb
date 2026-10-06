@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_21_174501) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_03_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -32,48 +32,48 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_174501) do
      RETURNS TABLE(opening_date date, closing_date date, due_date date)
      LANGUAGE plpgsql
     AS $function$
-                              DECLARE
-                                _due_day INT;
-                                _closing_day INT;
-                                _closing_month DATE;
-                                _previous_closing_date DATE;
-                              BEGIN
-                                SELECT due_day,
-                                       closing_day
-                                  INTO _due_day,
-                                       _closing_day
-                                  FROM credit_cards
-                                 WHERE id = _credit_card_id;
+          DECLARE
+            _due_day INT;
+            _closing_day INT;
+            _closing_month DATE;
+            _previous_closing_date DATE;
+          BEGIN
+            SELECT due_day,
+                   closing_day
+              INTO _due_day,
+                   _closing_day
+              FROM credit_cards
+             WHERE id = _credit_card_id;
     
-                                _closing_month := make_date(_year, _month, 1);
+            _closing_month := make_date(_year, _month, 1);
     
-                                IF _closing_day > _due_day THEN
-                                  _closing_month := _closing_month - INTERVAL '1 month';
-                                END IF;
+            IF _closing_day > _due_day THEN
+              _closing_month := _closing_month - INTERVAL '1 month';
+            END IF;
     
-                                closing_date := make_date_clamped(
-                                  EXTRACT(YEAR FROM _closing_month)::INT,
-                                  EXTRACT(MONTH FROM _closing_month)::INT,
-                                  _closing_day
-                                );
+            closing_date := make_date_clamped(
+              EXTRACT(YEAR FROM _closing_month)::INT,
+              EXTRACT(MONTH FROM _closing_month)::INT,
+              _closing_day
+            );
     
-                                due_date := make_date_clamped(
-                                  _year,
-                                  _month,
-                                  _due_day
-                                );
+            due_date := make_date_clamped(
+              _year,
+              _month,
+              _due_day
+            );
     
-                                _previous_closing_date := make_date_clamped(
-                                  EXTRACT(YEAR FROM closing_date - INTERVAL '1 month')::INT,
-                                  EXTRACT(MONTH FROM closing_date - INTERVAL '1 month')::INT,
-                                  _closing_day
-                                );
+            _previous_closing_date := make_date_clamped(
+              EXTRACT(YEAR FROM closing_date - INTERVAL '1 month')::INT,
+              EXTRACT(MONTH FROM closing_date - INTERVAL '1 month')::INT,
+              _closing_day
+            );
     
-                                opening_date := _previous_closing_date + 1;
+            opening_date := _previous_closing_date + 1;
     
-                                RETURN NEXT;
-                              END;
-                              $function$
+            RETURN NEXT;
+          END;
+          $function$
   SQL
 
   execute <<-'SQL'
@@ -82,20 +82,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_174501) do
      LANGUAGE sql
      IMMUTABLE STRICT
     AS $function$
-                                SELECT make_date(
-                                  _year,
-                                  _month,
-                                  LEAST(
-                                    _day,
-                                    EXTRACT(
-                                      DAY FROM (
-                                        make_date(_year, _month, 1)
-                                        + INTERVAL '1 month - 1 day'
-                                      )
-                                    )::INT
-                                  )
-                                );
-                              $function$
+            SELECT make_date(
+              _year,
+              _month,
+              LEAST(
+                _day,
+                EXTRACT(
+                  DAY FROM (
+                    make_date(_year, _month, 1)
+                    + INTERVAL '1 month - 1 day'
+                  )
+                )::INT
+              )
+            );
+          $function$
   SQL
 
   execute <<-'SQL'
@@ -104,28 +104,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_174501) do
      LANGUAGE sql
      IMMUTABLE
     AS $function$
-                                SELECT GREATEST(
-                                         _first_starts_on,
-                                         CASE
-                                           WHEN projected < _opening_date THEN
-                                             make_date_clamped(
-                                               EXTRACT(YEAR FROM (_opening_date + INTERVAL '1 month'))::INT,
-                                               EXTRACT(MONTH FROM (_opening_date + INTERVAL '1 month'))::INT,
-                                               EXTRACT(DAY FROM _first_starts_on)::INT
-                                             )
-                                           WHEN projected > _closing_date THEN
-                                             _opening_date
-                                           ELSE projected
-                                         END
-                                       )
-                                  FROM (
-                                         SELECT make_date_clamped(
-                                                  EXTRACT(YEAR FROM _opening_date)::INT,
-                                                  EXTRACT(MONTH FROM _opening_date)::INT,
-                                                  EXTRACT(DAY FROM _first_starts_on)::INT
-                                                ) AS projected
-                                       ) AS projection
-                              $function$
+            SELECT GREATEST(
+                     _first_starts_on,
+                     CASE
+                       WHEN projected < _opening_date THEN
+                         make_date_clamped(
+                           EXTRACT(YEAR FROM (_opening_date + INTERVAL '1 month'))::INT,
+                           EXTRACT(MONTH FROM (_opening_date + INTERVAL '1 month'))::INT,
+                           EXTRACT(DAY FROM _first_starts_on)::INT
+                         )
+                       WHEN projected > _closing_date THEN
+                         _opening_date
+                       ELSE projected
+                     END
+                   )
+              FROM (
+                     SELECT make_date_clamped(
+                              EXTRACT(YEAR FROM _opening_date)::INT,
+                              EXTRACT(MONTH FROM _opening_date)::INT,
+                              EXTRACT(DAY FROM _first_starts_on)::INT
+                            ) AS projected
+                   ) AS projection
+          $function$
   SQL
 
   create_table "accounts", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
@@ -397,6 +397,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_174501) do
     t.enum "kind", null: false, enum_type: "transaction_kind"
     t.enum "payment_method", enum_type: "transaction_payment_method"
     t.enum "recurrence_type", null: false, enum_type: "transaction_recurrence_type"
+    t.string "source_key"
     t.enum "status", default: "pending", null: false, enum_type: "transaction_status"
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
@@ -406,6 +407,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_21_174501) do
     t.index ["payment_method"], name: "index_transactions_on_payment_method"
     t.index ["recurrence_type"], name: "index_transactions_on_recurrence_type"
     t.index ["status"], name: "index_transactions_on_status"
+    t.index ["user_id", "source_key"], name: "index_transactions_on_user_id_and_source_key", unique: true, where: "(source_key IS NOT NULL)"
     t.index ["user_id"], name: "index_transactions_on_user_id"
     t.check_constraint "recurrence_type = 'one_time'::transaction_recurrence_type AND installments_count IS NULL AND ends_on IS NULL OR recurrence_type = 'installment'::transaction_recurrence_type AND installments_count > 1 AND ends_on IS NOT NULL OR recurrence_type = 'recurring'::transaction_recurrence_type AND installments_count IS NULL", name: "transactions_recurrence_type_consistency"
     t.check_constraint "status = 'canceled'::transaction_status AND canceled_on IS NOT NULL OR status <> 'canceled'::transaction_status AND canceled_on IS NULL", name: "transactions_canceled_on_consistency"

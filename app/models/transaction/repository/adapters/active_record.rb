@@ -26,6 +26,10 @@ module Transaction::Repository::Adapters::ActiveRecord
       user_transactions(user).exists?(category_id:)
     end
 
+    def exists_by_source_key?(user:, source_key:)
+      user_transactions(user).exists?(source_key:)
+    end
+
     def exists_by_institution_id?(user:, institution_id:)
       account_ids = Account::Record.where(user_id: user.id, institution_id:).select(:id)
       credit_card_ids = CreditCard::Record.where(user_id: user.id, institution_id:).select(:id)
@@ -60,6 +64,8 @@ module Transaction::Repository::Adapters::ActiveRecord
       transaction: Transaction::Mapper.to_entity(record),
       errors: Transaction::Mapper.to_errors(record)
     )
+  rescue ActiveRecord::RecordNotUnique
+    Failure(:already_imported)
   end
 
   def update(transaction:, attributes:)
@@ -98,7 +104,8 @@ module Transaction::Repository::Adapters::ActiveRecord
       :payment_method,
       :recurrence_type,
       :installments_count,
-      :ends_on
+      :ends_on,
+      :source_key
     )
   end
 

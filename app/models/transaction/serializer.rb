@@ -13,6 +13,7 @@ class Transaction::Serializer
              :ends_on,
              :canceled_on,
              :tag_ids,
+             :source_key,
              :current_value
 
   attribute :account_id, if: ->(transaction) { transaction.account_payment? }

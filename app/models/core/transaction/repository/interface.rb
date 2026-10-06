@@ -38,6 +38,15 @@ module Core::Transaction::Repository::Interface
       end
     end
 
+    def exists_by_source_key?(user:, source_key:)
+      user => Core::User::Entity
+      source_key => String
+
+      super.tap do
+        _1 => (true | false)
+      end
+    end
+
     def exists_by_institution_id?(user:, institution_id:)
       user => Core::User::Entity
       UUID.valid?(institution_id) => true
@@ -71,6 +80,7 @@ module Core::Transaction::Repository::Interface
 
       super.tap do
         _1 => (
+          Solid::Failure(:already_imported, {}) |
           Solid::Failure(:transaction_creation_failed, { transaction: Core::Transaction::Entity, errors: Core::Errors }) |
           Solid::Success(:transaction_created, { transaction: Core::Transaction::Entity })
         )
