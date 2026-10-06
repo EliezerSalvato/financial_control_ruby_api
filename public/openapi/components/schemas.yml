@@ -2158,3 +2158,386 @@ NotificationReadAllResponse:
           type: integer
           description: Number of notifications marked as read in this request
 
+
+TransactionImportRuleEffect:
+  type: object
+  description: |
+    One effect of an import rule. Which fields matter depends on `effect_type`:
+
+    - `set_category` — `category_id`
+    - `add_tags` — `tag_ids`
+    - `set_recurrence_type` — `recurrence_type`
+    - `replace_text` — replaces the text found by `match_type` and `pattern` with `replacement` (`target_column`)
+    - `set_installments_count` — a fixed `installments_count`, or a regex `pattern` whose first capture group is the count
+    - `skip` — leaves the row out of the import (no other field is accepted)
+
+    The other fields are returned empty.
+  properties:
+    id:
+      type: string
+      format: uuid
+    position:
+      type: integer
+      minimum: 0
+      description: Effects run in ascending order (the order of the list sent by the client)
+    effect_type:
+      type: string
+      enum: [set_category, add_tags, set_recurrence_type, replace_text, set_installments_count, skip]
+    target_column:
+      type: string
+      enum: [title, description, both]
+      description: Only used by `replace_text`. The effect changes the text only when the CSV column matches
+    category_id:
+      type: [string, "null"]
+      format: uuid
+    tag_ids:
+      type: array
+      items:
+        type: string
+        format: uuid
+    match_type:
+      type: string
+      enum: [contains, regex]
+      description: How the effect `pattern` is matched (only used by `replace_text`)
+    pattern:
+      type: [string, "null"]
+      description: |
+        `replace_text`: text or regular expression replaced (always case-insensitive).
+        `set_installments_count`: regular expression whose first capture group is the installments count
+    recurrence_type:
+      type: [string, "null"]
+      enum: [one_time, installment, recurring, null]
+    replacement:
+      type: [string, "null"]
+      description: Text that replaces the match (may be empty)
+    installments_count:
+      type: [integer, "null"]
+      description: Fixed number of installments of `set_installments_count`
+
+TransactionImportRuleEffectInput:
+  type: object
+  required: [effect_type]
+  properties:
+    effect_type:
+      type: string
+      enum: [set_category, add_tags, set_recurrence_type, replace_text, set_installments_count, skip]
+    target_column:
+      type: string
+      enum: [title, description, both]
+      default: both
+      description: Only used by `replace_text`
+    category_id:
+      type: string
+      format: uuid
+      description: Required for `set_category`
+    tag_ids:
+      type: array
+      items:
+        type: string
+        format: uuid
+      description: Required (at least one) for `add_tags`
+    match_type:
+      type: string
+      enum: [contains, regex]
+      default: contains
+      description: How the effect `pattern` is matched (only used by `replace_text`)
+    pattern:
+      type: string
+      description: |
+        Required for `replace_text` (text or regular expression, always case-insensitive).
+        For `set_installments_count`, a regular expression whose first capture group is the count (alternative to `installments_count`)
+    recurrence_type:
+      type: string
+      enum: [one_time, installment, recurring]
+      description: Required for `set_recurrence_type`
+    replacement:
+      type: string
+      description: Required for `replace_text` (an empty string removes the match)
+    installments_count:
+      type: integer
+      minimum: 2
+      description: Fixed number of installments of `set_installments_count` (alternative to `pattern`)
+
+TransactionImportRuleAttributes:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+      description: Unique per user, case-insensitive
+    position:
+      type: integer
+      minimum: 0
+      description: Rules run in ascending order. Creating or moving a rule shifts the others to keep positions contiguous (0..n-1); a position past the last rule appends it at the end
+    active:
+      type: boolean
+    match_type:
+      type: string
+      enum: [contains, regex]
+    pattern:
+      type: string
+    case_sensitive:
+      type: boolean
+    target_column:
+      type: string
+      enum: [title, description, both]
+      description: CSV text column the rule is tested against
+    effects:
+      type: array
+      items:
+        $ref: "#/TransactionImportRuleEffect"
+
+TransactionImportRuleResource:
+  type: object
+  properties:
+    id:
+      type: string
+      format: uuid
+    type:
+      type: string
+      const: transaction_import_rule
+    attributes:
+      $ref: "#/TransactionImportRuleAttributes"
+
+TransactionImportRuleRequest:
+  type: object
+  required: [import_rule]
+  properties:
+    import_rule:
+      type: object
+      required: [name, pattern, effects]
+      properties:
+        name:
+          type: string
+        position:
+          type: integer
+          minimum: 0
+          default: 0
+        active:
+          type: boolean
+          default: true
+        match_type:
+          type: string
+          enum: [contains, regex]
+          default: contains
+        pattern:
+          type: string
+          description: Literal text for `contains`, or a regular expression for `regex` (invalid regular expressions are rejected)
+        case_sensitive:
+          type: boolean
+          default: false
+        target_column:
+          type: string
+          enum: [title, description, both]
+          default: both
+        effects:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/TransactionImportRuleEffectInput"
+
+TransactionImportRuleUpdateRequest:
+  type: object
+  required: [import_rule]
+  properties:
+    import_rule:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+        position:
+          type: integer
+          minimum: 0
+        active:
+          type: boolean
+        match_type:
+          type: string
+          enum: [contains, regex]
+        pattern:
+          type: string
+        case_sensitive:
+          type: boolean
+        target_column:
+          type: string
+          enum: [title, description, both]
+        effects:
+          type: array
+          description: Replaces the whole list of effects. It must have at least one effect; omit it to keep the current ones
+          minItems: 1
+          items:
+            $ref: "#/TransactionImportRuleEffectInput"
+
+TransactionImportRuleSuccessResponse:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: object
+    message:
+      type: string
+    data:
+      $ref: "#/TransactionImportRuleResource"
+
+TransactionImportRuleCollection:
+  type: object
+  required: [status, type, data, meta]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: collection
+    data:
+      type: array
+      items:
+        $ref: "#/TransactionImportRuleResource"
+    meta:
+      $ref: "#/PaginationMeta"
+
+TransactionImportPreviewRequest:
+  type: object
+  required: [file, kind]
+  properties:
+    file:
+      type: string
+      format: binary
+      description: CSV file (`.csv`, at most 1 MB and 1000 data rows)
+    kind:
+      type: string
+      enum: [income, expense]
+    payment_method:
+      type: string
+      enum: [pix, debit, credit_card, ted, doc, deposit, cash, boleto]
+      description: Required; must be compatible with `kind`
+    account_id:
+      type: string
+      format: uuid
+      description: Required unless `payment_method` is `credit_card`
+    credit_card_id:
+      type: string
+      format: uuid
+      description: Required when `payment_method` is `credit_card`
+    limit_consumption_type:
+      type: string
+      enum: [upfront, monthly]
+      description: |
+        Optional default for credit card rows. Applies only to rows whose `recurrence_type` is `installment`
+        (it is cleared from the others)
+    installments_count:
+      type: integer
+      minimum: 2
+      description: |
+        Optional default number of installments. Applies only to rows whose `recurrence_type` is
+        `installment` (it is cleared from the others)
+
+TransactionImportAcceptedResponse:
+  type: object
+  required: [status, type, data]
+  properties:
+    status:
+      type: string
+      const: success
+    type:
+      type: string
+      const: object
+    message:
+      type: string
+    data:
+      type: object
+      properties:
+        import_id:
+          type: string
+          format: uuid
+          description: Present in every event pushed for this import
+        total_rows:
+          type: integer
+
+TransactionImportRequest:
+  type: object
+  required: [import_id, rows]
+  properties:
+    import_id:
+      type: string
+      format: uuid
+      description: The `import_id` returned by the preview
+    rows:
+      type: array
+      minItems: 1
+      maxItems: 1000
+      items:
+        type: object
+        required: [row, date, description, amount, kind, payment_method]
+        properties:
+          row:
+            type: integer
+            description: Row number from the preview, echoed in the events
+          create:
+            type: boolean
+            default: true
+            description: "`false` skips the row (reported as `ignored`)"
+          source_key:
+            type: string
+            description: Value from the preview. Rows whose key already exists are skipped
+          date:
+            type: string
+            format: date
+          description:
+            type: string
+          amount:
+            type: string
+            description: Decimal, greater than or equal to zero
+            example: "25.90"
+          kind:
+            type: string
+            enum: [income, expense]
+          payment_method:
+            type: string
+            enum: [pix, debit, credit_card, ted, doc, deposit, cash, boleto]
+          account_id:
+            type: string
+            format: uuid
+          credit_card_id:
+            type: string
+            format: uuid
+          limit_consumption_type:
+            type: string
+            enum: [upfront, monthly]
+            description: Required for credit card rows when `recurrence_type` is `installment`; must be absent otherwise
+          installments_count:
+            type: integer
+            minimum: 2
+            description: |
+              Required when `recurrence_type` is `installment`; must be absent otherwise.
+              `ends_on` is derived from it (`date` plus `installments_count - 1` months)
+          recurrence_type:
+            type: string
+            enum: [one_time, installment, recurring]
+            default: one_time
+          ends_on:
+            type: string
+            format: date
+            description: Ignored for `installment` rows (derived from `installments_count`)
+          category_id:
+            type: string
+            format: uuid
+          category_name:
+            type: string
+            description: Used when `category_id` is absent. Created when it does not exist
+          tag_ids:
+            type: array
+            items:
+              type: string
+              format: uuid
+          tag_names:
+            type: array
+            items:
+              type: string
+            description: Created when they do not exist

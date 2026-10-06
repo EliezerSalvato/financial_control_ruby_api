@@ -1,0 +1,45 @@
+post:
+  tags: [Transaction Imports]
+  summary: Preview a CSV import
+  description: |
+    Step 1 of the import. Uploads a CSV statement (`multipart/form-data`) and returns **202** with an
+    `import_id` and the number of rows. Rows are processed asynchronously, one job per row; each result
+    is pushed to `TransactionImportChannel` (see the **Transaction Imports** tag for the event format).
+
+    `kind`, `payment_method` and `account_id` / `credit_card_id` apply to every row and are echoed back in
+    each preview event. The optional `limit_consumption_type` and `installments_count` are defaults for
+    `installment` rows only; they are echoed back as `null` on any other row.
+    `kind` is `income` or `expense`; the payment method must be compatible with it.
+    Use `credit_card_id` when `payment_method` is `credit_card`, otherwise `account_id`.
+    The account or card must belong to the user and be active.
+
+    The text column may be named `title` or `description` (never both); either way the preview exposes it
+    as `description`, and import rules can target the original column with `target_column`.
+
+    Validation errors are synchronous (**422**) and no job is enqueued when: the file is missing, is not
+    a `.csv`, is larger than 1 MB, has more than 1000 data rows or a required column
+    (`date`, `description` **or** `title`, `amount`/`value`) is missing, or the form fields are invalid.
+  operationId: previewTransactionImport
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      multipart/form-data:
+        schema:
+          $ref: "../components/schemas.yml#/TransactionImportPreviewRequest"
+  responses:
+    "202":
+      description: Preview accepted; rows are processed in the background
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TransactionImportAcceptedResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

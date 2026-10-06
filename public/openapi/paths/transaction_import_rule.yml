@@ -1,0 +1,91 @@
+get:
+  tags: [Transaction Imports]
+  summary: Show import rule
+  description: Returns a single import rule owned by the authenticated user.
+  operationId: showTransactionImportRule
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Import rule found
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TransactionImportRuleSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"
+
+patch:
+  tags: [Transaction Imports]
+  summary: Update import rule
+  description: |
+    Updates an import rule owned by the authenticated user. Omitted fields are kept.
+    When `effects` is sent it **replaces the whole list** of effects (at least one effect is required);
+    omit it to keep the current effects.
+  operationId: updateTransactionImportRule
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/TransactionImportRuleUpdateRequest"
+        example:
+          import_rule:
+            active: false
+            effects:
+              - effect_type: replace_text
+                target_column: title
+                pattern: Ifd*
+                replacement: Delivery
+  responses:
+    "200":
+      description: Import rule updated
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TransactionImportRuleSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"
+
+delete:
+  tags: [Transaction Imports]
+  summary: Delete import rule
+  description: Deletes an import rule owned by the authenticated user.
+  operationId: deleteTransactionImportRule
+  security:
+    - bearerAuth: []
+  parameters:
+    - $ref: "../components/parameters.yml#/Id"
+  responses:
+    "200":
+      description: Import rule deleted
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/MessageSuccessResponse"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "404":
+      $ref: "../components/responses.yml#/NotFound"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

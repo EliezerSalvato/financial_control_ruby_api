@@ -1,0 +1,53 @@
+post:
+  tags: [Transaction Imports]
+  summary: Import reviewed rows
+  description: |
+    Step 2 of the import. Receives the rows reviewed by the client (at most 1000) and returns **202**.
+    One background job per row creates the transaction and publishes the result to
+    `TransactionImportChannel` (`created`, `ignored`, `skip` or `error`).
+
+    Each row is created like `POST /api/v1/transactions` with `starts_on` = `date` and `value` = `amount`,
+    plus the `source_key`. `category_id` or `category_name` is required: a `category_name` that does not
+    exist is created (default color) together with any new `tag_names`. `create: false` skips the row.
+    A row whose `source_key` was already imported is reported as `skip`.
+
+    Rows are independent: one failing row does not affect the others.
+  operationId: importTransactions
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/TransactionImportRequest"
+        example:
+          import_id: "0199f3c2-7a52-7c1e-9d2a-3f6a1c5b8e10"
+          rows:
+            - row: 1
+              create: true
+              source_key: "2026-10-01|Ifd*Burger King|25.90"
+              date: "2026-10-01"
+              description: Burger King
+              amount: "25.90"
+              kind: expense
+              payment_method: pix
+              account_id: "0199f3c2-7a52-7c1e-9d2a-3f6a1c5b8e11"
+              recurrence_type: one_time
+              category_name: Food
+              tag_names: [delivery]
+  responses:
+    "202":
+      description: Import accepted; rows are processed in the background
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TransactionImportAcceptedResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

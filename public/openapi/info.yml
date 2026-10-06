@@ -1,5 +1,5 @@
 title: Financial Control Ruby API
-version: "1.0.30"
+version: "1.0.31"
 description: |
   ## Authentication
 
@@ -33,8 +33,8 @@ description: |
   | Access | Endpoints |
   |--------|-----------|
   | Public | registrations, authentications, email confirmations, password resets, session refreshes |
-  | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, goals, monthly statuses, settlements, transactions, notifications, profiles, account deletion, email changes, password changes, session revokes |
-  | Session token (query or `Authorization`) | Action Cable at `/cable` (`MonthlyStatusChannel`, `NotificationChannel`) |
+  | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, goals, monthly statuses, settlements, transactions, transaction imports, notifications, profiles, account deletion, email changes, password changes, session revokes |
+  | Session token (query or `Authorization`) | Action Cable at `/cable` (`MonthlyStatusChannel`, `NotificationChannel`, `TransactionImportChannel`) |
 
   ---
 
@@ -95,6 +95,14 @@ description: |
   ```
 
   Distinguish the two by the presence of `notification`. If it is present, the item can be inserted at the top of the list. If it is absent, update the badge from `unread_count` and refetch `GET /api/v1/notifications`.
+
+  Subscribe to the current user's transaction import stream (no params), before uploading a CSV:
+
+  ```json
+  { "channel": "TransactionImportChannel" }
+  ```
+
+  There is no initial payload. Each CSV row publishes its result as an event carrying `import_id`, `stage` (`preview` or `import`), `row` and `status`. See the **Transaction Imports** tag for the event formats.
 
   ---
 

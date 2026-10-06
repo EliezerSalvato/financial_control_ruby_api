@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Financial Control Ruby API
-  version: 1.0.30
+  version: 1.0.40
   description: |
     ## Authentication
 
@@ -35,8 +35,8 @@ info:
     | Access | Endpoints |
     |--------|-----------|
     | Public | registrations, authentications, email confirmations, password resets, session refreshes |
-    | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, goals, monthly statuses, settlements, transactions, notifications, profiles, account deletion, email changes, password changes, session revokes |
-    | Session token (query or `Authorization`) | Action Cable at `/cable` (`MonthlyStatusChannel`, `NotificationChannel`) |
+    | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, goals, monthly statuses, settlements, transactions, transaction imports, notifications, profiles, account deletion, email changes, password changes, session revokes |
+    | Session token (query or `Authorization`) | Action Cable at `/cable` (`MonthlyStatusChannel`, `NotificationChannel`, `TransactionImportChannel`) |
 
     ---
 
@@ -97,6 +97,14 @@ info:
     ```
 
     Distinguish the two by the presence of `notification`. If it is present, the item can be inserted at the top of the list. If it is absent, update the badge from `unread_count` and refetch `GET /api/v1/notifications`.
+
+    Subscribe to the current user's transaction import stream (no params), before uploading a CSV:
+
+    ```json
+    { "channel": "TransactionImportChannel" }
+    ```
+
+    There is no initial payload. Each CSV row publishes its result as an event carrying `import_id`, `stage` (`preview` or `import`), `row` and `status`. See the **Transaction Imports** tag for the event formats.
 
     ---
 
@@ -217,6 +225,55 @@ tags:
     description: Enqueue processing of due transaction occurrences, transfers, and credit-card invoices
   - name: Notifications
     description: User notifications with cursor pagination, unread count, and real-time delivery over Action Cable
+  - name: Transaction Imports
+    description: |
+      Import transactions from a CSV statement in two steps, with configurable rules, and track each row over Action Cable.
+
+      **1. Preview** — `POST /api/v1/transactions/imports/previews` uploads the file. The API validates it, enqueues one job per row and returns **202** with an `import_id`. Each row is cleaned by the user's active import rules (description, category, tags, recurrence), gets a `source_key` for de-duplication, and is pushed to the client.
+
+      **2. Import** — `POST /api/v1/transactions/imports` receives the rows the client reviewed. One background job per row creates the transaction and reports the result.
+
+      **Channel** — subscribe to `TransactionImportChannel` (no params) *before* uploading. The stream belongs to the user, not to the import, so events that arrive before the HTTP response are not lost. Every event carries `import_id`; ignore events of other imports.
+
+      ```json
+      { "channel": "TransactionImportChannel" }
+      ```
+
+      Preview events (`stage: "preview"`):
+
+      ```json
+      { "import_id": "...", "stage": "preview", "row": 3, "status": "processed", "data": {
+          "date": "2026-10-01", "description": "Burger King", "original_description": "Ifd*Burger King",
+          "amount": "25.90", "recurrence_type": "one_time", "ends_on": null,
+          "kind": "expense", "payment_method": "pix", "account_id": "0199...", "credit_card_id": null, "limit_consumption_type": null,
+          "category": { "id": "0199...", "name": "Food", "new": false },
+          "tags": [{ "id": "0199...", "name": "delivery", "new": false }, { "name": "fun", "new": true }],
+          "source_key": "2026-10-01|Ifd*Burger King|25.90",
+          "applied_rules": [{ "id": "0199...", "name": "Delivery" }] } }
+      { "import_id": "...", "stage": "preview", "row": 4, "status": "skip" }
+      { "import_id": "...", "stage": "preview", "row": 5, "status": "error", "error": "Date must be a valid date in YYYY-MM-DD or DD/MM/YYYY format" }
+      ```
+
+      `skip` means a transaction with that `source_key` was already imported, or a rule with a `skip` effect matched the row (it must not go to step 2). `category` is `null` when neither the file nor a rule provides one, and `{ "name": "...", "new": true }` when it does not exist yet. Categories and tags are only created in step 2.
+
+      Import events (`stage: "import"`):
+
+      ```json
+      { "import_id": "...", "stage": "import", "row": 3, "status": "created", "transaction_id": "0199..." }
+      { "import_id": "...", "stage": "import", "row": 4, "status": "ignored" }
+      { "import_id": "...", "stage": "import", "row": 5, "status": "skip" }
+      { "import_id": "...", "stage": "import", "row": 6, "status": "error", "error": "..." }
+      ```
+
+      `ignored` means the row was sent with `create: false`; `skip` means the `source_key` already exists. Error messages follow the user's locale.
+
+      **CSV format** — comma or semicolon separated, UTF-8 (a BOM is accepted) or ISO-8859-1, at most 1 MB and 1000 data rows. Required columns: `date`, `description` (alias `title`), `amount` (alias `value`). Optional columns: `category`, `tags`, `recurrence_type`, `ends_on`. Header names are case-insensitive.
+
+      - `date` and `ends_on`: `YYYY-MM-DD` or `DD/MM/YYYY` (`DD/MM/YY` also accepted)
+      - `amount`: `100.01`, `100,01`, `1.234,56` or `1,234.56`. The sign is ignored because the kind comes from the form
+      - `tags`: separated by `|`, `;` or `,` inside the cell
+
+      **De-duplication** — `source_key` is `date|description|amount` (two decimals) built from the original description. Identical lines in the same file get an occurrence suffix from the second one on (`...|2`). A unique index on `(user_id, source_key)` guarantees a line is never imported twice.
 paths:
   /api/v1/tags:
     get:
@@ -2185,6 +2242,360 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  "/api/v1/transactions/import_rules":
+    get:
+      tags:
+      - Transaction Imports
+      summary: List import rules
+      description: |
+        Returns a paginated list of the authenticated user's import rules, ordered by `position` and `name`.
+        Supports Ransack filters via `q`.
+      operationId: listTransactionImportRules
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: q[name_cont]
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Filter rules whose name contains the given value
+      - name: q[active_eq]
+        in: query
+        required: false
+        schema:
+          type: boolean
+        description: Filter by active flag
+      - name: q[match_type_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - contains
+          - regex
+        description: Filter by match type
+      - name: q[target_column_eq]
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - title
+          - description
+          - both
+        description: Filter by target column
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          example: position asc
+        description: Sort expression (default `position asc, name asc`)
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+      responses:
+        '200':
+          description: Import rules listed
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionImportRuleCollection"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    post:
+      tags:
+      - Transaction Imports
+      summary: Create import rule
+      description: |
+        Creates an import rule for the authenticated user. Having rules is optional.
+  
+        A rule holds the **match** (`match_type`, `pattern`, `case_sensitive` and the CSV `target_column`)
+        and a list of **effects** (at least one is required) that run when it matches.
+  
+        Active rules run in `position` order against the **current** description of each imported row
+        (a rule that changes the text changes what the next rules see). The CSV may have a `title` **or** a
+        `description` column (never both); `target_column` is `title`, `description` or `both` (matches
+        whichever column the file has). The imported row always exposes the text as `description`.
+  
+        Effects run in the order they are sent (their `position`):
+  
+        - `set_category` — suggests a category (`category_id`)
+        - `add_tags` — adds tags (`tag_ids`)
+        - `set_recurrence_type` — suggests a `recurrence_type`
+        - `replace_text` — replaces the text found by the effect's own `match_type` and `pattern` with `replacement`
+          (an empty `replacement` removes it); it is independent from the rule's `pattern`
+        - `set_installments_count` — suggests the number of installments, either a fixed `installments_count` (2 or more)
+          or a regex `pattern` whose first capture group is read from the row's original text
+          (e.g. `Parcela \d+/(\d+)` reads `12` from `Shopee - Parcela 11/12`). Send one of them, not both; the pattern is always
+          a case-insensitive regex. It only takes effect on `installment` rows, so combine it with `set_recurrence_type`
+        - `skip` — leaves the row out of the import: the preview reports it as `skip`, so it never reaches step 2,
+          and the following rules are not evaluated. It accepts no other field
+  
+        A value present in the CSV always wins over rules. Among rules, the first one that sets a category
+        or recurrence wins; tags from the file and from every matching rule are merged (case-insensitive).
+        A text effect that would leave the description empty is skipped. An invalid effect, or one carrying fields that do not belong to its type, is rejected with **422**.
+  
+        `contains` matches the literal `pattern`; `regex` compiles it as a Ruby regular expression with a
+        100 ms evaluation timeout (an invalid regex is rejected with **422**; a rule that times out is ignored).
+        `category_id` and `tag_ids` must belong to the authenticated user (otherwise **422**). When a category or tag
+        is deleted later, the effect simply stops applying it.
+      operationId: createTransactionImportRule
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TransactionImportRuleRequest"
+            example:
+              import_rule:
+                name: Delivery
+                position: 1
+                match_type: contains
+                pattern: Ifd*
+                target_column: both
+                effects:
+                - effect_type: replace_text
+                  match_type: regex
+                  pattern: Parcela \\d+/\\d+
+                  replacement: ''
+                - effect_type: set_category
+                  category_id: 0198f1c2-7a1e-7c3b-9d5e-2f4a6b8c0d1e
+                - effect_type: add_tags
+                  tag_ids:
+                  - 0198f1c2-8b2f-7d4c-8e6f-3a5b7c9d1e2f
+      responses:
+        '201':
+          description: Import rule created
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionImportRuleSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/transactions/import_rules/{id}":
+    get:
+      tags:
+      - Transaction Imports
+      summary: Show import rule
+      description: Returns a single import rule owned by the authenticated user.
+      operationId: showTransactionImportRule
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Import rule found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionImportRuleSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    patch:
+      tags:
+      - Transaction Imports
+      summary: Update import rule
+      description: |
+        Updates an import rule owned by the authenticated user. Omitted fields are kept.
+        When `effects` is sent it **replaces the whole list** of effects (at least one effect is required);
+        omit it to keep the current effects.
+      operationId: updateTransactionImportRule
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TransactionImportRuleUpdateRequest"
+            example:
+              import_rule:
+                active: false
+                effects:
+                - effect_type: replace_text
+                  target_column: title
+                  pattern: Ifd*
+                  replacement: Delivery
+      responses:
+        '200':
+          description: Import rule updated
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionImportRuleSuccessResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+    delete:
+      tags:
+      - Transaction Imports
+      summary: Delete import rule
+      description: Deletes an import rule owned by the authenticated user.
+      operationId: deleteTransactionImportRule
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Import rule deleted
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '404':
+          "$ref": "#/components/responses/NotFound"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/transactions/imports/previews":
+    post:
+      tags:
+      - Transaction Imports
+      summary: Preview a CSV import
+      description: |
+        Step 1 of the import. Uploads a CSV statement (`multipart/form-data`) and returns **202** with an
+        `import_id` and the number of rows. Rows are processed asynchronously, one job per row; each result
+        is pushed to `TransactionImportChannel` (see the **Transaction Imports** tag for the event format).
+  
+        `kind`, `payment_method` and `account_id` / `credit_card_id` apply to every row and are echoed back in
+        each preview event. The optional `limit_consumption_type` and `installments_count` are defaults for
+        `installment` rows only; they are echoed back as `null` on any other row.
+        `kind` is `income` or `expense`; the payment method must be compatible with it.
+        Use `credit_card_id` when `payment_method` is `credit_card`, otherwise `account_id`.
+        The account or card must belong to the user and be active.
+  
+        The text column may be named `title` or `description` (never both); either way the preview exposes it
+        as `description`, and import rules can target the original column with `target_column`.
+  
+        Validation errors are synchronous (**422**) and no job is enqueued when: the file is missing, is not
+        a `.csv`, is larger than 1 MB, has more than 1000 data rows or a required column
+        (`date`, `description` **or** `title`, `amount`/`value`) is missing, or the form fields are invalid.
+      operationId: previewTransactionImport
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              "$ref": "#/components/schemas/TransactionImportPreviewRequest"
+      responses:
+        '202':
+          description: Preview accepted; rows are processed in the background
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TransactionImportAcceptedResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
+        '401':
+          "$ref": "#/components/responses/Unauthorized"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/transactions/imports":
+    post:
+      tags:
+      - Transaction Imports
+      summary: Import reviewed rows
+      description: |
+        Step 2 of the import. Receives the rows reviewed by the client (at most 1000) and returns **202**.
+        One background job per row creates the transaction and publishes the result to
+        `TransactionImportChannel` (`created`, `ignored`, `skip` or `error`).
+
+        Each row is created like `POST /api/v1/transactions` with `starts_on` = `date` and `value` = `amount`,
+        plus the `source_key`. `category_id` or `category_name` is required: a `category_name` that does not
+        exist is created (default color) together with any new `tag_names`. `create: false` skips the row.
+        A row whose `source_key` was already imported is reported as `skip`.
+
+        Rows are independent: one failing row does not affect the others.
+      operationId: importTransactions
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransactionImportRequest"
+            example:
+              import_id: '0199f3c2-7a52-7c1e-9d2a-3f6a1c5b8e10'
+              rows:
+              - row: 1
+                create: true
+                source_key: 2026-10-01|Ifd*Burger King|25.90
+                date: '2026-10-01'
+                description: Burger King
+                amount: '25.90'
+                kind: expense
+                payment_method: pix
+                account_id: '0199f3c2-7a52-7c1e-9d2a-3f6a1c5b8e11'
+                recurrence_type: one_time
+                category_name: Food
+                tag_names:
+                - delivery
+      responses:
+        '202':
+          description: Import accepted; rows are processed in the background
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionImportAcceptedResponse"
+        '400':
+          $ref: "#/components/responses/BadRequest"
+        '401':
+          $ref: "#/components/responses/Unauthorized"
+        '422':
+          $ref: "#/components/responses/UnprocessableContent"
+        '429':
+          $ref: "#/components/responses/TooManyRequests"
   /api/v1/transactions/{id}:
     get:
       tags:
@@ -5225,3 +5636,484 @@ components:
         password_confirmation:
           type: string
           format: password
+    TransactionImportRuleEffect:
+      type: object
+      description: |
+        One effect of an import rule. Which fields matter depends on `effect_type`:
+    
+        - `set_category` — `category_id`
+        - `add_tags` — `tag_ids`
+        - `set_recurrence_type` — `recurrence_type`
+        - `replace_text` — replaces the text found by `match_type` and `pattern` with `replacement` (`target_column`)
+        - `set_installments_count` — a fixed `installments_count`, or a regex `pattern` whose first capture group is the count
+        - `skip` — leaves the row out of the import (no other field is accepted)
+    
+        The other fields are returned empty.
+      properties:
+        id:
+          type: string
+          format: uuid
+        position:
+          type: integer
+          minimum: 0
+          description: Effects run in ascending order (the order of the list sent by the client)
+        effect_type:
+          type: string
+          enum:
+          - set_category
+          - add_tags
+          - set_recurrence_type
+          - replace_text
+          - set_installments_count
+          - skip
+        target_column:
+          type: string
+          enum:
+          - title
+          - description
+          - both
+          description: Only used by `replace_text`. The effect changes the text only when the CSV column matches
+        category_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        match_type:
+          type: string
+          enum:
+          - contains
+          - regex
+          description: How the effect `pattern` is matched (only used by `replace_text`)
+        pattern:
+          type:
+          - string
+          - 'null'
+          description: |
+            `replace_text`: text or regular expression replaced (always case-insensitive).
+            `set_installments_count`: regular expression whose first capture group is the installments count
+        recurrence_type:
+          type:
+          - string
+          - 'null'
+          enum:
+          - one_time
+          - installment
+          - recurring
+          -
+        replacement:
+          type:
+          - string
+          - 'null'
+          description: Text that replaces the match (may be empty)
+        installments_count:
+          type:
+          - integer
+          - 'null'
+          description: Fixed number of installments of `set_installments_count`
+    TransactionImportRuleEffectInput:
+      type: object
+      required:
+      - effect_type
+      properties:
+        effect_type:
+          type: string
+          enum:
+          - set_category
+          - add_tags
+          - set_recurrence_type
+          - replace_text
+          - set_installments_count
+          - skip
+        target_column:
+          type: string
+          enum:
+          - title
+          - description
+          - both
+          default: both
+          description: Only used by `replace_text`
+        category_id:
+          type: string
+          format: uuid
+          description: Required for `set_category`
+        tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Required (at least one) for `add_tags`
+        match_type:
+          type: string
+          enum:
+          - contains
+          - regex
+          default: contains
+          description: How the effect `pattern` is matched (only used by `replace_text`)
+        pattern:
+          type: string
+          description: |
+            Required for `replace_text` (text or regular expression, always case-insensitive).
+            For `set_installments_count`, a regular expression whose first capture group is the count (alternative to `installments_count`)
+        recurrence_type:
+          type: string
+          enum:
+          - one_time
+          - installment
+          - recurring
+          description: Required for `set_recurrence_type`
+        replacement:
+          type: string
+          description: Required for `replace_text` (an empty string removes the match)
+        installments_count:
+          type: integer
+          minimum: 2
+          description: Fixed number of installments of `set_installments_count` (alternative to `pattern`)
+    TransactionImportRuleAttributes:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Unique per user, case-insensitive
+        position:
+          type: integer
+          minimum: 0
+          description: Rules run in ascending order. Creating or moving a rule shifts the others to keep positions contiguous (0..n-1); a position past the last rule appends it at the end
+        active:
+          type: boolean
+        match_type:
+          type: string
+          enum:
+          - contains
+          - regex
+        pattern:
+          type: string
+        case_sensitive:
+          type: boolean
+        target_column:
+          type: string
+          enum:
+          - title
+          - description
+          - both
+          description: CSV text column the rule is tested against
+        effects:
+          type: array
+          items:
+            "$ref": "#/components/schemas/TransactionImportRuleEffect"
+    TransactionImportRuleResource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          const: transaction_import_rule
+        attributes:
+          "$ref": "#/components/schemas/TransactionImportRuleAttributes"
+    TransactionImportRuleRequest:
+      type: object
+      required:
+      - import_rule
+      properties:
+        import_rule:
+          type: object
+          required:
+          - name
+          - pattern
+          - effects
+          properties:
+            name:
+              type: string
+            position:
+              type: integer
+              minimum: 0
+              default: 0
+            active:
+              type: boolean
+              default: true
+            match_type:
+              type: string
+              enum:
+              - contains
+              - regex
+              default: contains
+            pattern:
+              type: string
+              description: Literal text for `contains`, or a regular expression for `regex` (invalid regular expressions are rejected)
+            case_sensitive:
+              type: boolean
+              default: false
+            target_column:
+              type: string
+              enum:
+              - title
+              - description
+              - both
+              default: both
+            effects:
+              type: array
+              minItems: 1
+              items:
+                "$ref": "#/components/schemas/TransactionImportRuleEffectInput"
+    TransactionImportRuleUpdateRequest:
+      type: object
+      required:
+      - import_rule
+      properties:
+        import_rule:
+          type: object
+          minProperties: 1
+          properties:
+            name:
+              type: string
+            position:
+              type: integer
+              minimum: 0
+            active:
+              type: boolean
+            match_type:
+              type: string
+              enum:
+              - contains
+              - regex
+            pattern:
+              type: string
+            case_sensitive:
+              type: boolean
+            target_column:
+              type: string
+              enum:
+              - title
+              - description
+              - both
+            effects:
+              type: array
+              description: Replaces the whole list of effects. It must have at least one effect; omit it to keep the current ones
+              minItems: 1
+              items:
+                "$ref": "#/components/schemas/TransactionImportRuleEffectInput"
+    TransactionImportRuleSuccessResponse:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/TransactionImportRuleResource"
+    TransactionImportRuleCollection:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      - meta
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: collection
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransactionImportRuleResource"
+        meta:
+          $ref: "#/components/schemas/PaginationMeta"
+    TransactionImportPreviewRequest:
+      type: object
+      required:
+      - file
+      - kind
+      properties:
+        file:
+          type: string
+          format: binary
+          description: CSV file (`.csv`, at most 1 MB and 1000 data rows)
+        kind:
+          type: string
+          enum:
+          - income
+          - expense
+        payment_method:
+          type: string
+          enum:
+          - pix
+          - debit
+          - credit_card
+          - ted
+          - doc
+          - deposit
+          - cash
+          - boleto
+          description: Required; must be compatible with `kind`
+        account_id:
+          type: string
+          format: uuid
+          description: Required unless `payment_method` is `credit_card`
+        credit_card_id:
+          type: string
+          format: uuid
+          description: Required when `payment_method` is `credit_card`
+        limit_consumption_type:
+          type: string
+          enum:
+          - upfront
+          - monthly
+          description: |
+            Optional default for credit card rows. Applies only to rows whose `recurrence_type` is `installment`
+            (it is cleared from the others)
+        installments_count:
+          type: integer
+          minimum: 2
+          description: |
+            Optional default number of installments. Applies only to rows whose `recurrence_type` is
+            `installment` (it is cleared from the others)
+    TransactionImportAcceptedResponse:
+      type: object
+      required:
+      - status
+      - type
+      - data
+      properties:
+        status:
+          type: string
+          const: success
+        type:
+          type: string
+          const: object
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            import_id:
+              type: string
+              format: uuid
+              description: Present in every event pushed for this import
+            total_rows:
+              type: integer
+    TransactionImportRequest:
+      type: object
+      required:
+      - import_id
+      - rows
+      properties:
+        import_id:
+          type: string
+          format: uuid
+          description: The `import_id` returned by the preview
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            type: object
+            required:
+            - row
+            - date
+            - description
+            - amount
+            - kind
+            - payment_method
+            properties:
+              row:
+                type: integer
+                description: Row number from the preview, echoed in the events
+              create:
+                type: boolean
+                default: true
+                description: "`false` skips the row (reported as `ignored`)"
+              source_key:
+                type: string
+                description: Value from the preview. Rows whose key already exists are
+                  skipped
+              date:
+                type: string
+                format: date
+              description:
+                type: string
+              amount:
+                type: string
+                description: Decimal, greater than or equal to zero
+                example: '25.90'
+              kind:
+                type: string
+                enum:
+                - income
+                - expense
+              payment_method:
+                type: string
+                enum:
+                - pix
+                - debit
+                - credit_card
+                - ted
+                - doc
+                - deposit
+                - cash
+                - boleto
+              account_id:
+                type: string
+                format: uuid
+              credit_card_id:
+                type: string
+                format: uuid
+              limit_consumption_type:
+                type: string
+                enum:
+                - upfront
+                - monthly
+                description: Required for credit card rows when `recurrence_type` is `installment`; must be absent otherwise
+              installments_count:
+                type: integer
+                minimum: 2
+                description: |
+                  Required when `recurrence_type` is `installment`; must be absent otherwise.
+                  `ends_on` is derived from it (`date` plus `installments_count - 1` months)
+              recurrence_type:
+                type: string
+                enum:
+                - one_time
+                - installment
+                - recurring
+                default: one_time
+              ends_on:
+                type: string
+                format: date
+                description: Ignored for `installment` rows (derived from `installments_count`)
+              category_id:
+                type: string
+                format: uuid
+              category_name:
+                type: string
+                description: Used when `category_id` is absent. Created when it does not
+                  exist
+              tag_ids:
+                type: array
+                items:
+                  type: string
+                  format: uuid
+              tag_names:
+                type: array
+                items:
+                  type: string
+                description: Created when they do not exist

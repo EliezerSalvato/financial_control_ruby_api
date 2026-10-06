@@ -24,3 +24,52 @@
   description: Enqueue processing of due transaction occurrences, transfers, and credit-card invoices
 - name: Notifications
   description: User notifications with cursor pagination, unread count, and real-time delivery over Action Cable
+- name: Transaction Imports
+  description: |
+    Import transactions from a CSV statement in two steps, with configurable rules, and track each row over Action Cable.
+
+    **1. Preview** — `POST /api/v1/transactions/imports/previews` uploads the file. The API validates it, enqueues one job per row and returns **202** with an `import_id`. Each row is cleaned by the user's active import rules (description, category, tags, recurrence), gets a `source_key` for de-duplication, and is pushed to the client.
+
+    **2. Import** — `POST /api/v1/transactions/imports` receives the rows the client reviewed. One background job per row creates the transaction and reports the result.
+
+    **Channel** — subscribe to `TransactionImportChannel` (no params) *before* uploading. The stream belongs to the user, not to the import, so events that arrive before the HTTP response are not lost. Every event carries `import_id`; ignore events of other imports.
+
+    ```json
+    { "channel": "TransactionImportChannel" }
+    ```
+
+    Preview events (`stage: "preview"`):
+
+    ```json
+    { "import_id": "...", "stage": "preview", "row": 3, "status": "processed", "data": {
+        "date": "2026-10-01", "description": "Burger King", "original_description": "Ifd*Burger King",
+        "amount": "25.90", "recurrence_type": "one_time", "ends_on": null,
+        "kind": "expense", "payment_method": "pix", "account_id": "0199...", "credit_card_id": null, "limit_consumption_type": null,
+        "category": { "id": "0199...", "name": "Food", "new": false },
+        "tags": [{ "id": "0199...", "name": "delivery", "new": false }, { "name": "fun", "new": true }],
+        "source_key": "2026-10-01|Ifd*Burger King|25.90",
+        "applied_rules": [{ "id": "0199...", "name": "Delivery" }] } }
+    { "import_id": "...", "stage": "preview", "row": 4, "status": "skip" }
+    { "import_id": "...", "stage": "preview", "row": 5, "status": "error", "error": "Date must be a valid date in YYYY-MM-DD or DD/MM/YYYY format" }
+    ```
+
+    `skip` means a transaction with that `source_key` was already imported, or a rule with a `skip` effect matched the row (it must not go to step 2). `category` is `null` when neither the file nor a rule provides one, and `{ "name": "...", "new": true }` when it does not exist yet. Categories and tags are only created in step 2.
+
+    Import events (`stage: "import"`):
+
+    ```json
+    { "import_id": "...", "stage": "import", "row": 3, "status": "created", "transaction_id": "0199..." }
+    { "import_id": "...", "stage": "import", "row": 4, "status": "ignored" }
+    { "import_id": "...", "stage": "import", "row": 5, "status": "skip" }
+    { "import_id": "...", "stage": "import", "row": 6, "status": "error", "error": "..." }
+    ```
+
+    `ignored` means the row was sent with `create: false`; `skip` means the `source_key` already exists. Error messages follow the user's locale.
+
+    **CSV format** — comma or semicolon separated, UTF-8 (a BOM is accepted) or ISO-8859-1, at most 1 MB and 1000 data rows. Required columns: `date`, `description` (alias `title`), `amount` (alias `value`). Optional columns: `category`, `tags`, `recurrence_type`, `ends_on`. Header names are case-insensitive.
+
+    - `date` and `ends_on`: `YYYY-MM-DD` or `DD/MM/YYYY` (`DD/MM/YY` also accepted)
+    - `amount`: `100.01`, `100,01`, `1.234,56` or `1,234.56`. The sign is ignored because the kind comes from the form
+    - `tags`: separated by `|`, `;` or `,` inside the cell
+
+    **De-duplication** — `source_key` is `date|description|amount` (two decimals) built from the original description. Identical lines in the same file get an occurrence suffix from the second one on (`...|2`). A unique index on `(user_id, source_key)` guarantees a line is never imported twice.

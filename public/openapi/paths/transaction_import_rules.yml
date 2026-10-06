@@ -1,0 +1,150 @@
+get:
+  tags: [Transaction Imports]
+  summary: List import rules
+  description: |
+    Returns a paginated list of the authenticated user's import rules, ordered by `position` and `name`.
+    Supports Ransack filters via `q`.
+  operationId: listTransactionImportRules
+  security:
+    - bearerAuth: []
+  parameters:
+    - name: q[name_cont]
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Filter rules whose name contains the given value
+    - name: q[active_eq]
+      in: query
+      required: false
+      schema:
+        type: boolean
+      description: Filter by active flag
+    - name: q[match_type_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [contains, regex]
+      description: Filter by match type
+    - name: q[target_column_eq]
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [title, description, both]
+      description: Filter by target column
+    - name: sort
+      in: query
+      required: false
+      schema:
+        type: string
+        example: position asc
+      description: Sort expression (default `position asc, name asc`)
+    - name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    - name: per_page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+  responses:
+    "200":
+      description: Import rules listed
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TransactionImportRuleCollection"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"
+
+post:
+  tags: [Transaction Imports]
+  summary: Create import rule
+  description: |
+    Creates an import rule for the authenticated user. Having rules is optional.
+
+    A rule holds the **match** (`match_type`, `pattern`, `case_sensitive` and the CSV `target_column`)
+    and a list of **effects** (at least one is required) that run when it matches.
+
+    Active rules run in `position` order against the **current** description of each imported row
+    (a rule that changes the text changes what the next rules see). The CSV may have a `title` **or** a
+    `description` column (never both); `target_column` is `title`, `description` or `both` (matches
+    whichever column the file has). The imported row always exposes the text as `description`.
+
+    Effects run in the order they are sent (their `position`):
+
+    - `set_category` — suggests a category (`category_id`)
+    - `add_tags` — adds tags (`tag_ids`)
+    - `set_recurrence_type` — suggests a `recurrence_type`
+    - `replace_text` — replaces the text found by the effect's own `match_type` and `pattern` with `replacement`
+      (an empty `replacement` removes it); it is independent from the rule's `pattern`
+    - `set_installments_count` — suggests the number of installments, either a fixed `installments_count` (2 or more)
+      or a regex `pattern` whose first capture group is read from the row's original text
+      (e.g. `Parcela \d+/(\d+)` reads `12` from `Shopee - Parcela 11/12`). Send one of them, not both; the pattern is always
+      a case-insensitive regex. It only takes effect on `installment` rows, so combine it with `set_recurrence_type`
+    - `skip` — leaves the row out of the import: the preview reports it as `skip`, so it never reaches step 2,
+      and the following rules are not evaluated. It accepts no other field
+
+    A value present in the CSV always wins over rules. Among rules, the first one that sets a category
+    or recurrence wins; tags from the file and from every matching rule are merged (case-insensitive).
+    A text effect that would leave the description empty is skipped. An invalid effect, or one carrying fields that do not belong to its type, is rejected with **422**.
+
+    `contains` matches the literal `pattern`; `regex` compiles it as a Ruby regular expression with a
+    100 ms evaluation timeout (an invalid regex is rejected with **422**; a rule that times out is ignored).
+    `category_id` and `tag_ids` must belong to the authenticated user (otherwise **422**). When a category or tag
+    is deleted later, the effect simply stops applying it.
+  operationId: createTransactionImportRule
+  security:
+    - bearerAuth: []
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../components/schemas.yml#/TransactionImportRuleRequest"
+        example:
+          import_rule:
+            name: Delivery
+            position: 1
+            match_type: contains
+            pattern: "Ifd*"
+            target_column: both
+            effects:
+              - effect_type: replace_text
+                match_type: regex
+                pattern: "Parcela \\d+/\\d+"
+                replacement: ""
+              - effect_type: set_category
+                category_id: 0198f1c2-7a1e-7c3b-9d5e-2f4a6b8c0d1e
+              - effect_type: add_tags
+                tag_ids: [0198f1c2-8b2f-7d4c-8e6f-3a5b7c9d1e2f]
+  responses:
+    "201":
+      description: Import rule created
+      content:
+        application/json:
+          schema:
+            $ref: "../components/schemas.yml#/TransactionImportRuleSuccessResponse"
+    "400":
+      $ref: "../components/responses.yml#/BadRequest"
+    "401":
+      $ref: "../components/responses.yml#/Unauthorized"
+    "422":
+      $ref: "../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../components/responses.yml#/TooManyRequests"

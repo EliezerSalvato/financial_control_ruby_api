@@ -61,6 +61,14 @@ paths:
     $ref: "./paths/transactions.yml"
   /api/v1/transactions/settled:
     $ref: "./paths/transactions_settled.yml"
+  /api/v1/transactions/import_rules:
+    $ref: "./paths/transaction_import_rules.yml"
+  /api/v1/transactions/import_rules/{id}:
+    $ref: "./paths/transaction_import_rule.yml"
+  /api/v1/transactions/imports/previews:
+    $ref: "./paths/transaction_imports_previews.yml"
+  /api/v1/transactions/imports:
+    $ref: "./paths/transaction_imports.yml"
   /api/v1/transactions/{id}:
     $ref: "./paths/transaction.yml"
   /api/v1/transactions/{id}/cancel:
