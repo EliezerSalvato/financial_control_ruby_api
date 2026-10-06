@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_03_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_03_120200) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -20,6 +20,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_03_120000) do
   create_enum "account_kind", ["bank_account", "cash"]
   create_enum "bank_account_type", ["checking", "savings", "investment", "salary"]
   create_enum "monthly_status", ["open", "closed"]
+  create_enum "transaction_import_rule_effect_type", ["set_category", "add_tags", "set_recurrence_type", "replace_text", "set_installments_count", "skip"]
+  create_enum "transaction_import_rule_match_type", ["contains", "regex"]
+  create_enum "transaction_import_rule_target_column", ["title", "description", "both"]
   create_enum "transaction_kind", ["income", "expense", "transfer_between_accounts"]
   create_enum "transaction_limit_consumption_type", ["upfront", "monthly"]
   create_enum "transaction_payment_method", ["pix", "debit", "credit_card", "ted", "doc", "deposit", "cash", "boleto"]
@@ -320,6 +323,44 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_03_120000) do
     t.check_constraint "source_account_id <> destination_account_id", name: "transaction_for_transfer_between_accounts_distinct_accounts"
   end
 
+  create_table "transaction_import_rule_effects", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.uuid "category_id"
+    t.datetime "created_at", null: false
+    t.enum "effect_type", null: false, enum_type: "transaction_import_rule_effect_type"
+    t.uuid "import_rule_id", null: false
+    t.integer "installments_count"
+    t.enum "match_type", default: "contains", null: false, enum_type: "transaction_import_rule_match_type"
+    t.string "pattern"
+    t.integer "position", default: 0, null: false
+    t.enum "recurrence_type", enum_type: "transaction_recurrence_type"
+    t.string "replacement"
+    t.uuid "tag_ids", default: [], null: false, array: true
+    t.enum "target_column", default: "both", null: false, enum_type: "transaction_import_rule_target_column"
+    t.datetime "updated_at", null: false
+    t.index ["category_id"], name: "index_transaction_import_rule_effects_on_category_id"
+    t.index ["import_rule_id", "position"], name: "idx_on_import_rule_id_position_9de8f1d884"
+    t.check_constraint "(effect_type = 'set_recurrence_type'::transaction_import_rule_effect_type) = (recurrence_type IS NOT NULL)", name: "transaction_import_rule_effects_recurrence_only_for_set_recurre"
+    t.check_constraint "effect_type = 'add_tags'::transaction_import_rule_effect_type AND cardinality(tag_ids) > 0 OR effect_type <> 'add_tags'::transaction_import_rule_effect_type AND cardinality(tag_ids) = 0", name: "transaction_import_rule_effects_tag_ids_only_for_add_tags"
+    t.check_constraint "effect_type = 'replace_text'::transaction_import_rule_effect_type AND pattern IS NOT NULL AND replacement IS NOT NULL OR effect_type = 'set_installments_count'::transaction_import_rule_effect_type AND replacement IS NULL AND match_type = 'regex'::transaction_import_rule_match_type OR (effect_type <> ALL (ARRAY['replace_text'::transaction_import_rule_effect_type, 'set_installments_count'::transaction_import_rule_effect_type])) AND pattern IS NULL AND replacement IS NULL AND target_column = 'both'::transaction_import_rule_target_column AND match_type = 'contains'::transaction_import_rule_match_type", name: "tir_effects_text_fields_by_effect_type"
+    t.check_constraint "effect_type = 'set_category'::transaction_import_rule_effect_type OR category_id IS NULL", name: "transaction_import_rule_effects_category_only_for_set_category"
+    t.check_constraint "effect_type = 'set_installments_count'::transaction_import_rule_effect_type AND (installments_count > 1 AND pattern IS NULL OR installments_count IS NULL AND pattern IS NOT NULL) OR effect_type <> 'set_installments_count'::transaction_import_rule_effect_type AND installments_count IS NULL", name: "tir_effects_installments_count_by_effect_type"
+  end
+
+  create_table "transaction_import_rules", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
+    t.boolean "active", default: true, null: false
+    t.boolean "case_sensitive", default: false, null: false
+    t.datetime "created_at", null: false
+    t.enum "match_type", default: "contains", null: false, enum_type: "transaction_import_rule_match_type"
+    t.string "name", null: false
+    t.string "pattern", null: false
+    t.integer "position", default: 0, null: false
+    t.enum "target_column", default: "both", null: false, enum_type: "transaction_import_rule_target_column"
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index "user_id, lower((name)::text)", name: "index_transaction_import_rules_on_user_id_and_lower_name", unique: true
+    t.index ["user_id", "position"], name: "index_transaction_import_rules_on_user_id_and_position"
+  end
+
   create_table "transaction_recurrences", id: :uuid, default: -> { "uuidv7()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.virtual "month", type: :integer, null: false, as: "(EXTRACT(month FROM starts_on))::integer", stored: true
@@ -496,6 +537,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_03_120000) do
   add_foreign_key "transaction_for_transfer_between_accounts", "accounts", column: "destination_account_id"
   add_foreign_key "transaction_for_transfer_between_accounts", "accounts", column: "source_account_id"
   add_foreign_key "transaction_for_transfer_between_accounts", "transactions"
+  add_foreign_key "transaction_import_rule_effects", "categories", on_delete: :nullify
+  add_foreign_key "transaction_import_rule_effects", "transaction_import_rules", column: "import_rule_id", on_delete: :cascade
+  add_foreign_key "transaction_import_rules", "users"
   add_foreign_key "transaction_recurrences", "transactions"
   add_foreign_key "transaction_settlement_for_accounts", "accounts"
   add_foreign_key "transaction_settlement_for_accounts", "transaction_settlements"

@@ -28,6 +28,10 @@ Rails.application.routes.draw do
       resources :transactions, only: %i[index show create update destroy] do
         collection do
           get :settled
+          post "imports/previews", to: "transaction/import/previews#create", as: :import_previews
+          post "imports", to: "transaction/imports#create", as: :imports
+
+          resources :import_rules, only: %i[index show create update destroy], module: :transaction
         end
 
         member do

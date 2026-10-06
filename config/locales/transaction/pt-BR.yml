@@ -32,6 +32,62 @@ pt-BR:
             base:
               cannot_be_destroyed: A transação não pode ser excluída no status atual
               transaction_destruction_failed: Falha ao excluir a transação
+        core/transaction/import/confirmation/input:
+          attributes:
+            rows:
+              invalid: deve ser uma lista de linhas
+              too_many_rows: deve ter no máximo %{max} linhas
+        core/transaction/import/csv_parsing/input:
+          attributes:
+            file:
+              invalid_file: deve ser um arquivo CSV
+              missing_columns: 'não possui as colunas obrigatórias: %{columns}'
+              too_many_rows: deve ter no máximo %{max} linhas
+        core/transaction/import/persist_row/input:
+          attributes:
+            base:
+              category_creation_failed: Falha ao criar a categoria
+              tag_creation_failed: Falha ao criar a tag
+        core/transaction/import/preview/input:
+          attributes:
+            file:
+              file_too_large: deve ter no máximo 1 MB
+              invalid_file: deve ser um arquivo CSV
+              missing_columns: 'não possui as colunas obrigatórias: %{columns}'
+              too_many_rows: deve ter no máximo %{max} linhas
+            payment_method:
+              invalid_for_kind: não é permitido para este tipo
+              present: deve ficar em branco para transferências entre contas
+        core/transaction/import/row_normalizing/input:
+          attributes:
+            amount:
+              invalid_amount: 'deve ser um valor válido (ex.: 100.01, 100,01 ou 1.234,56)'
+            date:
+              invalid_date: deve ser uma data válida no formato AAAA-MM-DD ou DD/MM/AAAA
+            ends_on:
+              invalid_date: deve ser uma data válida no formato AAAA-MM-DD ou DD/MM/AAAA
+        core/transaction/import/rule/creation/input:
+          attributes:
+            base:
+              import_rule_creation_failed: Falha ao criar a regra de importação
+            effects:
+              invalid_effect: possui %{field} inválido ou ausente no efeito %{position}
+              unexpected_effect_field: possui %{field} não permitido para o tipo do efeito %{position}
+            pattern:
+              invalid_regex: não é uma expressão regular válida
+        core/transaction/import/rule/deletion/input:
+          attributes:
+            base:
+              import_rule_destruction_failed: Falha ao excluir a regra de importação
+        core/transaction/import/rule/update/input:
+          attributes:
+            base:
+              import_rule_update_failed: Falha ao atualizar a regra de importação
+            effects:
+              invalid_effect: possui %{field} inválido ou ausente no efeito %{position}
+              unexpected_effect_field: possui %{field} não permitido para o tipo do efeito %{position}
+            pattern:
+              invalid_regex: não é uma expressão regular válida
         core/transaction/recurrence/change/input:
           attributes:
             base:
@@ -85,6 +141,24 @@ pt-BR:
       invalid_filters: Filtro inválido
       invalid_period: Período inválido
       not_found: Transação não encontrada
+    import:
+      errors:
+        unexpected: Erro inesperado ao processar esta linha
+      failure: Não foi possível processar a importação
+      queued: Importação aceita para processamento
+    import_rule:
+      creation:
+        failure: Falha ao criar a regra de importação
+        success: Regra de importação criada com sucesso
+      deletion:
+        failure: Falha ao excluir a regra de importação
+        success: Regra de importação excluída com sucesso
+      errors:
+        invalid_filters: Filtro inválido
+        not_found: Regra de importação não encontrada
+      update:
+        failure: Falha ao atualizar a regra de importação
+        success: Regra de importação atualizada com sucesso
     recurrence:
       change:
         failure: Falha ao alterar a recorrência

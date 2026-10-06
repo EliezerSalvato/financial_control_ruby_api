@@ -32,6 +32,62 @@ en:
             base:
               cannot_be_destroyed: Transaction cannot be deleted in the current status
               transaction_destruction_failed: Transaction deletion failed
+        core/transaction/import/confirmation/input:
+          attributes:
+            rows:
+              invalid: must be a list of rows
+              too_many_rows: must have at most %{max} rows
+        core/transaction/import/csv_parsing/input:
+          attributes:
+            file:
+              invalid_file: must be a CSV file
+              missing_columns: 'is missing required columns: %{columns}'
+              too_many_rows: must have at most %{max} rows
+        core/transaction/import/persist_row/input:
+          attributes:
+            base:
+              category_creation_failed: Category creation failed
+              tag_creation_failed: Tag creation failed
+        core/transaction/import/preview/input:
+          attributes:
+            file:
+              file_too_large: must be at most 1 MB
+              invalid_file: must be a CSV file
+              missing_columns: 'is missing required columns: %{columns}'
+              too_many_rows: must have at most %{max} rows
+            payment_method:
+              invalid_for_kind: is not allowed for this kind
+              present: must be empty for transfers between accounts
+        core/transaction/import/row_normalizing/input:
+          attributes:
+            amount:
+              invalid_amount: must be a valid amount (e.g. 100.01, 100,01 or 1.234,56)
+            date:
+              invalid_date: must be a valid date in YYYY-MM-DD or DD/MM/YYYY format
+            ends_on:
+              invalid_date: must be a valid date in YYYY-MM-DD or DD/MM/YYYY format
+        core/transaction/import/rule/creation/input:
+          attributes:
+            base:
+              import_rule_creation_failed: Import rule creation failed
+            effects:
+              invalid_effect: has an invalid or missing %{field} in effect %{position}
+              unexpected_effect_field: has an unexpected %{field} in effect %{position}
+            pattern:
+              invalid_regex: is not a valid regular expression
+        core/transaction/import/rule/deletion/input:
+          attributes:
+            base:
+              import_rule_destruction_failed: Import rule deletion failed
+        core/transaction/import/rule/update/input:
+          attributes:
+            base:
+              import_rule_update_failed: Import rule update failed
+            effects:
+              invalid_effect: has an invalid or missing %{field} in effect %{position}
+              unexpected_effect_field: has an unexpected %{field} in effect %{position}
+            pattern:
+              invalid_regex: is not a valid regular expression
         core/transaction/recurrence/change/input:
           attributes:
             base:
@@ -85,6 +141,24 @@ en:
       invalid_filters: Invalid filter
       invalid_period: Invalid period
       not_found: Transaction not found
+    import:
+      errors:
+        unexpected: Unexpected error while processing this row
+      failure: Import could not be processed
+      queued: Import accepted for processing
+    import_rule:
+      creation:
+        failure: Import rule creation failed
+        success: Import rule created successfully
+      deletion:
+        failure: Import rule deletion failed
+        success: Import rule deleted successfully
+      errors:
+        invalid_filters: Invalid filter
+        not_found: Import rule not found
+      update:
+        failure: Import rule update failed
+        success: Import rule updated successfully
     recurrence:
       change:
         failure: Recurrence change failed
