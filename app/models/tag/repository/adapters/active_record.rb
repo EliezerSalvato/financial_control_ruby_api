@@ -30,6 +30,31 @@ module Tag::Repository::Adapters::ActiveRecord
     Success(:tags_found, tags: Tag::Mapper.to_entities(records))
   end
 
+  def find_all_by_ids(user:, ids:)
+    Success(:tags_found, tags: Tag::Mapper.to_entities(user_tags(user).where(id: ids).to_a))
+  end
+
+  def find_all_by_names(user:, names:)
+    Success(:tags_found, tags: Tag::Mapper.to_entities(find_records_by_names(user:, names:)))
+  end
+
+  def find_or_create_by_names(user:, names:, color:)
+    records = find_records_by_names(user:, names:)
+    known = records.map { |record| record.name.downcase }
+
+    names.uniq(&:downcase).sort_by(&:downcase).each do |name|
+      next if known.include?(name.downcase)
+
+      record = create_record_by_name(user:, name:, color:)
+
+      return Failure(:tag_creation_failed, errors: Tag::Mapper.to_errors(record)) unless record.persisted?
+
+      records << record
+    end
+
+    Success(:tags_found, tags: Tag::Mapper.to_entities(records))
+  end
+
   def exists?(user:, name:, excluding_id: nil)
     scope = user_tags(user).where("LOWER(name) = LOWER(?)", name)
     scope = scope.where.not(id: excluding_id) if excluding_id.present?
@@ -63,6 +88,18 @@ module Tag::Repository::Adapters::ActiveRecord
   end
 
   private
+
+  def find_records_by_names(user:, names:)
+    return [] if names.empty?
+
+    user_tags(user).where("LOWER(tags.name) IN (?)", names.map(&:downcase)).to_a
+  end
+
+  def create_record_by_name(user:, name:, color:)
+    Tag::Record.transaction(requires_new: true) { user_tags(user).create(name:, color:) }
+  rescue ActiveRecord::RecordNotUnique
+    find_records_by_names(user:, names: [ name ]).first
+  end
 
   def user_tags(user)
     Tag::Record.where(user_id: user.id).includes(:goals)

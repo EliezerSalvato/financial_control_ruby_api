@@ -144,4 +144,42 @@ RSpec.describe Tag::Repository::Adapters::ActiveRecord do
       }.to change(Tag::Record, :count).by(-1)
     end
   end
+
+  describe "#find_all_by_names" do
+    it "returns the existing tags ignoring the case, scoped to the user" do
+      fun = create(:tag, user:, name: "Fun")
+      create(:tag, name: "Fun")
+
+      expect(repository.find_all_by_names(user: user_entity, names: %w[fun missing]).value[:tags].map(&:id)).to eq([ fun.id ])
+      expect(repository.find_all_by_names(user: user_entity, names: []).value[:tags]).to eq([])
+    end
+  end
+
+  describe "#find_or_create_by_names" do
+    it "reuses the existing tags and creates the missing ones" do
+      fun = create(:tag, user:, name: "Fun")
+
+      result = repository.find_or_create_by_names(user: user_entity, names: %w[FUN Daily daily], color: "#111111")
+
+      expect(result.value[:tags].map(&:name)).to contain_exactly("Fun", "Daily")
+      expect(result.value[:tags].map(&:id)).to include(fun.id)
+      expect(Tag::Record.where(user_id: user.id).count).to eq(2)
+    end
+
+    it "returns the tag created by a concurrent job" do
+      existing = create(:tag, user:, name: "Daily")
+      allow(repository).to receive(:find_records_by_names).and_return([], [ existing ])
+      allow(Tag::Record).to receive(:transaction).and_raise(ActiveRecord::RecordNotUnique)
+
+      result = repository.find_or_create_by_names(user: user_entity, names: [ "Daily" ], color: "#111111")
+
+      expect(result.value[:tags].map(&:id)).to eq([ existing.id ])
+    end
+
+    it "returns Failure when a tag does not persist" do
+      allow_any_instance_of(Tag::Record).to receive(:save).and_return(false)
+
+      expect(repository.find_or_create_by_names(user: user_entity, names: [ "Daily" ], color: "#111111").type).to eq(:tag_creation_failed)
+    end
+  end
 end

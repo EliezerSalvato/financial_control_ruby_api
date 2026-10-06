@@ -42,6 +42,37 @@ module Core::Tag::Repository::Interface
       end
     end
 
+    def find_all_by_ids(user:, ids:)
+      user => Core::User::Entity
+      ids => Array
+
+      super.tap do
+        _1 => Solid::Success(:tags_found, { tags: Array })
+      end
+    end
+
+    def find_all_by_names(user:, names:)
+      user => Core::User::Entity
+      names => Array
+
+      super.tap do
+        _1 => Solid::Success(:tags_found, { tags: Array })
+      end
+    end
+
+    def find_or_create_by_names(user:, names:, color:)
+      user => Core::User::Entity
+      names => Array
+      color => String
+
+      super.tap do
+        _1 => (
+          Solid::Failure(:tag_creation_failed, { errors: Core::Errors }) |
+          Solid::Success(:tags_found, { tags: Array })
+        )
+      end
+    end
+
     def exists?(user:, name:, excluding_id: nil)
       user => Core::User::Entity
       name => String
