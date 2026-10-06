@@ -16,6 +16,9 @@ gem "ransack", "~> 4.4"
 gem "rack-cors", "~> 3.0"
 gem "rack-attack", "~> 6.8"
 
+# CSV import (bundled gem since Ruby 3.4)
+gem "csv", "~> 3.3"
+
 # I18n
 gem "rails-i18n", "~> 8.1"
 
