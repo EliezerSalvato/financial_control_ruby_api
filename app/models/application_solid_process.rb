@@ -19,7 +19,7 @@ class ApplicationSolidProcess < Solid::Process
 
   def merge_nested_input_errors(nested_input)
     nested_input.errors.details.each do |attribute, errors|
-      errors.each { |detail| input.errors.add(attribute, detail[:error]) }
+      errors.each { |detail| input.errors.add(attribute, detail[:error], **detail.except(:error)) }
     end
   end
 
