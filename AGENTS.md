@@ -15,7 +15,7 @@ Before making code changes:
 
 This project is used with both Cursor and Claude Code. This file is the single source of instructions: Cursor reads it natively and `CLAUDE.md` only imports it (`@AGENTS.md`). Never add content to `CLAUDE.md`, and do not create `.cursor/rules/` or `.claude/rules/`.
 
-Detailed rules live **only** in `.agents/rules/` as plain Markdown. Before working on a matching task, read the rule file:
+Detailed rules live **only** in `.agents/rules/` as plain Markdown. They are NOT loaded automatically: you MUST open and read the matching rule file BEFORE editing any file or answering a task that matches the "Read when" column. Do not rely on memory or on this summary.
 
 | Rule | Read when |
 |------|-----------|
