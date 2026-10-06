@@ -112,4 +112,44 @@ RSpec.describe Category::Repository::Adapters::ActiveRecord do
       }.to change(Category::Record, :count).by(-1)
     end
   end
+
+  describe "#find_by_name" do
+    it "finds a category by name ignoring the case, scoped to the user" do
+      category = create(:category, user:, name: "Food")
+      create(:category, name: "Other user")
+
+      expect(repository.find_by_name(user: user_entity, name: "fOOd").value[:category].id).to eq(category.id)
+      expect(repository.find_by_name(user: user_entity, name: "Other user").type).to eq(:category_not_found)
+    end
+  end
+
+  describe "#find_or_create_by_name" do
+    it "returns the existing category" do
+      category = create(:category, user:, name: "Food")
+
+      expect { repository.find_or_create_by_name(user: user_entity, name: "food", color: "#111111") }.not_to change(Category::Record, :count)
+      expect(repository.find_or_create_by_name(user: user_entity, name: "food", color: "#111111").value[:category].id).to eq(category.id)
+    end
+
+    it "creates a missing category with the given color" do
+      result = repository.find_or_create_by_name(user: user_entity, name: "Leisure", color: "#111111")
+
+      expect(result.value[:category]).to have_attributes(name: "Leisure", color: "#111111")
+    end
+
+    it "returns the category created by a concurrent job" do
+      existing = create(:category, user:, name: "Leisure")
+      allow(repository).to receive(:find_record_by_name).and_call_original
+      allow(repository).to receive(:find_record_by_name).and_return(nil, existing)
+      allow(Category::Record).to receive(:transaction).and_raise(ActiveRecord::RecordNotUnique)
+
+      expect(repository.find_or_create_by_name(user: user_entity, name: "Leisure", color: "#111111").value[:category].id).to eq(existing.id)
+    end
+
+    it "returns Failure when the category does not persist" do
+      allow_any_instance_of(Category::Record).to receive(:save).and_return(false)
+
+      expect(repository.find_or_create_by_name(user: user_entity, name: "Leisure", color: "#111111").type).to eq(:category_creation_failed)
+    end
+  end
 end

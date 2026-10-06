@@ -29,6 +29,31 @@ module Core::Category::Repository::Interface
       end
     end
 
+    def find_by_name(user:, name:)
+      user => Core::User::Entity
+      name => String
+
+      super.tap do
+        _1 => (
+          Solid::Failure(:category_not_found, {}) |
+          Solid::Success(:category_found, { category: Core::Category::Entity })
+        )
+      end
+    end
+
+    def find_or_create_by_name(user:, name:, color:)
+      user => Core::User::Entity
+      name => String
+      color => String
+
+      super.tap do
+        _1 => (
+          Solid::Failure(:category_creation_failed, { errors: Core::Errors }) |
+          Solid::Success(:category_found, { category: Core::Category::Entity })
+        )
+      end
+    end
+
     def exists?(user:, name:, excluding_id: nil)
       user => Core::User::Entity
       name => String
