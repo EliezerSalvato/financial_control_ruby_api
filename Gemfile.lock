@@ -107,7 +107,7 @@ GEM
     bigdecimal (4.1.2)
     bootsnap (1.24.6)
       msgpack (~> 1.2)
-    brakeman (8.0.6)
+    brakeman (8.1.0)
       racc
     builder (3.3.0)
     bundler-audit (0.9.3)
@@ -400,7 +400,7 @@ DEPENDENCIES
   aws-sdk-rails (~> 5)
   bcrypt (~> 3.1)
   bootsnap (~> 1.24)
-  brakeman (~> 8.0)
+  brakeman (~> 8.1)
   bundler-audit (~> 0.9)
   csv (~> 3.3)
   debug (~> 1.11)
