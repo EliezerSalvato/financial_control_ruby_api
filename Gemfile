@@ -11,7 +11,7 @@ gem "propshaft", "~> 1.3"
 
 # API
 gem "jsonapi-serializer", "~> 2.2"
-gem "pagy", "~> 43.6"
+gem "pagy", "~> 43.7"
 gem "ransack", "~> 4.4"
 gem "rack-cors", "~> 3.0"
 gem "rack-attack", "~> 6.8"
