@@ -4,7 +4,7 @@ ruby "~> 3.4.5"
 
 # Core
 gem "rails", "~> 8.1"
-gem "pg", "~> 1.6"
+gem "pg", "~> 1.7"
 gem "puma", "~> 8.0"
 gem "bootsnap", "~> 1.24", require: false
 gem "propshaft", "~> 1.3"
