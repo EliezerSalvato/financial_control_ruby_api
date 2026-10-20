@@ -1,0 +1,27 @@
+post:
+  tags: [User]
+  summary: Resend email confirmation
+  description: |
+    Sends a new confirmation email to the given address.
+    The user must exist, be **active**, and still have an unverified email.
+    Previous pending confirmation tokens are invalidated. Public endpoint.
+  operationId: resendEmailConfirmation
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: "../../components/schemas.yml#/EmailConfirmationResendRequest"
+        example:
+          email: john.doe@example.com
+  responses:
+    "200":
+      description: Confirmation email sent
+      content:
+        application/json:
+          schema:
+            $ref: "../../components/schemas.yml#/MessageSuccessResponse"
+    "422":
+      $ref: "../../components/responses.yml#/UnprocessableContent"
+    "429":
+      $ref: "../../components/responses.yml#/TooManyRequests"

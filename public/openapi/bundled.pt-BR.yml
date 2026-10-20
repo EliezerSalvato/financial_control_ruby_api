@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: API Ruby de Controle Financeiro
-  version: 1.0.40
+  version: 1.0.41
   description: |
     ## Autenticação
 
@@ -14,7 +14,7 @@ info:
     ### Fluxo
 
     1. **Registrar** — `POST /api/v1/user/registrations`
-    2. **Confirmar e-mail** — `POST /api/v1/user/email/confirmations` (token do e-mail)
+    2. **Confirmar e-mail** — `POST /api/v1/user/email/confirmations` (token do e-mail). Se ele não chegar, reenvie com `POST /api/v1/user/email/confirmation_resends`
     3. **Entrar** — `POST /api/v1/user/authentications` → `token` no corpo JSON; `refresh_token` é definido como cookie httpOnly criptografado (`SameSite=Lax`; `Secure` em produção). O `remember_me` opcional controla a duração do cookie e do refresh. O login **revoga todas as sessões de refresh anteriores**. Um token Bearer mais antigo permanece válido até expirar (15 minutos)
     4. **Chamar endpoints protegidos** com `Authorization: Bearer <token>`. Um token válido de um usuário **inativo** também é **401**
     5. **Atualizar** — quando o token de sessão expira, `PATCH /api/v1/user/session/refreshes` (lê o cookie `refresh_token`; `remember_me` opcional no corpo)
@@ -34,7 +34,7 @@ info:
 
     | Acesso | Endpoints |
     |--------|-----------|
-    | Público | registrations, authentications, email confirmations, password resets, session refreshes |
+    | Público | registrations, authentications, email confirmations, email confirmation resends, password resets, session refreshes |
     | Bearer obrigatório | tags, categories, institutions, accounts, credit cards, monthly statements, goals, monthly statuses, settlements, transactions, transaction imports, notifications, profiles, account deletion, email changes, password changes, session revokes |
     | Token de sessão (query ou `Authorization`) | Action Cable em `/cable` (`MonthlyStatusChannel`, `NotificationChannel`, `TransactionImportChannel`) |
 
@@ -164,11 +164,12 @@ info:
 
     - `POST /api/v1/user/authentications` (por IP e e-mail)
     - `POST /api/v1/user/registrations` (por IP e e-mail)
+    - `POST /api/v1/user/email/confirmation_resends` (por IP e e-mail)
     - `POST /api/v1/user/password/resets` (por IP e e-mail)
     - `PATCH /api/v1/user/password/resets` (por IP e token)
     - `PATCH /api/v1/user/session/refreshes` (por IP e cookie de refresh)
 
-    Toda operação documenta **429**. Confirmação de e-mail, alteração de senha, alteração de e-mail e revogação de sessão usam apenas o throttle geral.
+    Toda operação documenta **429**. Confirmar o e-mail com o token, alteração de senha, alteração de e-mail e revogação de sessão usam apenas o throttle geral.
 
     ---
 
@@ -3107,6 +3108,35 @@ paths:
           "$ref": "#/components/responses/UnprocessableContent"
         '429':
           "$ref": "#/components/responses/TooManyRequests"
+  "/api/v1/user/email/confirmation_resends":
+    post:
+      tags:
+      - Usuário
+      summary: Reenviar confirmação de e-mail
+      description: |
+        Envia um novo e-mail de confirmação para o endereço informado.
+        O usuário deve existir, estar **ativo** e ainda ter o e-mail não verificado.
+        Tokens de confirmação pendentes anteriores são invalidados. Endpoint público.
+      operationId: resendEmailConfirmation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/EmailConfirmationResendRequest"
+            example:
+              email: john.doe@example.com
+      responses:
+        '200':
+          description: E-mail de confirmação enviado
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/MessageSuccessResponse"
+        '422':
+          "$ref": "#/components/responses/UnprocessableContent"
+        '429':
+          "$ref": "#/components/responses/TooManyRequests"
   "/api/v1/user/email/changes":
     patch:
       tags:
@@ -5658,6 +5688,14 @@ components:
       properties:
         token:
           type: string
+    EmailConfirmationResendRequest:
+      type: object
+      required:
+      - email
+      properties:
+        email:
+          type: string
+          format: email
     EmailChangeRequest:
       type: object
       required:

@@ -183,7 +183,7 @@ Authorization: Bearer <token>
 ```
 
 1. Register — `POST /api/v1/user/registrations`
-2. Confirm email — `POST /api/v1/user/email/confirmations` (token from email; inspect in Mailpit locally)
+2. Confirm email — `POST /api/v1/user/email/confirmations` (token from email; inspect in Mailpit locally). Resend with `POST /api/v1/user/email/confirmation_resends` when the message did not arrive
 3. Sign in — `POST /api/v1/user/authentications` → `token` in the JSON body; `refresh_token` is set as an encrypted httpOnly cookie (`SameSite=Lax`; `Secure` in production). Revokes previous refresh sessions
 4. Call protected endpoints with `Authorization: Bearer <token>`
 5. Refresh when expired — `PATCH /api/v1/user/session/refreshes` (reads the `refresh_token` cookie)
@@ -206,6 +206,7 @@ Password change, password reset (`PATCH`), and email change also revoke all refr
 | POST | `/api/v1/user/registrations` | Public |
 | POST | `/api/v1/user/authentications` | Public |
 | POST | `/api/v1/user/email/confirmations` | Public |
+| POST | `/api/v1/user/email/confirmation_resends` | Public |
 | POST | `/api/v1/user/password/resets` | Public |
 | PATCH | `/api/v1/user/password/resets` | Public |
 | PATCH | `/api/v1/user/session/refreshes` | Public |
@@ -246,7 +247,7 @@ On sign in, a valid `locale` cookie that differs from `configs.locale` updates t
 | Scope | Limit |
 |-------|-------|
 | General (all HTTP except `/up` and `/cable`, any method) | 300 requests / 5 minutes per IP, hashed Bearer token, and user id |
-| Login, registration, password reset, session refresh | 10 requests / 1 minute |
+| Login, registration, password reset, email confirmation resend, session refresh | 10 requests / 1 minute |
 
 Throttled responses are **429** with Rack::Attack's default `text/plain` body (`Retry later`), not the JSON error envelope. Every OpenAPI operation documents **429**.
 

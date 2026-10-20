@@ -105,6 +105,14 @@ class Rack::Attack
     Discriminator.hashed_email(req) if req.post? && req.path == "/api/v1/user/registrations"
   end
 
+  throttle("email_confirmation_resends/ip", limit: AUTH_ENDPOINT_LIMIT, period: AUTH_ENDPOINT_PERIOD) do |req|
+    req.ip if req.post? && req.path == "/api/v1/user/email/confirmation_resends"
+  end
+
+  throttle("email_confirmation_resends/email", limit: AUTH_ENDPOINT_LIMIT, period: AUTH_ENDPOINT_PERIOD) do |req|
+    Discriminator.hashed_email(req) if req.post? && req.path == "/api/v1/user/email/confirmation_resends"
+  end
+
   throttle("password_resets/ip", limit: AUTH_ENDPOINT_LIMIT, period: AUTH_ENDPOINT_PERIOD) do |req|
     req.ip if req.path == "/api/v1/user/password/resets" && (req.post? || req.patch? || req.put?)
   end

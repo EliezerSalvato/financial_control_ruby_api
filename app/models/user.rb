@@ -6,6 +6,7 @@ module User
     authenticate: Core::User::Authentication,
     delete_account: Core::User::Account::Deletion,
     confirm_email: Core::User::Email::Confirmation,
+    resend_email_confirmation: Core::User::Email::Confirmation::Resend,
     change_email: Core::User::Email::Change,
     change_password: Core::User::Password::Change,
     send_reset_password_instructions: Core::User::Password::Reset::SendInstructions,

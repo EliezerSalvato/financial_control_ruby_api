@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Financial Control Ruby API
-  version: 1.0.40
+  version: 1.0.41
   description: |
     ## Authentication
 
@@ -14,7 +14,7 @@ info:
     ### Flow
 
     1. **Register** — `POST /api/v1/user/registrations`
-    2. **Confirm email** — `POST /api/v1/user/email/confirmations` (token from email)
+    2. **Confirm email** — `POST /api/v1/user/email/confirmations` (token from email). If it did not arrive, resend it with `POST /api/v1/user/email/confirmation_resends`
     3. **Sign in** — `POST /api/v1/user/authentications` → `token` in the JSON body; `refresh_token` is set as an encrypted httpOnly cookie (`SameSite=Lax`; `Secure` in production). Optional `remember_me` controls cookie and refresh lifetime. Sign in **revokes every previous refresh session**. An older Bearer token remains valid until it expires (15 minutes)
     4. **Call protected endpoints** with `Authorization: Bearer <token>`. A valid token for an **inactive** user is also **401**
     5. **Refresh** — when the session token expires, `PATCH /api/v1/user/session/refreshes` (reads the `refresh_token` cookie; optional `remember_me` in the body)
@@ -34,7 +34,7 @@ info:
 
     | Access | Endpoints |
     |--------|-----------|
-    | Public | registrations, authentications, email confirmations, password resets, session refreshes |
+    | Public | registrations, authentications, email confirmations, email confirmation resends, password resets, session refreshes |
     | Bearer required | tags, categories, institutions, accounts, credit cards, monthly statements, goals, monthly statuses, settlements, transactions, transaction imports, notifications, profiles, account deletion, email changes, password changes, session revokes |
     | Session token (query or `Authorization`) | Action Cable at `/cable` (`MonthlyStatusChannel`, `NotificationChannel`, `TransactionImportChannel`) |
 
@@ -164,11 +164,12 @@ info:
 
     - `POST /api/v1/user/authentications` (per IP and email)
     - `POST /api/v1/user/registrations` (per IP and email)
+    - `POST /api/v1/user/email/confirmation_resends` (per IP and email)
     - `POST /api/v1/user/password/resets` (per IP and email)
     - `PATCH /api/v1/user/password/resets` (per IP and token)
     - `PATCH /api/v1/user/session/refreshes` (per IP and refresh cookie)
 
-    Every operation documents **429**. Email confirmation, password change, email change, and session revoke use only the general throttle.
+    Every operation documents **429**. Confirming an email with the token, password change, email change, and session revoke use only the general throttle.
 
     ---
 
@@ -3081,6 +3082,35 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+  /api/v1/user/email/confirmation_resends:
+    post:
+      tags:
+        - User
+      summary: Resend email confirmation
+      description: |
+        Sends a new confirmation email to the given address.
+        The user must exist, be **active**, and still have an unverified email.
+        Previous pending confirmation tokens are invalidated. Public endpoint.
+      operationId: resendEmailConfirmation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailConfirmationResendRequest'
+            example:
+              email: john.doe@example.com
+      responses:
+        '200':
+          description: Confirmation email sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSuccessResponse'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
   /api/v1/user/email/changes:
     patch:
       tags:
@@ -5583,6 +5613,14 @@ components:
       properties:
         token:
           type: string
+    EmailConfirmationResendRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
     EmailChangeRequest:
       type: object
       required:

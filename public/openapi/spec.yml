@@ -89,6 +89,8 @@ paths:
     $ref: "./paths/user/accounts.yml"
   /api/v1/user/email/confirmations:
     $ref: "./paths/user/email_confirmations.yml"
+  /api/v1/user/email/confirmation_resends:
+    $ref: "./paths/user/email_confirmation_resends.yml"
   /api/v1/user/email/changes:
     $ref: "./paths/user/email_changes.yml"
   /api/v1/user/password/changes:

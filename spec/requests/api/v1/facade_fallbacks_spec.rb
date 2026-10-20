@@ -543,6 +543,15 @@ RSpec.describe "API facade fallback branches", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
     end
 
+    it "returns unprocessable content when resending the email confirmation fails unexpectedly" do
+      allow(User).to receive(:resend_email_confirmation).and_return(unexpected_failure)
+
+      post "/api/v1/user/email/confirmation_resends", params: { email: "a@example.com" }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body["message"]).to eq(I18n.t("user.email.confirmation_resend.failure"))
+    end
+
     it "returns unprocessable content when changing password fails unexpectedly" do
       allow(User).to receive(:change_password).and_return(unexpected_failure)
 

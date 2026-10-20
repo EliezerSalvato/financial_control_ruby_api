@@ -78,6 +78,14 @@ EmailConfirmationRequest:
     token:
       type: string
 
+EmailConfirmationResendRequest:
+  type: object
+  required: [email]
+  properties:
+    email:
+      type: string
+      format: email
+
 EmailChangeRequest:
   type: object
   required: [current_password, new_email]

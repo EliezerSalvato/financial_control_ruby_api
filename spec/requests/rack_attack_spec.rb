@@ -19,7 +19,8 @@ RSpec.describe "Rack::Attack", type: :request do
       register: failure,
       send_reset_password_instructions: failure,
       reset_password: failure,
-      refresh_session: failure
+      refresh_session: failure,
+      resend_email_confirmation: failure
     )
   end
 
@@ -82,6 +83,10 @@ RSpec.describe "Rack::Attack", type: :request do
 
     Rack::Attack.reset!
 
+    exceed_dedicated_throttle(:post, "/api/v1/user/email/confirmation_resends", params: { email: "a@example.com" })
+
+    Rack::Attack.reset!
+
     exceed_dedicated_throttle(:patch, "/api/v1/user/password/resets", params: { token: "t", password: "password123", password_confirmation: "password123" })
 
     Rack::Attack.reset!
@@ -119,6 +124,10 @@ RSpec.describe "Rack::Attack", type: :request do
     Rack::Attack.reset!
 
     exceed_from_rotating_ips(:post, "/api/v1/user/password/resets", params: { email: "a@example.com" })
+
+    Rack::Attack.reset!
+
+    exceed_from_rotating_ips(:post, "/api/v1/user/email/confirmation_resends", params: { email: "a@example.com" })
 
     Rack::Attack.reset!
 

@@ -70,6 +70,7 @@ Rails.application.routes.draw do
 
         namespace :email do
           resource :confirmations, only: %i[create]
+          resource :confirmation_resends, only: %i[create]
           resource :changes, only: %i[update]
         end
 

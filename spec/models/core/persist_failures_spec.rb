@@ -1131,6 +1131,17 @@ RSpec.describe "core process persist and not-found failures" do
       expect(Core::User::Email::Confirmation.call(token:).type).to eq(:mark_email_confirmation_as_confirmed_failed)
     end
 
+    it "fails email confirmation resend persist" do
+      unverified = create(:user)
+
+      allow(User::Adapters.email_confirmation_repository).to receive(:invalidate_all_by).and_return(failure(:email_confirmations_invalidation_failed))
+      expect(Core::User::Email::Confirmation::Resend.call(email: unverified.email).type).to eq(:email_confirmations_invalidation_failed)
+
+      allow(User::Adapters.email_confirmation_repository).to receive(:invalidate_all_by).and_call_original
+      allow(User::Adapters.email_confirmation_repository).to receive(:create).and_return(failure(:email_confirmation_creation_failed, errors:))
+      expect(Core::User::Email::Confirmation::Resend.call(email: unverified.email).type).to eq(:email_confirmation_creation_failed)
+    end
+
     it "fails password reset instructions persist" do
       allow(User::Adapters.password_reset_repository).to receive(:invalidate_all_by).and_return(failure(:password_resets_invalidation_failed))
       expect(Core::User::Password::Reset::SendInstructions.call(email: user.email).type).to eq(:password_resets_invalidation_failed)
