@@ -40,6 +40,9 @@ gem "mission_control-jobs", "~> 1.1"
 gem "aws-sdk-rails", "~> 5"
 gem "aws-actionmailer-ses", "~> 1"
 
+# Knowledge
+gem "okf", "~> 2.2"
+
 group :development do
   gem "rubocop-rails-omakase", "~> 1.1", require: false
   gem "i18n-tasks", "~> 1.1"
