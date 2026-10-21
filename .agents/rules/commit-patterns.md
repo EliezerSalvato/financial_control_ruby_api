@@ -1,3 +1,7 @@
+---
+description: "Use when creating or suggesting a git commit. Messages follow Conventional Commits, and a commit happens only when the user explicitly asks."
+---
+
 # Commit Rules
 
 When generating or suggesting commit messages, ALWAYS follow these rules.

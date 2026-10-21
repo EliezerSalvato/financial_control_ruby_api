@@ -1,3 +1,8 @@
+---
+description: "Use when editing Record classes, mappers, adapters, or migrations. Persistence stays in Record classes; domain orchestration stays in Core processes."
+globs: "app/models/**/record.rb,app/models/**/mapper.rb,app/models/**/adapters/**/*.rb,db/migrate/**/*.rb"
+---
+
 # Active Record Patterns
 
 This project does **not** use fat `ApplicationRecord` domain models or `app/services/`.

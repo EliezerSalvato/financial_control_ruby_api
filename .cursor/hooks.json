@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "node .agents/hooks/guard-shell.js",
+        "timeout": 10,
+        "failClosed": true
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "node .agents/hooks/strip-frozen-string-literal.js",
+        "timeout": 10
+      }
+    ]
+  }
+}

@@ -15,7 +15,9 @@ Before making code changes:
 
 This project is used with both Cursor and Claude Code. This file is the single source of instructions: Cursor reads it natively and `CLAUDE.md` only imports it (`@AGENTS.md`). Never add content to `CLAUDE.md`, and do not create `.cursor/rules/` or `.claude/rules/`.
 
-Detailed rules live **only** in `.agents/rules/` as plain Markdown. They are NOT loaded automatically: you MUST open and read the matching rule file BEFORE editing any file or answering a task that matches the "Read when" column. Do not rely on memory or on this summary.
+Detailed rules live **only** in `.agents/rules/`. Each rule starts with neutral YAML frontmatter: `description`, plus `globs` when the rule is path-scoped. The body stays plain Markdown. Do not use Cursor `.mdc` fields or Claude `paths:` frontmatter.
+
+Cursor and Claude Code do not auto-load `.agents/rules/`. Open and read the matching rule file BEFORE editing any file or answering a task that matches the "Read when" column. Do not rely on memory or on this summary.
 
 | Rule | Read when |
 |------|-----------|
@@ -24,7 +26,11 @@ Detailed rules live **only** in `.agents/rules/` as plain Markdown. They are NOT
 | [`.agents/rules/readme.md`](.agents/rules/readme.md) | Creating or updating `README.md` |
 | [`.agents/rules/terraform-naming.md`](.agents/rules/terraform-naming.md) | Writing or reviewing Terraform (`**/*.tf`, `**/*.tfvars`) |
 
-To add a rule, create `.agents/rules/<name>.md` (plain Markdown, no tool-specific frontmatter) and add a row to this table.
+To add a rule, create `.agents/rules/<name>.md` with that frontmatter and add a row to this table.
+
+Procedural workflows live in `.agents/skills/` and `.agents/workflows/`. Cursor and Claude Code reach the same files through symlinks in `.cursor/skills/`, `.claude/skills/`, `.cursor/commands/`, and `.claude/commands/`.
+
+Shell gates live in `.agents/hooks/` and are wired from `.cursor/hooks.json` (`beforeShellExecution`) and `.claude/settings.json` (`PreToolUse`). A developer opts into the git hooks with `git config core.hooksPath .githooks`. Agents must not change git config.
 
 ## Docker (mandatory)
 

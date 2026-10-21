@@ -1,0 +1,21 @@
+#!/bin/sh
+# Opt in with: git config core.hooksPath .githooks
+# Rejects staged env files. Templates ending in .example or .sample stay allowed.
+
+fail=0
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+  case "$file" in
+    *.example|*.sample) continue ;;
+  esac
+  case "$file" in
+    .env|.env.*|*.env)
+      echo "pre-commit: refusing staged env file: $file" >&2
+      fail=1
+      ;;
+  esac
+done <<EOF
+$(git diff --cached --name-only --diff-filter=ACMR)
+EOF
+
+exit "$fail"

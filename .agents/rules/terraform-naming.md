@@ -1,3 +1,8 @@
+---
+description: "Use when writing or reviewing Terraform. Identifiers use underscores and follow the layout in this rule."
+globs: "**/*.tf,**/*.tfvars,**/*.tfvars.example"
+---
+
 # Terraform Naming and Layout
 
 All Terraform authoring and review **must** follow these conventions.

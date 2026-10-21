@@ -1,3 +1,8 @@
+---
+description: "Use when creating or updating README.md. Keep the fixed section order and write the file in English."
+globs: "README.md"
+---
+
 # README Rules
 
 When creating or updating README.md:
