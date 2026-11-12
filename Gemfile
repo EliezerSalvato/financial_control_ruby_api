@@ -45,7 +45,7 @@ gem "okf", "~> 2.2"
 
 group :development do
   gem "rubocop-rails-omakase", "~> 1.1", require: false
-  gem "i18n-tasks", "~> 1.1"
+  gem "i18n-tasks", "~> 1.2"
 end
 
 group :test do
